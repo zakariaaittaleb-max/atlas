@@ -1,26 +1,68 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * ATLAS — fondations visuelles.
+ *
+ * Contraintes de conception (doc 00 §11) :
+ *  • l'interface est projetée en salle : contrastes élevés, corps de texte
+ *    généreux, aucune information portée par la seule couleur ;
+ *  • les montants s'affichent en DH avec l'espace comme séparateur de milliers.
+ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  --background: #f7f7f5;
+  --surface: #ffffff;
+  --surface-muted: #f0efec;
+  --border: #dddbd5;
+  --foreground: #1a1a17;
+  --foreground-muted: #5c5a53;
+
+  /* Vert et rouge ne portent JAMAIS seuls une information : ils accompagnent
+     toujours une flèche ou un signe, pour rester lisibles en daltonisme. */
+  --positive: #1a6b3c;
+  --negative: #a32b1f;
+  --accent: #1d4e6b;
+  --warning: #8a5a00;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #14140f;
+    --surface: #1e1e19;
+    --surface-muted: #26261f;
+    --border: #3a382f;
+    --foreground: #f2f0e9;
+    --foreground-muted: #a6a294;
+    --positive: #5fbe86;
+    --negative: #e8836f;
+    --accent: #79b6d8;
+    --warning: #d9a441;
   }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border-subtle: var(--border);
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-accent: var(--accent);
+  --color-warning: var(--warning);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Les chiffres d'un tableau doivent s'aligner colonne par colonne, sinon on ne
+   compare pas des ordres de grandeur d'un coup d'œil. */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
