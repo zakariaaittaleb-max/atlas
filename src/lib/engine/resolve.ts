@@ -43,13 +43,15 @@ import {
   marginPremium,
   scoreCorporateAlignment,
   synergyEffect,
+  verticalIntegrationIndex,
 } from './alignment';
 import { scoreGroupAlignment, type GroupAlignmentResult } from './group-alignment';
 import { computeIndicators } from './indicators';
 import {
   giacSupport, nextClimatSocial, nextSkillIndex, ofpptReimbursement,
   qualityLossFromCuts, safeHeadcountReduction, severancePerHead,
-  standardisationLevel, turnoverRate, workloadIndex,
+  consolidateClimate, consolidateHeadcount,
+  standardisationLevel, trainingFocusEffects, turnoverRate, workloadIndex,
 } from './hr';
 import { coverageCappedShare, resolveDistribution, resolveProcurement } from './channels';
 import {
@@ -64,6 +66,7 @@ import {
 import { clamp, clamp01, clamp100, makeRng, median, seedFrom } from './math';
 import {
   allocateMarketShares,
+  ansoffRisk,
   applyShockRedistribution,
   competitivenessScore,
   competitivePressure,
@@ -72,7 +75,8 @@ import {
   poolMedianPrice,
   priceCompetitiveness,
   resolveVolume,
-  segmentQualityPenalty,
+  addressableShare,
+  segmentPriceSensitivity,
   unitPrice,
 } from './market';
 import {
@@ -82,15 +86,16 @@ import {
   capacityFromHeadcount,
   experienceCurveUnitCost,
   nextCapacity,
-  nextClimateSocial,
   nextNotoriety,
   nextQuality,
   perceivedQuality,
   utilisationEffects,
 } from './operations';
 import { organisationalAxes } from './organisation';
+import { mitigateShock } from './shocks';
 import { param, type EngineParams } from './params';
 import type {
+  AcquisitionOperation,
   DasSnapshot,
   ResolutionInput,
   ShockEffects,
@@ -166,6 +171,16 @@ export interface DasMetricsOutput {
   cashGeneratedMad: number;
   capitalEmployedMad: number;
   investmentMad: number;
+
+  // ── Océan bleu ───────────────────────────────────────────────────────────
+  /** L'unité est-elle hors somme nulle CE TOUR-CI ? */
+  blueOceanActive: boolean;
+  /** Tours restants À LA CLÔTURE, à persister sur l'unité. */
+  blueOceanRoundsLeft: number;
+  /** Ticket d'entrée payé ce tour, qu'elle réussisse ou non. */
+  blueOceanEntryCostMad: number;
+  /** L'entrée a été tentée et a échoué : à dire au débriefing. */
+  blueOceanFailed: boolean;
 }
 
 export interface TeamOutput {
@@ -219,6 +234,38 @@ export interface AcquisitionOutput {
   valueLossPct: number;
   /** Part de marché effectivement récupérée, après perte d'intégration. */
   marketShareAcquired: number;
+  /**
+   * Ce que l'opération cherchait à faire.
+   *
+   * Une ENTRÉE crée une unité et lui transfère une position de marché. Une
+   * INTÉGRATION ne crée rien : elle change le propriétaire d'un maillon que
+   * l'équipe utilisait déjà, et n'a donc ni part de marché ni capacité à
+   * transférer. Les confondre ferait apparaître un domaine fantôme au
+   * portefeuille de qui rachète son grossiste.
+   */
+  operation: AcquisitionOperation;
+  /**
+   * Part du bénéfice d'intégration réellement captée, figée au rachat.
+   *
+   * Racheter un maillon sans budgéter l'intégration, c'est se retrouver
+   * propriétaire d'une entreprise qu'on ne sait pas faire tourner. Ce
+   * coefficient ne se rattrape pas au tour suivant par un chèque : c'est ce
+   * qui fait du budget d'intégration une décision et non une formalité.
+   */
+  integrationQuality: number;
+  /**
+   * Chiffre d'affaires repris, qui devient l'historique du domaine acquis.
+   *
+   * Il était laissé à ZÉRO en base, alors que le poids réel de la cible était
+   * bien chargé côté serveur. Un domaine acheté entrait donc au portefeuille
+   * sans passé commercial, et le tour suivant en tirait quatre conséquences
+   * fausses : il ne pesait rien dans le SAB pondéré, son rôle de portefeuille
+   * devenait injugeable faute de part de chiffre d'affaires, il ne comptait
+   * pas dans l'intégration verticale, et un océan bleu s'y déclarait
+   * gratuitement — le ticket d'entrée étant proportionnel à un chiffre
+   * d'affaires nul.
+   */
+  revenueAcquired: number;
   capacityAcquired: number;
   notorietyAcquired: number;
   qualityAcquired: number;
@@ -288,6 +335,11 @@ interface UnitWorkspace {
   avgDistributorMargin: number;
   channelControl: number;
   distributionServiceLevel: number;
+  // Océan bleu, arrêté en phase A : il conditionne la répartition (phase D).
+  blueOceanActive: boolean;
+  blueOceanRoundsLeft: number;
+  blueOceanEntryCostMad: number;
+  blueOceanFailed: boolean;
   // Phase C
   vector: BusinessVector;
   // Phase D
@@ -309,8 +361,29 @@ interface UnitWorkspace {
   cogsMad: number;
 }
 
-function shocksFor(dasId: string, shocks: ShockEffects[]): ShockEffects {
-  const relevant = shocks.filter((s) => s.dasId === dasId);
+/**
+ * Cumul des cartes actives sur un DAS, atténué par les réponses d'une équipe.
+ *
+ * ── L'ATTÉNUATION S'APPLIQUE CARTE PAR CARTE, AVANT LE CUMUL ───────────────
+ * Une équipe répond à UNE carte, pas au climat général du tour. L'appliquer
+ * après le cumul mélangerait la sécheresse qu'elle a couverte et le
+ * resserrement monétaire qu'elle a subi de plein fouet.
+ *
+ * `mitigation` absente — ou vide — laisse le cumul intact : c'est le cas du
+ * marché lui-même, qui est PARTAGÉ par tout le pool et ne peut pas rétrécir
+ * différemment selon l'équipe qui le regarde.
+ */
+function shocksFor(
+  dasId: string,
+  shocks: ShockEffects[],
+  mitigation?: Map<string, number>,
+): ShockEffects {
+  const relevant = shocks
+    .filter((s) => s.dasId === dasId)
+    .map((s) => {
+      const effectiveness = mitigation?.get(s.shockId) ?? 0;
+      return effectiveness > 0 ? mitigateShock(s, effectiveness) : s;
+    });
 
   /**
    * Les pourcentages s'ADDITIONNENT plutôt que de se composer : deux cartes à
@@ -321,6 +394,9 @@ function shocksFor(dasId: string, shocks: ShockEffects[]): ShockEffects {
     relevant.reduce((acc, s) => acc + (Number(s[key]) || 0), 0);
 
   return {
+    // Le cumul n'est plus UNE carte : il n'a pas d'identité propre, et la
+    // laisser vide vaut mieux que d'usurper celle de la première.
+    shockId: '',
     dasId,
     marketSizePct: relevant.reduce((acc, s) => acc + s.marketSizePct, 0),
     inputCostPct: relevant.reduce((acc, s) => acc + s.inputCostPct, 0),
@@ -368,6 +444,21 @@ export function resolveRound(
     );
   }
 
+  // Ce que chaque équipe a répondu, carte par carte.
+  //
+  // La table sert PARTOUT où un choc frappe une équipe en particulier : coûts,
+  // capacité, seuil de qualité, RH, trésorerie. Elle ne sert PAS à la taille
+  // du marché, calculée plus haut : le marché est partagé par tout le pool, et
+  // ne peut pas rétrécir différemment selon l'équipe qui le regarde.
+  const mitigationByTeam = new Map<string, Map<string, number>>(
+    activeTeams.map((t) => [
+      t.teamId,
+      new Map(t.shockResponses.map((r) => [r.shockId, r.effectiveness])),
+    ]),
+  );
+  const teamShock = (teamId: string, dasId: string): ShockEffects =>
+    shocksFor(dasId, input.shocks, mitigationByTeam.get(teamId));
+
   // ─────────────────────────────────────────────────────────────────────────
   // PHASE A — Par équipe et par DAS : amont, capacité, coûts, qualité, canal
   // ─────────────────────────────────────────────────────────────────────────
@@ -377,12 +468,45 @@ export function resolveRound(
     for (const unit of team.units) {
       const das = dasById.get(unit.dasId);
       if (!das) continue;
-      const shock = shocksFor(das.dasId, input.shocks);
+      const shock = teamShock(team.teamId, das.dasId);
 
       // Étape 2 — Approvisionnement.
       // La graine inclut l'équipe, le DAS et le tour : deux équipes ne subissent
       // pas la même rupture, et rejouer le tour redonne le même résultat.
       const rng = makeRng(seedFrom(input.sessionId, input.roundNumber, team.teamId, unit.dasId));
+
+      // ── Océan bleu : la déclaration devient un état ────────────────────
+      //
+      // La case « déclarer un océan bleu » était écrite en base et lue par
+      // PERSONNE. Rien ne la transformait en état d'unité, si bien que le
+      // code de répartition qui l'attend — hors somme nulle — n'a jamais été
+      // atteint, et que ni le ticket d'entrée, ni le risque d'échec, ni la
+      // marge multipliée n'existaient. L'écran promettait les trois.
+      //
+      // Une fenêtre déjà ouverte court jusqu'à son terme ; on n'en ouvre une
+      // nouvelle que si l'équipe le redemande ET que la tentative réussit.
+      const inWindow = unit.blueOcean && unit.blueOceanRoundsLeft > 0;
+      const attempts = unit.decision.declareBlueOcean && !inWindow;
+
+      // Le tirage précède l'usage de `rng` par l'approvisionnement : le
+      // consommer ici de façon inconditionnelle garderait la suite du flux
+      // identique d'un cas à l'autre, ce qui rend les tests comparables.
+      const entryRoll = rng();
+      const entrySucceeds =
+        attempts && entryRoll >= param(params, 'blue_ocean.failure_probability');
+
+      const blueOceanActive = inWindow || entrySucceeds;
+      const blueOceanRoundsLeft = entrySucceeds
+        ? param(params, 'blue_ocean.rounds')
+        : Math.max(unit.blueOceanRoundsLeft - 1, 0);
+
+      // Le ticket se paie que l'entrée réussisse ou non : c'est une
+      // exploration, pas un achat. Il est proportionnel au chiffre d'affaires
+      // du domaine — sortir un métier de son marché coûte à proportion de ce
+      // métier.
+      const blueOceanEntryCostMad = attempts
+        ? unit.previous.revenueMad * param(params, 'blue_ocean.entry_cost_pct')
+        : 0;
       // Un choc sur le pouvoir des fournisseurs passe par le MÊME point
       // d'ancrage que la molette de difficulté « écosystème » : ce sont deux
       // sources d'un seul effet, et les faire converger évite qu'elles se
@@ -521,6 +645,10 @@ export function resolveRound(
         avgDistributorMargin: distribution.avgMarginPct,
         channelControl: distribution.channelControl,
         distributionServiceLevel: distribution.serviceLevel,
+        blueOceanActive,
+        blueOceanRoundsLeft,
+        blueOceanEntryCostMad,
+        blueOceanFailed: attempts && !entrySucceeds,
         vector: {} as BusinessVector,
         priceCompetitiveness: 0,
         pressure: 0,
@@ -584,6 +712,7 @@ export function resolveRound(
       shared: number;
       relatedness: number;
       talentMix: number;
+      verticalIntegration: number;
     }
   >();
 
@@ -664,6 +793,23 @@ export function resolveRound(
       null,
     );
 
+    // L'intégration verticale se MESURE sur les décisions du tour : réseau
+    // propre en aval, approvisionnement sous contrat en amont. Elle était
+    // auparavant une constante héritée, ce qui rendait la stratégie
+    // d'intégration verticale impossible à satisfaire.
+    const verticalIntegration = verticalIntegrationIndex(
+      teamUnits.map((w) => ({
+        weight: Math.max(w.unit.previous.revenueMad, 0),
+        channelControl: w.channelControl,
+        committedVolume: w.unit.procurement.reduce(
+          (acc, l) => acc + (l.supplier.ownedByTeam ? 0 : l.committedVolume), 0),
+        ownedVolume: w.unit.procurement.reduce(
+          (acc, l) => acc + (l.supplier.ownedByTeam ? l.committedVolume : 0), 0),
+        expectedVolume: Math.max(w.unit.previous.volumeSold, w.capacityUnits),
+      })),
+      params,
+    );
+
     const corporateInput = {
       corporateStrategy: team.corporate.corporateStrategy,
       structureType: team.corporate.structureType,
@@ -678,7 +824,7 @@ export function resolveRound(
       activeSectors: teamUnits.map((w) => w.das.sectorKey),
       sharedSupplierRatio: team.corporate.sharedSupplierRatio,
       sharedDistributorRatio: team.corporate.sharedDistributorRatio,
-      verticalIntegration: team.corporate.verticalIntegration,
+      verticalIntegration,
       talentMix,
       dominantStrategy: dominantUnit?.unit.decision.genericStrategy ?? 'domination_couts',
     };
@@ -820,6 +966,7 @@ export function resolveRound(
       shared: sharedDetail?.observed ?? 0,
       relatedness: relatednessDetail?.observed ?? 100,
       talentMix,
+      verticalIntegration,
     });
   }
 
@@ -843,9 +990,17 @@ export function resolveRound(
       // La bascule vers la marque propre en est l'exemple : le marché ne
       // rétrécit pas, il arbitre différemment, et la prime à la marque s'érode.
       // Le plancher évite qu'une élasticité négative n'inverse la logique.
+      // La sensibilité au prix des segments SERVIS module l'élasticité de
+      // branche : servir la restauration collective, qui n'achète que le prix,
+      // ou le premium bio, qui ne le regarde pas, ne peut pas produire la même
+      // réaction au même geste de prix.
+      const servedForPrice = das.segments.filter((seg) =>
+        w.unit.decision.servedSegments.includes(seg.segmentKey),
+      );
       const elasticity = Math.max(
-        das.parameters.priceElasticity +
-          shocksFor(w.unit.dasId, input.shocks).priceElasticityDelta,
+        (das.parameters.priceElasticity +
+          teamShock(w.teamId, w.unit.dasId).priceElasticityDelta) *
+          segmentPriceSensitivity(servedForPrice, das.segments),
         0.1,
       );
 
@@ -872,7 +1027,9 @@ export function resolveRound(
           priceCompetitiveness: w.priceCompetitiveness,
           iaScore: ia,
           competitivePressure: w.pressure,
-          ansoffRiskCoefficient: w.unit.ansoffRiskCoefficient,
+          // Dérivé du mouvement DÉCLARÉ, et non d'une colonne d'état que
+          // seule la persistance des acquisitions alimentait.
+          ansoffRiskCoefficient: ansoffRisk(w.unit.ansoffMovement, params),
           roundsSinceLaunch: input.roundNumber - w.unit.launchedRound,
           treasuryMalus,
         },
@@ -886,7 +1043,7 @@ export function resolveRound(
       // compétitivité — une équipe à zéro sortirait de la répartition sans
       // avoir été liquidée, et le pool ne sommerait plus à 100 %. On l'effondre
       // progressivement en dessous du seuil, ce qui laisse un tour pour réagir.
-      const floor = shocksFor(w.unit.dasId, input.shocks).qualityFloor;
+      const floor = teamShock(w.teamId, w.unit.dasId).qualityFloor;
       if (floor !== null && w.perceived < floor) {
         const shortfall = (floor - w.perceived) / Math.max(floor, 1);
         w.competitiveness *= Math.max(1 - shortfall * 1.8, 0.05);
@@ -898,7 +1055,7 @@ export function resolveRound(
         teamId: w.teamId,
         competitiveness: w.competitiveness,
         coverageCap: coverageCappedShare(1, w.coverage, params),
-        blueOcean: w.unit.blueOcean && w.unit.blueOceanRoundsLeft > 0,
+        blueOcean: w.blueOceanActive,
       })),
       param(params, 'market.competitiveness_exponent'),
     );
@@ -918,7 +1075,7 @@ export function resolveRound(
 
       // Océan bleu : hors du pool, l'équipe se taille une part sur un marché
       // vierge plutôt que d'en disputer une.
-      if (w.unit.blueOcean && w.unit.blueOceanRoundsLeft > 0) {
+      if (w.blueOceanActive) {
         w.marketShare = clamp01(w.competitiveness);
         w.rawShare = w.marketShare;
       }
@@ -939,12 +1096,13 @@ export function resolveRound(
   for (const w of workspaces) {
     const volumeOfMarket = marketVolume(w.marketSizeMad, w.das.parameters.referenceUnitPriceMad);
 
-    // L'exigence de qualité des segments servis rabote la part accessible :
-    // on ne vend pas du haut de gamme avec un produit moyen.
+    // Les segments servis déterminent la part du DAS réellement adressée, et
+    // leur exigence de qualité la rabote encore : on ne vend ni sur un segment
+    // qu'on ne sert pas, ni du haut de gamme avec un produit moyen.
     const servedSegments = w.das.segments.filter((s) =>
       w.unit.decision.servedSegments.includes(s.segmentKey),
     );
-    const segmentFactor = segmentQualityPenalty(w.perceived, servedSegments, params);
+    const segmentFactor = addressableShare(w.perceived, servedSegments, params);
 
     const volume = resolveVolume(
       volumeOfMarket,
@@ -973,6 +1131,209 @@ export function resolveRound(
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // PHASE E bis — Ressources humaines, DAS par DAS
+  //
+  // ── POURQUOI CE BLOC A ÉTÉ REMONTÉ ICI ───────────────────────────────────
+  // Il vivait APRÈS le compte de résultat, ce qui en faisait une écriture
+  // d'état sans conséquence financière. Deux décisions coûteuses étaient donc
+  // gratuites :
+  //
+  //   • LES INDEMNITÉS DE LICENCIEMENT. Elles étaient calculées ici au barème
+  //     de l'article 53, affichées à l'équipe avant qu'elle ne tranche, puis
+  //     jamais débitées : le compte de résultat lisait `hr_metrics`, dont la
+  //     colonne n'était alimentée par personne et valait 0. Licencier libérait
+  //     la masse salariale sans jamais coûter le cash annoncé — soit
+  //     l'inverse exact de ce que l'écran enseigne.
+  //   • LES SUBVENTIONS OFPPT ET GIAC. Calculées, persistées, jamais créditées.
+  //
+  // Le bloc ne dépend que de la demande (phase E) et de la capacité (phase A) :
+  // rien n'empêchait de le placer avant le résultat, où ses montants comptent.
+  // ─────────────────────────────────────────────────────────────────────────
+  /**
+   * État RH d'un DAS à la clôture de l'exercice.
+   *
+   * L'enchaînement suit la chaîne du module `hr.ts` : la demande crée une
+   * charge, l'effectif et les gains de standardisation l'absorbent, le reste
+   * pèse sur le climat, qui pèse sur la rotation et la compétence — donc sur la
+   * productivité du tour SUIVANT. La boucle est lente, et c'est ce qui la rend
+   * enseignable.
+   */
+  /**
+   * Le MARCHÉ INTERNE est à somme nulle : qui arrive quelque part est parti
+   * d'ailleurs.
+   *
+   * ── LE DÉFAUT CORRIGÉ ────────────────────────────────────────────────────
+   * `internalTransfersIn` n'avait aucune contrepartie sortante. Un domaine
+   * gagnait des gens, aucun autre n'en perdait, et la consolidation d'équipe
+   * excluait délibérément ces transferts de la masse salariale — puisqu'il
+   * s'agit de personnes DÉJÀ payées. Résultat : de l'effectif gratuit, qui
+   * allégeait la charge de travail et remontait le climat sans coûter un
+   * dirham, sur autant de domaines qu'on voulait.
+   *
+   * Les départs sont donc prélevés sur les AUTRES domaines de l'équipe, au
+   * prorata de leur effectif. Débaucher un expert pour le numérique le retire
+   * bel et bien de l'agro-industrie, et l'arbitrage redevient un arbitrage.
+   */
+  const transfersOutByUnit = new Map<string, number>();
+  for (const team of activeTeams) {
+    const units = workspaces.filter((w) => w.teamId === team.teamId);
+    const totalIn = units.reduce((acc, w) => acc + (w.unit.hr?.internalTransfersIn ?? 0), 0);
+    if (totalIn <= 0) continue;
+
+    for (const w of units) {
+      // Un domaine ne se prélève pas sur lui-même : l'assiette exclut ce qu'il
+      // reçoit, sans quoi une mutation interne se compenserait elle-même.
+      const receives = w.unit.hr?.internalTransfersIn ?? 0;
+      const others = units.filter((o) => o !== w);
+      const pool = others.reduce((acc, o) => acc + Math.max(o.unit.previousHr.headcount, 0), 0);
+      if (pool <= 0) continue;
+
+      for (const source of others) {
+        const share = Math.max(source.unit.previousHr.headcount, 0) / pool;
+        const key = `${source.teamId}::${source.unit.dasId}`;
+        transfersOutByUnit.set(key, (transfersOutByUnit.get(key) ?? 0) + receives * share);
+      }
+    }
+  }
+
+  const dasHrStates: DasHrOutput[] = workspaces.map((w) => {
+    const prev = w.unit.previousHr;
+    const d = w.unit.hr;
+    const shock = teamShock(w.teamId, w.unit.dasId);
+
+    const hires = d
+      ? d.hireOperateurs + d.hireTechniciens + d.hireExperts + d.hireCadres +
+        d.internalTransfersIn
+      : 0;
+    const layoffs = d?.layoffs ?? 0;
+    // Ce que les autres domaines de l'équipe sont venus chercher ici.
+    const transfersOut = transfersOutByUnit.get(`${w.teamId}::${w.unit.dasId}`) ?? 0;
+    const headcount = Math.max(prev.headcount + hires - layoffs - transfersOut, 1);
+
+    const salary = d?.avgSalaryBrutMad ?? prev.avgSalaryBrutMad;
+    const payrollMad =
+      payrollCost(headcount, salary, params) * (1 + shock.payrollPct);
+
+    // Ce que le DAS a mutualisé PUIS standardisé. C'est le seul chemin par
+    // lequel un effectif peut être réduit sans perte de qualité.
+    const standardisation = clamp100(
+      standardisationLevel(w.unit.groupStance?.sharedResources ?? []) *
+        trainingFocusEffects(w.unit.hr?.trainingFocus).standardisation,
+    );
+
+    // La productivité de référence est celle DE CE DAS, dérivée de son propre
+    // rapport capacité/effectif — et non une constante globale. Une conserverie
+    // et une société de services n'ont pas la même, et une valeur unique
+    // saturait la charge à 200 sur les métiers capitalistiques : l'indicateur
+    // affichait « surcharge maximale » quoi que l'équipe décide, donc
+    // n'informait plus rien.
+    const dasProductivity =
+      prev.headcount > 0 && w.capacityUnits > 0
+        ? w.capacityUnits / prev.headcount
+        : param(params, 'hr.base_productivity');
+
+    const load = workloadIndex({
+      demandUnits: w.volumeDemanded,
+      headcount,
+      baseProductivity: dasProductivity,
+      standardisationLevel: standardisation,
+      automationLevel: w.automation,
+      skillIndex: prev.skillIndex,
+    });
+
+    const trainingBudget = d?.trainingBudgetMad ?? 0;
+    const trainingIntensity = payrollMad > 0 ? trainingBudget / payrollMad : 0;
+    // Ce que l'orientation choisie fait du même budget. Les quatre options
+    // avaient jusqu'ici rigoureusement le même effet : aucun.
+    const focus = trainingFocusEffects(d?.trainingFocus);
+
+    const climat = nextClimatSocial({
+      previousClimat: prev.climatSocial,
+      workloadIndex: load,
+      hiringRatio: prev.headcount > 0 ? hires / prev.headcount : 0,
+      layoffRatio: prev.headcount > 0 ? layoffs / prev.headcount : 0,
+      trainingIntensity,
+      trainingFocusClimat: focus.climat,
+      salaryRatio: prev.avgSalaryBrutMad > 0 ? salary / prev.avgSalaryBrutMad : 1,
+      // Le saut d'automatisation du tour : c'est lui qui inquiète, pas le
+      // niveau absolu. Une usine automatisée depuis dix ans ne provoque plus
+      // d'angoisse ; celle qui s'automatise brusquement, si.
+      automationDelta: Math.max(
+        w.automation -
+          automationLevel(
+            w.unit.previous.cumulativeAutomationCapexMad,
+            w.capacityUnits,
+            w.das.parameters.unitCapacityCostMad,
+          ),
+        0,
+      ),
+      restructuring: d?.restructuring ?? 'aucune',
+    }, params);
+
+    const turnover = turnoverRate(climat, prev.skillIndex, params);
+
+    const skill = nextSkillIndex({
+      previousSkill: prev.skillIndex,
+      trainingIntensity,
+      focusMultiplier: focus.skill,
+      skillsAuditOrdered: d?.orderSkillsAudit ?? false,
+      hiringRatio: prev.headcount > 0 ? hires / prev.headcount : 0,
+      internalHiringRatio:
+        prev.headcount > 0 ? (d?.internalTransfersIn ?? 0) / prev.headcount : 0,
+      turnoverRate: turnover,
+    }, params);
+
+    // Les indemnités se paient d'AVANCE, en trésorerie, alors que l'économie
+    // de masse salariale n'arrive qu'après. C'est tout l'enseignement.
+    const severanceMad =
+      layoffs *
+      severancePerHead(salary, prev.seniorityYears) *
+      (1 + shock.severancePct);
+
+    const subsidiesMad =
+      (d?.claimOfppt
+        ? ofpptReimbursement(trainingBudget, payrollMad, params)
+        : 0) +
+      (d?.claimGiac ? giacSupport(d.orderSkillsAudit, payrollMad, params) : 0) +
+      trainingBudget * shock.trainingSubsidyPct;
+
+    return {
+      teamId: w.teamId,
+      dasId: w.unit.dasId,
+      headcount,
+      climatSocial: climat,
+      productivity: headcount > 0 ? w.volumeSold / headcount : 0,
+      standardisationLevel: standardisation,
+      automationLevel: w.automation,
+      turnoverRate: turnover,
+      payrollMad,
+      workloadIndex: load,
+      overstaffingPct: Math.max(100 - load, 0),
+      skillIndex: skill,
+      severancePaidMad: severanceMad,
+      subsidiesMad,
+      /** Ce que la standardisation autorisait de retirer sans perdre en qualité. */
+      safeReduction: safeHeadcountReduction(
+        prev.headcount, standardisation, w.automation, params,
+      ),
+      qualityLossPts: qualityLossFromCuts(
+        layoffs,
+        safeHeadcountReduction(prev.headcount, standardisation, w.automation, params),
+        prev.headcount,
+      ),
+    };
+  });
+
+  // Ce que la RH de chaque DAS coûte — ou rapporte — à la trésorerie du groupe.
+  const hrCashByTeam = new Map<string, { severanceMad: number; subsidiesMad: number }>();
+  for (const state of dasHrStates) {
+    const acc = hrCashByTeam.get(state.teamId) ?? { severanceMad: 0, subsidiesMad: 0 };
+    acc.severanceMad += state.severancePaidMad;
+    acc.subsidiesMad += state.subsidiesMad;
+    hrCashByTeam.set(state.teamId, acc);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // PHASE F — Compte de résultat et trésorerie
   // ─────────────────────────────────────────────────────────────────────────
   const teamOutputs: TeamOutput[] = [];
@@ -982,6 +1343,9 @@ export function resolveRound(
     const teamUnits = workspaces.filter((w) => w.teamId === team.teamId);
     const alignment = alignmentByTeam.get(team.teamId)!;
     const corporate = corporateByTeam.get(team.teamId)!;
+
+    const hrCash = hrCashByTeam.get(team.teamId) ?? { severanceMad: 0, subsidiesMad: 0 };
+    const teamHrStates = dasHrStates.filter((h) => h.teamId === team.teamId);
 
     const revenueMad = teamUnits.reduce((acc, w) => acc + w.revenueMad, 0);
     const cogsMad = teamUnits.reduce((acc, w) => acc + w.cogsMad, 0);
@@ -999,7 +1363,8 @@ export function resolveRound(
           w.unit.decision.capexAutomationMad +
           w.unit.decision.capexOwnNetworkMad,
         0,
-      ) + team.corporate.structureTransitionCostMad;
+      );
+
 
     const distributorMarginPct =
       revenueMad > 0
@@ -1009,6 +1374,27 @@ export function resolveRound(
     const hires =
       team.hr.hireOperateurs + team.hr.hireTechniciens + team.hr.hireExperts + team.hr.hireCadres;
     const headcount = Math.max(team.hr.headcountStart + hires - team.hr.restructuringCount, 0);
+
+    // ── Coût de réorganisation ─────────────────────────────────────────────
+    //
+    // Il était lu depuis `structure_transition_cost_mad` — colonne qu'AUCUNE
+    // écriture n'alimentait, et qui valait donc 0 pour toujours. Changer de
+    // structure ne coûtait rien en trésorerie : une équipe pouvait basculer de
+    // fonctionnelle à matricielle chaque tour et repartir en sens inverse le
+    // suivant, ne payant jamais que la pénalité d'alignement.
+    //
+    // Le coût est désormais DÉRIVÉ du changement lui-même, et assis sur la
+    // masse salariale : cabinets, doublons transitoires, mois de flottement —
+    // une réorganisation se paie en personnel, non en pourcentage d'un chiffre
+    // d'affaires qu'on ne connaît pas encore quand on la décide.
+    const structureChanged =
+      team.previousStructureType !== null &&
+      team.previousStructureType !== team.corporate.structureType;
+
+    const structureTransitionCostMad = structureChanged
+      ? payrollCost(headcount, team.hr.avgSalaryBrutMad, params) *
+        param(params, 'structure.transition_cost_pct_of_payroll')
+      : 0;
 
     const synergy = synergyEffect(
       corporate.shared,
@@ -1029,7 +1415,7 @@ export function resolveRound(
       revenueMad > 0
         ? teamUnits.reduce(
             (acc, w) =>
-              acc + (w.revenueMad / revenueMad) * pick(shocksFor(w.unit.dasId, input.shocks)),
+              acc + (w.revenueMad / revenueMad) * pick(teamShock(team.teamId, w.unit.dasId)),
             0,
           )
         : 0;
@@ -1048,11 +1434,18 @@ export function resolveRound(
         distributorMarginPct,
         cogsMad,
         marginPremiumPct: marginPremium(alignment.iaFinal, params),
+        // Les indemnités viennent des décisions RH de chaque DAS — le seul
+        // endroit où elles sont réellement calculées, au barème de l'article
+        // 53 et sur l'ancienneté du domaine. Le choc de branche leur est déjà
+        // appliqué par DAS : le réappliquer ici le compterait deux fois.
+        // Les subventions OFPPT et GIAC viennent en DÉDUCTION : elles
+        // remboursent de la formation, qui est dans cette même ligne.
         payrollMad:
           payrollCost(headcount, team.hr.avgSalaryBrutMad, params) *
             (1 + weightedShock((s) => s.payrollPct)) +
-          team.hr.severancePaidMad * (1 + weightedShock((s) => s.severancePct)) +
-          team.hr.trainingBudgetMad * (1 - weightedShock((s) => s.trainingSubsidyPct)),
+          hrCash.severanceMad +
+          team.hr.trainingBudgetMad * (1 - weightedShock((s) => s.trainingSubsidyPct)) -
+          hrCash.subsidiesMad,
         marketingMad,
         rdMad,
         overheadMad: team.finance.opexMad,
@@ -1063,14 +1456,32 @@ export function resolveRound(
         debtMad: team.finance.debtOutstandingMad,
         equityMad: team.finance.equityMad,
         taxRegime: team.finance.taxRegime,
-        capexMad,
+        capexMad: capexMad + structureTransitionCostMad,
         treasuryStartMad: team.finance.treasuryStartMad,
         workingCapitalDays,
         previousWorkingCapitalMad: team.finance.previousWorkingCapitalMad,
         debtDrawnMad: team.finance.debtDrawnMad,
         debtRepaidMad: team.finance.debtRepaidMad,
-        divestitureCashMad: revenueMad * weightedShock((s) => s.subsidyPctOfRevenue),
+        // Répondre à une crise se paie, y compris quand la carte s'avère
+        // bénigne : c'est le prix de l'assurance, et c'est l'arbitrage que
+        // la war room propose. Le coût était calculé puis jamais débité.
+        divestitureCashMad:
+          revenueMad * weightedShock((s) => s.subsidyPctOfRevenue) -
+          team.shockResponses.reduce((acc, r) => acc + r.costMad, 0),
         rateDelta: weightedShock((s) => s.rateDelta),
+        // La marge d'océan bleu se calcule PAR DOMAINE : la fenêtre s'ouvre
+        // sur un métier, pas sur le groupe. Un pourcentage global l'aurait
+        // étendue à des domaines qui n'ont rien tenté.
+        blueOceanMarginMad: teamUnits.reduce(
+          (acc, w) =>
+            acc +
+            (w.blueOceanActive
+              ? Math.max(w.revenueMad - w.cogsMad, 0) *
+                (param(params, 'blue_ocean.margin_multiplier') - 1)
+              : 0),
+          0,
+        ),
+        blueOceanEntryMad: teamUnits.reduce((acc, w) => acc + w.blueOceanEntryCostMad, 0),
       },
       params,
     );
@@ -1088,19 +1499,15 @@ export function resolveRound(
       poolId: team.poolId,
       pnl,
       alignment,
-      climatSocial: nextClimateSocial(
-        team.previousClimatSocial,
-        team.hr.headcountStart,
-        hires,
-        team.hr.restructuringCount,
-        team.hr.trainingBudgetMad,
-        params,
-      ),
-      headcount,
+      // Le climat et l'effectif du groupe sont la CONSOLIDATION de ses
+      // domaines, non un second calcul. Deux modèles coexistaient, et le plus
+      // grossier alimentait le cockpit et le Balanced Scorecard.
+      climatSocial: consolidateClimate(teamHrStates, team.previousClimatSocial),
+      headcount: consolidateHeadcount(teamHrStates, headcount),
       centralisationIndex: corporate.centralisation,
       sharedResourcesIndex: corporate.shared,
       portfolioRelatedness: corporate.relatedness,
-      verticalIntegration: team.corporate.verticalIntegration,
+      verticalIntegration: corporate.verticalIntegration,
       talentMix: corporate.talentMix,
       synergySavingPct: synergy.savingPct,
       coordinationCostPct: synergy.coordinationCostPct,
@@ -1149,21 +1556,32 @@ export function resolveRound(
       params,
     );
 
+    // Une intégration de filière ne transfère NI part de marché NI capacité :
+    // le maillon servait déjà l'équipe, il change seulement de propriétaire.
+    // Ce qu'elle transfère, c'est le droit de ne plus payer d'intermédiaire —
+    // et ce droit est amputé de ce que l'intégration a raté.
+    const integre = best.operation !== 'entree_das';
+
     acquisitions.push({
       offerId: best.offerId,
       buyerTeamId: best.bidderTeamId,
       targetActorId,
       dasId: best.dasId,
+      operation: best.operation,
+      integrationQuality: 1 - outcome.valueLossPct,
       pricePaidMad: best.offerMad,
       integrationRatio: outcome.integrationRatio,
       valueLossPct: outcome.valueLossPct,
-      marketShareAcquired: outcome.marketShareTransferred,
+      marketShareAcquired: integre ? 0 : outcome.marketShareTransferred,
+      // Le chiffre d'affaires suit la part de marché : on rachète une
+      // position commerciale, amputée de ce que l'intégration détruit.
+      revenueAcquired: integre ? 0 : best.targetRevenueMad * (1 - outcome.valueLossPct),
       // La capacité et la qualité subissent la même érosion que la part de
       // marché : mal intégrer, c'est perdre des équipes, des clients et du
       // savoir-faire au même rythme.
-      capacityAcquired: best.targetCapacityUnits * (1 - outcome.valueLossPct),
-      notorietyAcquired: outcome.notorietyTransferred,
-      qualityAcquired: best.targetQuality * (1 - outcome.valueLossPct * 0.5),
+      capacityAcquired: integre ? 0 : best.targetCapacityUnits * (1 - outcome.valueLossPct),
+      notorietyAcquired: integre ? 0 : outcome.notorietyTransferred,
+      qualityAcquired: integre ? 0 : best.targetQuality * (1 - outcome.valueLossPct * 0.5),
     });
 
     // Le prix sort de la trésorerie de l'acquéreur, budget d'intégration compris.
@@ -1320,134 +1738,6 @@ export function resolveRound(
     };
   };
 
-  /**
-   * État RH d'un DAS à la clôture de l'exercice.
-   *
-   * L'enchaînement suit la chaîne du module `hr.ts` : la demande crée une
-   * charge, l'effectif et les gains de standardisation l'absorbent, le reste
-   * pèse sur le climat, qui pèse sur la rotation et la compétence — donc sur la
-   * productivité du tour SUIVANT. La boucle est lente, et c'est ce qui la rend
-   * enseignable.
-   */
-  const dasHrStates: DasHrOutput[] = workspaces.map((w) => {
-    const prev = w.unit.previousHr;
-    const d = w.unit.hr;
-    const shock = shocksFor(w.unit.dasId, input.shocks);
-
-    const hires = d
-      ? d.hireOperateurs + d.hireTechniciens + d.hireExperts + d.hireCadres +
-        d.internalTransfersIn
-      : 0;
-    const layoffs = d?.layoffs ?? 0;
-    const headcount = Math.max(prev.headcount + hires - layoffs, 1);
-
-    const salary = d?.avgSalaryBrutMad ?? prev.avgSalaryBrutMad;
-    const payrollMad =
-      payrollCost(headcount, salary, params) * (1 + shock.payrollPct);
-
-    // Ce que le DAS a mutualisé PUIS standardisé. C'est le seul chemin par
-    // lequel un effectif peut être réduit sans perte de qualité.
-    const standardisation = standardisationLevel(
-      w.unit.groupStance?.sharedResources ?? [],
-    );
-
-    // La productivité de référence est celle DE CE DAS, dérivée de son propre
-    // rapport capacité/effectif — et non une constante globale. Une conserverie
-    // et une société de services n'ont pas la même, et une valeur unique
-    // saturait la charge à 200 sur les métiers capitalistiques : l'indicateur
-    // affichait « surcharge maximale » quoi que l'équipe décide, donc
-    // n'informait plus rien.
-    const dasProductivity =
-      prev.headcount > 0 && w.capacityUnits > 0
-        ? w.capacityUnits / prev.headcount
-        : param(params, 'hr.base_productivity');
-
-    const load = workloadIndex({
-      demandUnits: w.volumeDemanded,
-      headcount,
-      baseProductivity: dasProductivity,
-      standardisationLevel: standardisation,
-      automationLevel: w.automation,
-      skillIndex: prev.skillIndex,
-    });
-
-    const trainingBudget = d?.trainingBudgetMad ?? 0;
-    const trainingIntensity = payrollMad > 0 ? trainingBudget / payrollMad : 0;
-
-    const climat = nextClimatSocial({
-      previousClimat: prev.climatSocial,
-      workloadIndex: load,
-      hiringRatio: prev.headcount > 0 ? hires / prev.headcount : 0,
-      layoffRatio: prev.headcount > 0 ? layoffs / prev.headcount : 0,
-      trainingIntensity,
-      salaryRatio: prev.avgSalaryBrutMad > 0 ? salary / prev.avgSalaryBrutMad : 1,
-      // Le saut d'automatisation du tour : c'est lui qui inquiète, pas le
-      // niveau absolu. Une usine automatisée depuis dix ans ne provoque plus
-      // d'angoisse ; celle qui s'automatise brusquement, si.
-      automationDelta: Math.max(
-        w.automation -
-          automationLevel(
-            w.unit.previous.cumulativeAutomationCapexMad,
-            w.capacityUnits,
-            w.das.parameters.unitCapacityCostMad,
-          ),
-        0,
-      ),
-      restructuring: d?.restructuring ?? 'aucune',
-    }, params);
-
-    const turnover = turnoverRate(climat, prev.skillIndex, params);
-
-    const skill = nextSkillIndex({
-      previousSkill: prev.skillIndex,
-      trainingIntensity,
-      skillsAuditOrdered: d?.orderSkillsAudit ?? false,
-      hiringRatio: prev.headcount > 0 ? hires / prev.headcount : 0,
-      internalHiringRatio:
-        prev.headcount > 0 ? (d?.internalTransfersIn ?? 0) / prev.headcount : 0,
-      turnoverRate: turnover,
-    }, params);
-
-    // Les indemnités se paient d'AVANCE, en trésorerie, alors que l'économie
-    // de masse salariale n'arrive qu'après. C'est tout l'enseignement.
-    const severanceMad =
-      layoffs *
-      severancePerHead(salary, prev.seniorityYears) *
-      (1 + shock.severancePct);
-
-    const subsidiesMad =
-      (d?.claimOfppt
-        ? ofpptReimbursement(trainingBudget, payrollMad, params)
-        : 0) +
-      (d?.claimGiac ? giacSupport(d.orderSkillsAudit, payrollMad, params) : 0) +
-      trainingBudget * shock.trainingSubsidyPct;
-
-    return {
-      teamId: w.teamId,
-      dasId: w.unit.dasId,
-      headcount,
-      climatSocial: climat,
-      productivity: headcount > 0 ? w.volumeSold / headcount : 0,
-      standardisationLevel: standardisation,
-      automationLevel: w.automation,
-      turnoverRate: turnover,
-      payrollMad,
-      workloadIndex: load,
-      overstaffingPct: Math.max(100 - load, 0),
-      skillIndex: skill,
-      severancePaidMad: severanceMad,
-      subsidiesMad,
-      /** Ce que la standardisation autorisait de retirer sans perdre en qualité. */
-      safeReduction: safeHeadcountReduction(
-        prev.headcount, standardisation, w.automation, params,
-      ),
-      qualityLossPts: qualityLossFromCuts(
-        layoffs,
-        safeHeadcountReduction(prev.headcount, standardisation, w.automation, params),
-        prev.headcount,
-      ),
-    };
-  });
 
   const dasMetrics: DasMetricsOutput[] = workspaces.map((w) => {
     const diagnosis = alignmentByTeam.get(w.teamId)?.perDas[w.unit.dasId];
@@ -1481,6 +1771,10 @@ export function resolveRound(
       distributionCoverage: w.coverage,
       avgDistributorMargin: w.avgDistributorMargin,
       channelControl: w.channelControl,
+      blueOceanActive: w.blueOceanActive,
+      blueOceanRoundsLeft: w.blueOceanRoundsLeft,
+      blueOceanEntryCostMad: w.blueOceanEntryCostMad,
+      blueOceanFailed: w.blueOceanFailed,
       marketSizeMad: w.marketSizeMad,
       rawShare: w.rawShare,
       marketSharePct: w.marketShare,
@@ -1541,13 +1835,20 @@ export function checkInvariants(
     const metrics = dasMetrics.filter(
       (m) => m.dasId === summary.dasId && summary.teamIds.includes(m.teamId),
     );
-    const contenders = metrics.filter((m) => m.rawShare > 0 || m.marketSharePct > 0);
+    // Les équipes en océan bleu sont hors du pool : leur part se prend sur un
+    // marché vierge et n'entre pas dans la somme.
+    //
+    // Le commentaire l'annonçait déjà, mais la soustraction portait sur une
+    // constante nulle — un `blueOceanTotal = 0` qui ne retirait rien. Le
+    // défaut est resté invisible tant que l'océan bleu lui-même était inerte :
+    // aucune équipe n'ayant jamais quitté le pool, la somme tombait juste par
+    // accident. Le voilà exact, et le filtre est explicite.
+    const contenders = metrics.filter(
+      (m) => !m.blueOceanActive && (m.rawShare > 0 || m.marketSharePct > 0),
+    );
     const total = contenders.reduce((acc, m) => acc + m.marketSharePct, 0) + summary.unservedShare;
 
-    // Les équipes en océan bleu sont hors du pool : leur part n'entre pas dans
-    // la somme, sans quoi l'invariant serait faux par construction.
-    const blueOceanTotal = 0;
-    if (contenders.length > 0 && Math.abs(total - blueOceanTotal - 1) > 1e-4) {
+    if (contenders.length > 0 && Math.abs(total - 1) > 1e-4) {
       failures.push({
         code: 'share_sum',
         message: `Pool ${summary.poolId}, DAS ${summary.dasId} : les parts somment à ${total.toFixed(6)} au lieu de 1.`,

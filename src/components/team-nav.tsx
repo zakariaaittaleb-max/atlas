@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { DasSwitcher } from '@/components/das-scope';
 import { getTeamContext, getRoundState } from '@/lib/dal';
 import { formatMadCompact } from '@/lib/format';
 import { loadMoneyBar } from '@/lib/server/money-bar';
@@ -13,15 +14,31 @@ import { loadMoneyBar } from '@/lib/server/money-bar';
  * encore modifiables, sans avoir à ouvrir un onglet pour le découvrir.
  */
 
-const LINKS = [
+/**
+ * Les écrans, rangés par NIVEAU DE DÉCISION.
+ *
+ * Le cahier distingue la stratégie du Groupe de celle de chaque domaine, mais
+ * la barre les mélangeait : rien ne disait qu'un prix se décide par DAS et un
+ * régime fiscal pour l'entreprise entière. Les deux familles sont désormais
+ * séparées visuellement, et le sélecteur de domaine se trouve juste en dessous
+ * de la seconde — là où il gouverne effectivement quelque chose.
+ */
+const GROUP_LINKS = [
   { href: '/cockpit', label: 'Cockpit' },
-  { href: '/strategie', label: 'Stratégie' },
-  { href: '/organisation', label: 'Organisation' },
+  { href: '/strategie', label: 'Stratégie du Groupe' },
+  { href: '/finance', label: 'Finance du Groupe' },
+  { href: '/cession', label: 'Cession & acquisitions' },
+] as const;
+
+const DAS_LINKS = [
+  { href: '/strategie/das', label: 'Stratégie du DAS' },
+  { href: '/organisation', label: 'Organisation & RH' },
   { href: '/marches', label: 'Achats & distribution' },
-  { href: '/finance', label: 'Organisation & finance' },
+] as const;
+
+const SHARED_LINKS = [
   { href: '/war-room', label: 'War Room' },
   { href: '/cabinet', label: 'Cabinet' },
-  { href: '/cession', label: 'Cession' },
   { href: '/revelation', label: 'Révélation' },
 ] as const;
 
@@ -52,8 +69,24 @@ export async function TeamNav() {
       <div className="mx-auto flex w-full min-w-0 max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-3">
         <span className="font-semibold tracking-tight">Atlas</span>
 
-        <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-          {LINKS.map((link) => (
+        <ul className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+          {GROUP_LINKS.map((link) => (
+            <li key={link.href}>
+              <Link href={link.href} className="hover:underline">
+                {link.label}
+              </Link>
+            </li>
+          ))}
+          <li aria-hidden className="text-(--foreground-muted)">|</li>
+          {DAS_LINKS.map((link) => (
+            <li key={link.href}>
+              <Link href={link.href} className="hover:underline">
+                {link.label}
+              </Link>
+            </li>
+          ))}
+          <li aria-hidden className="text-(--foreground-muted)">|</li>
+          {SHARED_LINKS.map((link) => (
             <li key={link.href}>
               <Link href={link.href} className="hover:underline">
                 {link.label}
@@ -93,6 +126,13 @@ export async function TeamNav() {
           </form>
         </div>
       </div>
+
+      {/* ── Le domaine piloté, en permanence ─────────────────────────────
+          Il gouverne la stratégie du DAS, les achats, la distribution,
+          l'organisation et les RH. Le laisser implicite, c'était laisser une
+          équipe saisir un prix sur le mauvais domaine sans jamais s'en rendre
+          compte. */}
+      <DasSwitcher />
 
       {/* ── L'argent, en permanence ──────────────────────────────────────
           Une équipe engageait des dépenses sur quatre écrans sans jamais voir

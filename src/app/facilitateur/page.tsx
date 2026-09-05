@@ -9,6 +9,7 @@ import { DAS_CATALOG } from '@/lib/server/das-catalog';
 import { createAdminClient } from '@/lib/supabase/server';
 
 import { SessionLauncher } from './session-launcher';
+import { BriefingGuide } from './briefing-guide';
 
 export const metadata = { title: 'Atlas — Mes sessions' };
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,8 @@ export default async function FacilitatorIndexPage() {
           distribuent en salle.
         </p>
       </header>
+
+      <BriefingGuide />
 
       {(sessions ?? []).length === 0 ? (
         <p className="mb-10 rounded-xl border border-(--border) bg-(--surface) p-6 text-(--foreground-muted)">

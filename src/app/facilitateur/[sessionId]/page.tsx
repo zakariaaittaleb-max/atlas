@@ -24,11 +24,16 @@ export default async function FacilitatorPage({
 
   const admin = createAdminClient();
 
-  const [{ data: session }, { data: teams }, { data: das }, { data: cards }, { data: shocks }, { data: runs }] =
+  const [{ data: session }, { data: teams }, { data: das }, { data: targets }, { data: cards }, { data: shocks }, { data: runs }] =
     await Promise.all([
       admin.from('game_sessions').select('*').eq('id', sessionId).maybeSingle(),
       admin.from('teams').select('id, name, pool_id, join_code, is_liquidated').eq('session_id', sessionId).order('name'),
       admin.from('strategic_units').select('id, name, sector_key').eq('session_id', sessionId).order('name'),
+      // Quels domaines sont OUVERTS à l'acquisition. On lit les cibles plutôt
+      // qu'un drapeau sur le DAS : c'est la cible qu'on ouvre, et un domaine
+      // sans cible n'est pas acquérable même si on le déclarait ouvert.
+      admin.from('ecosystem_actors').select('das_id, market_open')
+        .eq('session_id', sessionId).eq('actor_type', 'cible_acquisition'),
       admin.from('shock_cards').select('key, name, description, nature, pestel_dimension, target_sectors, duration_rounds, source_reference').order('pestel_dimension'),
       admin.from('market_shocks').select('id, card_key, das_id, round_number, rounds_remaining').eq('session_id', sessionId).order('round_number', { ascending: false }),
       admin.from('resolution_runs').select('round_number, status, duration_ms, error_message, invariant_failures').eq('session_id', sessionId).order('started_at', { ascending: false }).limit(5),
@@ -94,7 +99,17 @@ export default async function FacilitatorPage({
       plannedRounds={Number(session?.planned_rounds ?? 3)}
       maxRounds={Number(session?.max_rounds ?? 10)}
       teams={progress}
-      das={(das ?? []).map((d) => ({ id: String(d.id), name: String(d.name) }))}
+      das={(das ?? []).map((d) => {
+        const mine = (targets ?? []).filter((t) => String(t.das_id) === String(d.id));
+        return {
+          id: String(d.id),
+          name: String(d.name),
+          // « Ouvert » dès qu'une cible l'est : le geste du facilitateur porte
+          // sur le domaine, et ouvre ses deux cibles ensemble.
+          marketOpen: mine.some((t) => t.market_open === true),
+          hasTargets: mine.length > 0,
+        };
+      })}
       difficulty={String(session?.difficulty ?? 'standard')}
       dials={dialsFor(
         (session?.difficulty ?? 'standard') as Parameters<typeof dialsFor>[0],

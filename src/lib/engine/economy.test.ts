@@ -24,7 +24,9 @@ import {
   competitivenessScore,
   priceCompetitiveness,
   resolveVolume,
-  segmentQualityPenalty,
+  addressableShare,
+  ansoffRisk,
+  segmentPriceSensitivity,
   unitPrice,
 } from './market';
 import {
@@ -453,23 +455,71 @@ describe('volumes', () => {
   });
 });
 
-describe('exigence de segment', () => {
-  it('divise par deux la part sur un segment trop exigeant', () => {
-    const penalty = segmentQualityPenalty(
-      50,
-      [{ qualityRequirement: 80, marketSharePct: 1 }],
-      params,
-    );
-    expect(penalty).toBeCloseTo(0.5, 6);
+describe('marché adressable par les segments', () => {
+  // Les cinq segments d'un DAS pèsent 1 au total. Ceux qu'on ne sert pas ne
+  // rapportent rien : c'est ce que « élargir le marché adressable » veut dire.
+  const cinq = [
+    { qualityRequirement: 40, marketSharePct: 0.38 },
+    { qualityRequirement: 70, marketSharePct: 0.24 },
+    { qualityRequirement: 35, marketSharePct: 0.14 },
+    { qualityRequirement: 82, marketSharePct: 0.10 },
+    { qualityRequirement: 55, marketSharePct: 0.14 },
+  ];
+
+  it('divise par deux la part d’un segment trop exigeant', () => {
+    expect(addressableShare(50, [{ qualityRequirement: 80, marketSharePct: 1 }], params))
+      .toBeCloseTo(0.5, 6);
   });
 
   it('ne pénalise pas une offre à la hauteur', () => {
-    const penalty = segmentQualityPenalty(
-      85,
-      [{ qualityRequirement: 80, marketSharePct: 1 }],
-      params,
-    );
-    expect(penalty).toBe(1);
+    expect(addressableShare(85, [{ qualityRequirement: 80, marketSharePct: 1 }], params))
+      .toBe(1);
+  });
+
+  it('rend le marché entier à qui sert les cinq segments avec la qualité requise', () => {
+    expect(addressableShare(90, cinq, params)).toBeCloseTo(1, 6);
+  });
+
+  it('RESTREINT le marché de qui ne sert qu’une niche', () => {
+    // Le défaut corrigé : la normalisation rendait 1 dans les deux cas, si
+    // bien que se concentrer ne coûtait aucun volume tout en rapportant des
+    // points d’alignement. La concentration était strictement dominante.
+    const niche = addressableShare(90, [cinq[3]], params);
+    expect(niche).toBeCloseTo(0.10, 6);
+    expect(niche).toBeLessThan(addressableShare(90, cinq, params));
+  });
+
+  it('n’adresse rien quand aucun segment n’est servi', () => {
+    expect(addressableShare(90, [], params)).toBe(0);
+  });
+});
+
+describe('sensibilité au prix des segments servis', () => {
+  const cinq = [
+    { marketSharePct: 0.38, priceSensitivity: 1.7 },
+    { marketSharePct: 0.24, priceSensitivity: 1.2 },
+    { marketSharePct: 0.14, priceSensitivity: 1.9 },
+    { marketSharePct: 0.10, priceSensitivity: 0.7 },
+    { marketSharePct: 0.14, priceSensitivity: 1.5 },
+  ];
+
+  it('laisse l’élasticité de branche intacte quand tout le marché est servi', () => {
+    // Sans quoi le correctif aurait dérégulé la calibration de tout le jeu :
+    // la sensibilité moyenne de l’agro vaut 1,48, pas 1.
+    expect(segmentPriceSensitivity(cinq, cinq)).toBeCloseTo(1, 9);
+  });
+
+  it('rend le premium bio nettement moins sensible que la moyenne', () => {
+    expect(segmentPriceSensitivity([cinq[3]], cinq)).toBeLessThan(0.6);
+  });
+
+  it('rend la restauration collective plus sensible que la moyenne', () => {
+    expect(segmentPriceSensitivity([cinq[2]], cinq)).toBeGreaterThan(1.2);
+  });
+
+  it('rend 1 plutôt qu’un zéro quand aucun segment n’est servi', () => {
+    // Un zéro se propagerait dans une multiplication d’élasticité.
+    expect(segmentPriceSensitivity([], cinq)).toBe(1);
   });
 });
 
@@ -683,5 +733,41 @@ describe('cession de DAS', () => {
     const bienIntegre = resolveTransfer(100_000_000, 20_000_000, 0.3, 70, params);
     expect(bienIntegre.integrationRatio).toBeCloseTo(1, 6);
     expect(bienIntegre.valueLossPct).toBeCloseTo(0.05, 6);
+  });
+});
+
+describe('risque d’entrée d’Ansoff', () => {
+  /**
+   * Le défaut corrigé : les quatre paramètres `ansoff.risk.*` existaient, la
+   * matrice était saisie à l'écran d'organisation, et rien ne reliait le
+   * mouvement déclaré à son coefficient — le moteur lisait une colonne d'état
+   * que seule la persistance des acquisitions alimente. Une équipe déclarait
+   * « diversification », le mouvement le plus risqué de la matrice, et n'en
+   * subissait aucun risque.
+   */
+  it('ne fait courir aucun risque à la pénétration de son propre marché', () => {
+    expect(ansoffRisk('penetration', params)).toBe(0);
+  });
+
+  it('ordonne les quatre mouvements du moins au plus risqué', () => {
+    const risques = ['penetration', 'developpement_marche', 'developpement_produit', 'diversification']
+      .map((m) => ansoffRisk(m, params));
+
+    for (let i = 1; i < risques.length; i += 1) {
+      expect(risques[i]).toBeGreaterThan(risques[i - 1]);
+    }
+  });
+
+  it('fait de la diversification le mouvement le plus coûteux', () => {
+    expect(ansoffRisk('diversification', params)).toBeGreaterThan(0.2);
+  });
+
+  it('ne risque rien faute de mouvement déclaré', () => {
+    expect(ansoffRisk(null, params)).toBe(0);
+    expect(ansoffRisk(undefined, params)).toBe(0);
+  });
+
+  it('borne un mouvement inconnu plutôt que de propager un NaN', () => {
+    expect(ansoffRisk('mouvement_fantaisiste', params)).toBe(0);
   });
 });

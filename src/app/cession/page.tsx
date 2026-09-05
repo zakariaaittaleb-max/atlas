@@ -1,7 +1,9 @@
 import { decisionsAreOpen, getRoundState, requireTeam } from '@/lib/dal';
 import { createServerClient } from '@/lib/supabase/server';
 
-import { CessionView, type OwnListing, type PublicListing, type SellableDas } from './cession-view';
+import {
+  CessionView, type IntegrationTarget, type OwnListing, type PublicListing, type SellableDas,
+} from './cession-view';
 
 export const metadata = { title: 'Atlas — Marché de cession' };
 export const dynamic = 'force-dynamic';
@@ -17,6 +19,7 @@ export default async function CessionPage() {
   const [
     { data: units }, { data: ownListings }, { data: interest },
     { data: market }, { data: myBids }, { data: targets }, { data: myOffers },
+    { data: links },
   ] =
     await Promise.all([
       // Portefeuille de l'équipe. `strategic_units` n'expose que l'identité du
@@ -51,6 +54,10 @@ export default async function CessionPage() {
         .select('target_actor_id, offer_mad, integration_budget_mad, status')
         .eq('bidder_team_id', team.teamId)
         .eq('round_number', roundNumber),
+      // Maillons intégrables : les fournisseurs et distributeurs des domaines
+      // que l'équipe EXPLOITE. Identité seulement — capacité, fiabilité et
+      // marge exigée restent au cabinet.
+      supabase.from('integration_targets_public').select('*'),
     ]);
 
   const interestByListing = new Map(
@@ -102,6 +109,15 @@ export default async function CessionPage() {
           offerMad: Number(o.offer_mad),
           integrationBudgetMad: Number(o.integration_budget_mad),
         }))}
+      integrationTargets={(links ?? []).map((l): IntegrationTarget => ({
+        targetActorId: String(l.target_actor_id),
+        targetName: String(l.target_name),
+        dasName: String(l.das_name),
+        regionKey: l.region_key ? String(l.region_key) : null,
+        actorType: String(l.actor_type) as IntegrationTarget['actorType'],
+        alreadyOwned: Boolean(l.already_owned),
+        ownedByMe: Boolean(l.owned_by_me),
+      }))}
     />
   );
 }

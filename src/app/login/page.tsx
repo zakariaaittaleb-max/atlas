@@ -20,7 +20,7 @@ export default async function LoginPage() {
         <header className="mb-10">
           <h1 className="text-4xl font-semibold tracking-tight">Atlas</h1>
           <p className="mt-2 text-lg text-(--foreground-muted)">
-            Simulateur de strategie d'entreprise
+            Simulateur de stratégie d’entreprise
           </p>
         </header>
 

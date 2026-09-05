@@ -1,18 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  buildStudyDeliverable,
-  discloseField,
-  normalizedError,
-  perturb,
-  quantize,
-  STUDY_BASE_PRICES,
-  STUDY_TIERS,
-  studyPrice,
-  TIER_PROFILES,
-  type DisclosureContext,
-  type NumericFieldSpec,
-  type StudyTier,
+  STUDY_BASE_PRICES, STUDY_FIELDS, STUDY_TIERS, TIER_PROFILES, buildStudyDeliverable, discloseField, normalizedError, perturb, quantize, studyPrice, type DisclosureContext, type NumericFieldSpec, type StudyTier,
 } from './consulting';
 import { buildParams } from './params';
 
@@ -270,5 +259,93 @@ describe('livrable complet', () => {
     expect(() => buildStudyDeliverable('inexistante', 'standard', {}, ctx, params)).toThrow(
       /Étude inconnue/,
     );
+  });
+});
+
+// ===========================================================================
+// Les analyses stratégiques sont-elles CONSTRUCTIBLES ?
+// ===========================================================================
+
+/**
+ * Un catalogue d'études peut porter les bons noms et ne pas livrer la matière.
+ * C'était le cas : l'étude « PESTEL » ne livrait aucune des six dimensions, et
+ * deux des cinq forces de Porter n'avaient aucune donnée achetable — la menace
+ * des entrants reposait sur une valeur que le moteur utilisait sans jamais la
+ * divulguer, celle des substituts n'existait pas du tout.
+ *
+ * Ce test relie chaque outil d'analyse aux champs qui le rendent possible.
+ * Retirer un champ casse l'outil, et le test le dit.
+ */
+const champs = (study: string) => STUDY_FIELDS[study].map((f) => f.key);
+const toutesLesEtudes = Object.keys(STUDY_FIELDS).flatMap(champs);
+
+describe('couverture des outils d’analyse stratégique', () => {
+  it('PESTEL — les six dimensions sont livrées', () => {
+    const dims = ['politique', 'economique', 'socioculturel',
+                  'technologique', 'ecologique', 'legal'];
+    for (const d of dims) {
+      expect(champs('pestel_sectoriel'), d).toContain(`exposure_${d}`);
+    }
+  });
+
+  it('PORTER — les cinq forces ont chacune leur donnée', () => {
+    // 1. Pouvoir de négociation des fournisseurs
+    expect(champs('benchmark_fourn')).toContain('switching_cost');
+    expect(champs('benchmark_fourn')).toContain('capacity_units');
+    // 2. Pouvoir de négociation des distributeurs
+    expect(champs('benchmark_distri')).toContain('negotiating_strength');
+    expect(champs('benchmark_distri')).toContain('required_margin_pct');
+    // 3. Rivalité entre concurrents
+    expect(champs('concurrentielle')).toContain('pool_concentration');
+    expect(champs('concurrentielle')).toContain('competitor_market_share');
+    // 4. Menace des entrants — la donnée existait, elle n'était pas vendue
+    expect(champs('concurrentielle')).toContain('entry_barrier');
+    // 5. Menace des substituts — elle n'existait pas du tout
+    expect(champs('concurrentielle')).toContain('substitution_pressure');
+  });
+
+  it('BCG — les deux axes sont achetables', () => {
+    // Abscisse : part relative au leader. Une part absolue ne dit rien.
+    expect(champs('concurrentielle')).toContain('relative_market_share');
+    // Ordonnée : croissance du marché.
+    expect(champs('pestel_sectoriel')).toContain('growth_rate');
+  });
+
+  it('BCG — les deux axes sont dans DEUX études distinctes', () => {
+    // C'est délibéré : construire un BCG demande deux missions, et le coût de
+    // l'information est une leçon du jeu, pas une lacune du catalogue.
+    expect(champs('pestel_sectoriel')).not.toContain('relative_market_share');
+    expect(champs('concurrentielle')).not.toContain('growth_rate');
+  });
+
+  it('SWOT — l’interne et l’externe sont couverts', () => {
+    // Forces et faiblesses : l'audit d'alignement décompose axe par axe.
+    expect(champs('audit_alignement')).toContain('sab_global');
+    expect(champs('audit_alignement')).toContain('sac_score');
+    // Opportunités et menaces : exposition PESTEL et pression concurrentielle.
+    expect(champs('pestel_sectoriel')).toContain('next_round_shock_risk');
+    expect(champs('concurrentielle')).toContain('substitution_pressure');
+  });
+
+  it('aucun champ n’est déclaré deux fois dans la même étude', () => {
+    for (const [study, fields] of Object.entries(STUDY_FIELDS)) {
+      const keys = fields.map((f) => f.key);
+      expect(new Set(keys).size, study).toBe(keys.length);
+    }
+  });
+
+  it('chaque champ porte un libellé lisible en salle', () => {
+    for (const [study, fields] of Object.entries(STUDY_FIELDS)) {
+      for (const f of fields) {
+        expect(f.label.length, `${study}.${f.key}`).toBeGreaterThan(3);
+        expect(f.label, `${study}.${f.key}`).not.toMatch(/_/);
+      }
+    }
+  });
+
+  it('les signaux faibles restent rares — sinon ils ne signalent plus rien', () => {
+    const faibles = Object.values(STUDY_FIELDS).flat().filter((f) => f.weakSignal);
+    expect(faibles.length).toBeGreaterThan(0);
+    expect(faibles.length / toutesLesEtudes.length).toBeLessThan(0.2);
   });
 });

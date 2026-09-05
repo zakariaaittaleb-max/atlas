@@ -31,6 +31,7 @@ import {
   type OrgSnapshot,
 } from '@/lib/engine/organisation';
 import type { createAdminClient } from '@/lib/supabase/server';
+import { latestAtMost, servedSegmentsOrDefault } from './reconduction';
 
 /**
  * Le client est typé sur le schéma `atlas`, pas sur `public` : reprendre le
@@ -176,18 +177,20 @@ export async function loadResolutionSnapshot(
     { data: hrRows },
     { data: budgetRows },
     { data: unitRows },
-    { data: decisionRows },
-    { data: previousDecisionRows },
+    { data: decisionHistoryRows },
     { data: procurementRows },
     { data: distributionRows },
     { data: previousMetricRows },
     { data: previousStateRows },
+    { data: iaHistoryRows },
+    { data: previousStrategyRows },
     { data: previousPnlRows },
     { data: previousAlignmentRows },
     { data: consultingRows },
     { data: capexHistoryRows },
     { data: actorRows },
     { data: shockRows },
+    { data: shockResponseRows },
     { data: listingRows },
     { data: bidRows },
     { data: kpiCatalogRows },
@@ -214,8 +217,20 @@ export async function loadResolutionSnapshot(
     // capital restait dû dans la base et gratuit dans le calcul.
     admin.from('financial_budgets').select('*').in('team_id', teamIds).lte('round_number', roundNumber),
     admin.from('team_units').select('*').in('team_id', teamIds).eq('status', 'active'),
-    admin.from('das_decisions').select('*').in('team_id', teamIds).eq('round_number', roundNumber),
-    admin.from('das_decisions').select('*').in('team_id', teamIds).eq('round_number', previousRound),
+    // TOUT l'historique des décisions, et non le seul tour courant.
+    //
+    // Les décisions se RECONDUISENT : une équipe qui ne rouvre pas l'écran de
+    // stratégie garde celle du tour précédent. L'interface le disait déjà et le
+    // faisait — `decision-context.ts` retient la dernière décision au plus tard
+    // au tour demandé — mais le moteur, lui, ne lisait que le tour courant et
+    // retombait sur des valeurs neutres codées en dur : domination par les
+    // coûts, prix au marché, AUCUN segment servi, tous les budgets à zéro.
+    //
+    // L'écran montrait donc à l'équipe ses choix reconduits, et le moteur en
+    // résolvait d'autres. Une équipe qui relisait sa stratégie, la jugeait
+    // bonne et n'y touchait pas était calculée sur une stratégie qu'elle
+    // n'avait jamais déclarée.
+    admin.from('das_decisions').select('*').in('team_id', teamIds).lte('round_number', roundNumber),
     // `lte` et non `eq` : les contrats PERSISTENT d'un exercice à l'autre.
     // Un contrat d'approvisionnement ne s'évapore pas au 31 décembre — ne rien
     // renégocier, c'est reconduire. Voir `contractsFor` plus bas.
@@ -223,12 +238,22 @@ export async function loadResolutionSnapshot(
     admin.from('distribution_contracts').select('*').in('team_id', teamIds).lte('round_number', roundNumber),
     admin.from('team_das_round_metrics').select('*').in('team_id', teamIds).eq('round_number', previousRound),
     admin.from('team_round_state').select('*').in('team_id', teamIds).eq('round_number', previousRound),
+    // L'HISTORIQUE des indices, et non le seul tour précédent : le score
+    // temporel récompense une progression SOUTENUE, ce qui ne se lit pas sur
+    // une valeur isolée.
+    admin.from('team_round_state').select('team_id, round_number, ia_score')
+      .in('team_id', teamIds).lt('round_number', roundNumber).order('round_number'),
+    // La stratégie de groupe du tour PRÉCÉDENT, pour facturer les changements.
+    admin.from('team_round_strategy').select('team_id, corporate_strategy, structure_type')
+      .in('team_id', teamIds).eq('round_number', previousRound),
     admin.from('pnl_statements').select('*').in('team_id', teamIds).eq('round_number', previousRound),
     admin.from('alignment_scores').select('*').in('team_id', teamIds).eq('round_number', previousRound),
     admin.from('consulting_orders').select('team_id, price_paid_mad').in('team_id', teamIds).eq('round_number', roundNumber),
     admin.from('financial_budgets').select('team_id, round_number').in('team_id', teamIds).lt('round_number', roundNumber),
-    admin.from('ecosystem_actors').select('id, actor_type, das_id, ecosystem_actor_rounds(*)').eq('session_id', sessionId),
+    admin.from('ecosystem_actors').select('id, actor_type, das_id, owner_team_id, integration_quality, ecosystem_actor_rounds(*)').eq('session_id', sessionId),
     admin.from('market_shocks').select('*').eq('session_id', sessionId).gte('rounds_remaining', 1),
+    admin.from('shock_responses').select('shock_id, team_id, cost_mad, effectiveness')
+      .in('team_id', teamIds).eq('round_number', roundNumber),
     admin.from('das_listings').select('*').eq('session_id', sessionId).eq('round_number', roundNumber).eq('status', 'open'),
     admin.from('das_bids').select('*').eq('round_number', roundNumber).eq('status', 'sealed'),
     admin.from('kpi_catalog').select('key, direction_key, affinity_domination_couts, affinity_differenciation, affinity_focus_couts, affinity_focus_differenciation'),
@@ -371,7 +396,13 @@ export async function loadResolutionSnapshot(
   const alignmentByTeam = byTeam(previousAlignmentRows as Row[] | null);
 
   // --- Offres de l'écosystème, à l'état du tour en cours ---------------------
-  interface ActorState { actorId: string; dasId: string; type: string; round: Row }
+  interface ActorState {
+    actorId: string; dasId: string; type: string; round: Row;
+    /** Équipe qui a racheté ce maillon. `null` = acteur indépendant. */
+    ownerTeamId: string | null;
+    /** Qualité d'intégration figée au rachat. `undefined` si indépendant. */
+    integrationQuality: number | undefined;
+  }
   const actorStates = new Map<string, ActorState>();
   for (const actor of (actorRows ?? []) as Row[]) {
     const rounds = (actor.ecosystem_actor_rounds ?? []) as Row[];
@@ -385,6 +416,11 @@ export async function loadResolutionSnapshot(
       actorId: str(actor.id),
       dasId: str(actor.das_id),
       type: str(actor.actor_type),
+      ownerTeamId: actor.owner_team_id ? str(actor.owner_team_id) : null,
+      integrationQuality:
+        actor.integration_quality === null || actor.integration_quality === undefined
+          ? undefined
+          : num(actor.integration_quality),
       round: state,
     });
   }
@@ -410,6 +446,8 @@ export async function loadResolutionSnapshot(
 
   const sectorByDas = new Map(das.map((d) => [d.dasId, d.sectorKey]));
 
+
+
   /**
    * Déclinaison des directives du groupe par un DAS, ou `null` si l'équipe n'en
    * a jamais saisi.
@@ -425,6 +463,24 @@ export async function loadResolutionSnapshot(
    * peut se calculer qu'ici, où l'on connaît à la fois la liste des utilisateurs
    * et la matrice sectorielle.
    */
+  /**
+   * Mouvement Ansoff retenu pour un DAS : la directive la plus récente, à
+   * défaut ce que porte l'unité — une unité acquise en cours de partie reçoit
+   * son mouvement à l'acquisition, avant que l'équipe n'ait rien déclaré.
+   */
+  const ansoffMovementFor = (
+    teamId: string,
+    dasId: string,
+    unitRow: Row,
+  ): TeamDasSnapshot['ansoffMovement'] => {
+    const directive = ((groupDirectiveRows ?? []) as Row[])
+      .filter((d) => str(d.team_id) === teamId && str(d.das_id) === dasId)
+      .sort((a, b) => num(b.round_number) - num(a.round_number))[0];
+
+    return ((directive?.ansoff_movement ?? unitRow.ansoff_movement) as
+      TeamDasSnapshot['ansoffMovement']) ?? null;
+  };
+
   const groupStanceFor = (teamId: string, dasId: string) => {
     const directives = ((groupDirectiveRows ?? []) as Row[])
       .filter((d) => str(d.team_id) === teamId && str(d.das_id) === dasId)
@@ -480,6 +536,32 @@ export async function loadResolutionSnapshot(
     };
   };
 
+  /**
+   * Nombre de tours consécutifs, en remontant depuis le dernier, où l'indice
+   * d'alignement a PROGRESSÉ.
+   *
+   * Le champ était câblé à zéro, si bien que le bonus de progression du score
+   * temporel (`alignment.sat_improvement_bonus`) n'était jamais versé : une
+   * équipe qui se redressait tour après tour n'en tirait rien, et le seul
+   * levier du SAT restait le malus de changement. Le message du jeu s'en
+   * trouvait inversé — tenir un cap ne payait pas, il évitait seulement d'être
+   * puni.
+   */
+  const improvingRoundsByTeam = new Map<string, number>();
+  for (const teamId of teamIds) {
+    const history = ((iaHistoryRows ?? []) as Row[])
+      .filter((r) => str(r.team_id) === teamId)
+      .sort((a, b) => num(a.round_number) - num(b.round_number))
+      .map((r) => num(r.ia_score));
+
+    let streak = 0;
+    for (let i = history.length - 1; i > 0; i -= 1) {
+      if (history[i] > history[i - 1]) streak += 1;
+      else break;
+    }
+    improvingRoundsByTeam.set(teamId, streak);
+  }
+
   // --- Construction des équipes ---------------------------------------------
   const teams: TeamSnapshot[] = (teamRows ?? []).map((teamRow: Row) => {
     const teamId = str(teamRow.id);
@@ -495,12 +577,13 @@ export async function loadResolutionSnapshot(
 
     const units: TeamDasSnapshot[] = teamUnits.map((unitRow) => {
       const dasId = str(unitRow.das_id);
-      const decision = ((decisionRows ?? []) as Row[]).find(
+      // La décision EN VIGUEUR : la plus récente au plus tard à ce tour.
+      // Même règle que l'interface, au caractère près.
+      const myDecisions = ((decisionHistoryRows ?? []) as Row[]).filter(
         (d) => str(d.team_id) === teamId && str(d.das_id) === dasId,
       );
-      const previousDecision = ((previousDecisionRows ?? []) as Row[]).find(
-        (d) => str(d.team_id) === teamId && str(d.das_id) === dasId,
-      );
+      const decision = latestAtMost(myDecisions, roundNumber);
+      const previousDecision = latestAtMost(myDecisions, previousRound);
       const previousMetric = ((previousMetricRows ?? []) as Row[]).find(
         (m) => str(m.team_id) === teamId && str(m.das_id) === dasId,
       );
@@ -518,6 +601,9 @@ export async function loadResolutionSnapshot(
               capacityUnits: num(actor.round.capacity_units, 1),
               switchingCost: num(actor.round.switching_cost),
               minimumVolume: num(actor.round.minimum_volume),
+              // Intégration amont : on ne négocie pas contre soi-même.
+              ownedByTeam: actor.ownerTeamId === teamId,
+              integrationQuality: actor.integrationQuality,
             },
             committedVolume: num(p.committed_volume),
           }];
@@ -535,6 +621,9 @@ export async function loadResolutionSnapshot(
               negotiatingStrength: num(actor.round.negotiating_strength, 50),
               serviceLevel: num(actor.round.service_level, 60),
               minimumVolume: num(actor.round.minimum_volume),
+              // Intégration aval : sa couverture rejoint le réseau propre.
+              ownedByTeam: actor.ownerTeamId === teamId,
+              integrationQuality: actor.integrationQuality,
             },
             volumeShare: num(d.volume_share),
           }];
@@ -549,7 +638,15 @@ export async function loadResolutionSnapshot(
         decision: {
           genericStrategy: (str(decision?.generic_strategy, 'domination_couts') as GenericStrategy),
           pricePosition: num(decision?.price_position, 50),
-          servedSegments: (decision?.served_segments as string[]) ?? [],
+          // Sans segment servi il n'y a rien à calculer : un domaine acquis
+          // peut avoir hérité de clés qui n'existent plus, et une équipe qui
+          // n'a jamais ouvert l'écran n'a rien déclaré. On retombe sur le
+          // premier segment du catalogue — le même défaut que l'interface
+          // affiche, plutôt qu'un marché adressable vide.
+          servedSegments: servedSegmentsOrDefault(
+            decision?.served_segments as string[] | null,
+            (das.find((d) => d.dasId === dasId)?.segments ?? []).map((seg) => seg.segmentKey),
+          ),
           capexCapacityMad: num(decision?.capex_capacity_mad),
           capexAutomationMad: num(decision?.capex_automation_mad),
           capexOwnNetworkMad: num(decision?.capex_own_network_mad),
@@ -577,8 +674,17 @@ export async function loadResolutionSnapshot(
         distribution,
         supplierAlternatives: supplierCountByDas.get(dasId) ?? 0,
         launchedRound: num(unitRow.launched_round),
-        ansoffMovement: (unitRow.ansoff_movement as TeamDasSnapshot['ansoffMovement']) ?? null,
-        ansoffRiskCoefficient: num(unitRow.ansoff_risk_coefficient),
+        // Le mouvement DÉCLARÉ, et non l'état figé de l'unité.
+        //
+        // L'écran d'organisation écrit le mouvement Ansoff dans
+        // `das_group_directives`, tandis que le moteur lisait
+        // `team_units.ansoff_movement` — colonne que seule la persistance des
+        // acquisitions alimente. Pour toute unité fondatrice, le mouvement
+        // restait donc nul et `ansoff_risk_coefficient` à son défaut de 0 :
+        // une équipe déclarait « diversification » et le moteur appliquait un
+        // risque d'entrée nul. La matrice d'Ansoff ne coûtait rien.
+        ansoffMovement: ansoffMovementFor(teamId, dasId, unitRow),
+
         blueOcean: bool(unitRow.blue_ocean),
         blueOceanRoundsLeft: num(unitRow.blue_ocean_rounds_left),
         commissionedCapexMad: num(previousDecision?.capex_capacity_mad),
@@ -645,7 +751,6 @@ export async function loadResolutionSnapshot(
       corporate: {
         corporateStrategy: (str(strategy?.corporate_strategy, 'specialisation') as TeamSnapshot['corporate']['corporateStrategy']),
         structureType: (str(strategy?.structure_type, 'fonctionnelle') as TeamSnapshot['corporate']['structureType']),
-        structureTransitionCostMad: num(strategy?.structure_transition_cost_mad),
         centralPurchasing: bool(strategy?.central_purchasing),
         centralIt: bool(strategy?.central_it),
         centralRd: bool(strategy?.central_rd),
@@ -659,7 +764,6 @@ export async function loadResolutionSnapshot(
         ] as TeamSnapshot['corporate']['values'],
         sharedSupplierRatio: sharedActorRatio(procurementRows as Row[] | null, teamId, 'supplier_id'),
         sharedDistributorRatio: sharedActorRatio(distributionRows as Row[] | null, teamId, 'distributor_id'),
-        verticalIntegration: num(state?.vertical_integration, 20),
       },
       hr: {
         headcountStart: num(hr?.headcount_start, num(state?.headcount, 1)),
@@ -670,7 +774,6 @@ export async function loadResolutionSnapshot(
         avgSalaryBrutMad: num(hr?.avg_salary_brut_mad, num(params['endowment.avg_salary_mad'], 5800)),
         trainingBudgetMad: num(hr?.training_budget_mad),
         restructuringCount: num(hr?.restructuring_count),
-        severancePaidMad: num(hr?.severance_paid_mad),
         previousExpertShare: num(state?.talent_mix, num(params['endowment.expert_share'], 20)),
       },
       finance: {
@@ -689,11 +792,28 @@ export async function loadResolutionSnapshot(
       },
       units,
       previousClimatSocial: num(state?.climat_social, 70),
-      previousIaScore: num(state?.ia_score, num(params['alignment.initial_ia'], 70)),
       previousTreasuryStatus: (str(state?.treasury_status, 'sain') as TeamSnapshot['previousTreasuryStatus']),
       previousConsecutiveNegativeRounds: num(state?.consecutive_negative_treasury_rounds),
-      consecutiveImprovingRounds: 0,
-      previousCorporateStrategy: null,
+      consecutiveImprovingRounds: improvingRoundsByTeam.get(teamId) ?? 0,
+      // Changer de stratégie de groupe se facture au score temporel — encore
+      // faut-il savoir ce qu'elle était. Le champ valait `null` en dur, ce qui
+      // rendait tout changement de cap corporate gratuit, alors qu'un
+      // changement par DAS, lui, était bien compté.
+      previousCorporateStrategy:
+        (((previousStrategyRows ?? []) as Row[])
+          .find((r) => str(r.team_id) === teamId)?.corporate_strategy as
+            TeamSnapshot['previousCorporateStrategy']) ?? null,
+      previousStructureType:
+        (((previousStrategyRows ?? []) as Row[])
+          .find((r) => str(r.team_id) === teamId)?.structure_type as
+            TeamSnapshot['previousStructureType']) ?? null,
+      shockResponses: ((shockResponseRows ?? []) as Row[])
+        .filter((r) => str(r.team_id) === teamId)
+        .map((r) => ({
+          shockId: str(r.shock_id),
+          effectiveness: num(r.effectiveness),
+          costMad: num(r.cost_mad),
+        })),
     };
   });
 
@@ -701,6 +821,7 @@ export async function loadResolutionSnapshot(
   const shocks: ShockEffects[] = ((shockRows ?? []) as Row[]).map((row) => {
     const effects = (row.effects ?? {}) as Record<string, unknown>;
     return {
+      shockId: str(row.id),
       dasId: str(row.das_id),
       marketSizePct: num(effects.market_size_pct),
       inputCostPct: num(effects.input_cost_pct),
@@ -766,6 +887,8 @@ export async function loadResolutionSnapshot(
         bidderTeamId: str(offer.bidder_team_id),
         targetActorId: str(offer.target_actor_id),
         dasId,
+        operation: (str(offer.operation, 'entree_das') as
+          AcquisitionOfferSnapshot['operation']),
         offerMad: num(offer.offer_mad),
         integrationBudgetMad: num(offer.integration_budget_mad),
         targetMarketShare: marketSize > 0 ? revenue / marketSize : 0,
@@ -778,8 +901,16 @@ export async function loadResolutionSnapshot(
         // Prix de réserve : la valorisation par les revenus, escomptée d'autant
         // plus que la cible est pressée de vendre. Une entreprise en bonne
         // santé et sans appétence à céder ne se brade pas.
+        // Un maillon de filière ne se valorise pas comme l'industriel qu'il
+        // sert : un distributeur est peu capitalistique et vit sur des marges
+        // minces, un fournisseur se situe entre les deux. Appliquer le multiple
+        // du secteur à tout le monde aurait fait payer un grossiste au prix
+        // d'une usine.
         reservePriceMad:
-          revenue * (dasEntry?.parameters.valuationMultiple ?? 5) * 0.35
+          revenue
+          * (dasEntry?.parameters.valuationMultiple ?? 5)
+          * (state?.type === 'distributeur' ? 0.65 : state?.type === 'fournisseur' ? 0.80 : 1)
+          * 0.35
           * (1 - (appetite / 100) * 0.35),
       };
     },

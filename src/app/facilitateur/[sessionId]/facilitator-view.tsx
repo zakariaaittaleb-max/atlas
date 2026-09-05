@@ -15,11 +15,13 @@
  *     pas découvrir un classement faux projeté au mur.
  */
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import type { DifficultyDials } from '@/lib/difficulty-types';
 
 import { SettingsSection } from './settings-section';
+import { SessionBriefing } from './session-briefing';
 import { useState, useTransition } from 'react';
 
 import { formatMadCompact, formatScore, treasuryLabel, sessionStatusLabel } from '@/lib/format';
@@ -61,7 +63,8 @@ export function FacilitatorView({
 }: {
   sessionId: string; sessionName: string; joinCode: string; status: string;
   roundNumber: number; plannedRounds: number; maxRounds: number;
-  teams: TeamProgress[]; das: { id: string; name: string }[];
+  teams: TeamProgress[];
+  das: { id: string; name: string; marketOpen: boolean; hasTargets: boolean }[];
   cards: Card[];
   difficulty: string;
   dials: DifficultyDials;
@@ -134,6 +137,8 @@ export function FacilitatorView({
         </div>
       </header>
 
+      <SessionBriefing roundNumber={roundNumber} />
+
       {error ? (
         <p role="alert" className="mb-6 rounded-lg border border-(--negative) px-4 py-3 text-sm text-(--negative)">
           {error}
@@ -201,6 +206,30 @@ export function FacilitatorView({
           >
             Exporter la session
           </a>
+        </div>
+
+        {/* ── Les deux documents de séance ────────────────────────────────
+            Ils ne pilotent rien : ils servent à EXPLIQUER, au débriefing,
+            pourquoi le moteur a rendu ce qu'il a rendu. Séparés des gestes de
+            conduite ci-dessus, parce qu'on ne les ouvre pas dans le même
+            moment — ni dans le même état d'esprit. */}
+        <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-(--border) pt-5">
+          <span className="text-sm font-medium">Pour le débriefing</span>
+          <Link
+            href={`/facilitateur/${sessionId}/simulateur`}
+            className="rounded-lg border border-(--border) px-4 py-2 text-sm"
+          >
+            Simulateur d’impacts
+          </Link>
+          <Link
+            href={`/facilitateur/${sessionId}/moteur`}
+            className="rounded-lg border border-(--border) px-4 py-2 text-sm"
+          >
+            Cartographie du moteur
+          </Link>
+          <span className="text-xs text-(--foreground-muted)">
+            Réservés à l’animation : ils donnent les profils-cibles de l’alignement.
+          </span>
         </div>
 
         {runs.length > 0 ? (
@@ -311,6 +340,64 @@ export function FacilitatorView({
         call={call}
         disabled={disabled}
       />
+
+      {/* ── La réserve mise sur le marché ──────────────────────────────────
+          Ouvrir la diversification est un GESTE PÉDAGOGIQUE, pas un réglage.
+          Tant qu'un domaine reste fermé, les équipes règlent le métier qu'elles
+          ont ; ouvert trop tôt, il devient une échappatoire pour celle qui
+          n'arrive pas à redresser le sien. D'où le levier, tour par tour. */}
+      <section className="mb-8 rounded-xl border border-(--border) bg-(--surface) p-6">
+        <h2 className="mb-1 text-xl font-medium">Domaines ouverts à l’acquisition</h2>
+        <p className="mb-5 max-w-3xl text-sm text-(--foreground-muted)">
+          Un domaine ouvert apparaît sur le marché des équipes, qui peuvent y entrer par
+          rachat — et le pilotent ensuite comme les leurs. Fermer un domaine ne retire rien
+          à celles qui l’exploitent déjà : cela retire seulement la cible du marché.
+        </p>
+
+        <ul className="space-y-2">
+          {das.map((d) => (
+            <li
+              key={d.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-(--border) px-4 py-3"
+            >
+              <span className="min-w-0">
+                <span className="text-sm font-medium">{d.name}</span>
+                <span className="ml-3 text-sm text-(--foreground-muted)">
+                  {!d.hasTargets
+                    ? 'aucune cible provisionnée — non acquérable'
+                    : d.marketOpen
+                      ? 'sur le marché'
+                      : 'en réserve'}
+                </span>
+              </span>
+
+              <button
+                type="button"
+                disabled={disabled || !d.hasTargets}
+                onClick={() =>
+                  call(
+                    '/api/facilitator',
+                    { sessionId, action: 'set_market', dasId: d.id, open: !d.marketOpen },
+                    d.marketOpen
+                      ? `${d.name} retiré du marché.`
+                      : `${d.name} ouvert à l’acquisition.`,
+                  )
+                }
+                className="rounded-lg border px-4 py-2 text-sm disabled:opacity-40"
+                style={{
+                  borderColor: d.marketOpen ? 'var(--accent)' : 'var(--border)',
+                  background: d.marketOpen ? 'var(--surface-muted)' : undefined,
+                  fontWeight: d.marketOpen ? 600 : 400,
+                }}
+              >
+                {/* Le libellé dit l'ACTION, jamais l'état : « ouvert » sur un
+                    bouton laisse toujours douter de ce qu'un clic va faire. */}
+                {d.marketOpen ? 'Retirer du marché' : 'Mettre sur le marché'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <section className="rounded-xl border border-(--border) bg-(--surface) p-6">
         <h2 className="mb-1 text-xl font-medium">Opportunités &amp; menaces</h2>

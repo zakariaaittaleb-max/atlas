@@ -96,7 +96,41 @@ export function resolveProcurement(
   const maxDiscount = param(params, 'procurement.max_discount');
   const totalVolume = lines.reduce((acc, l) => acc + l.committedVolume, 0);
 
+  const ownedCapture = param(params, 'procurement.owned_margin_captured');
+  const ownedReliabilityFloor = param(params, 'procurement.owned_reliability_floor');
+
   const results: ProcurementResult[] = lines.map((line) => {
+    // ── Fournisseur INTÉGRÉ ────────────────────────────────────────────────
+    //
+    // On ne négocie pas contre soi-même : le pouvoir de négociation n'a plus
+    // d'objet, et ce qu'on capte n'est pas une remise mais la MARGE que le
+    // fournisseur prenait — structurellement plus qu'une remise de volume.
+    // La fiabilité passe sous plancher : un maillon intégré ne rompt plus pour
+    // désaccord commercial, mais le risque industriel demeure. On ne l'annule
+    // jamais, sinon intégrer serait un gain sans contrepartie.
+    if (line.supplier.ownedByTeam) {
+      // Ce qu'on capte est amputé de ce que l'intégration a raté : un
+      // fournisseur racheté sans budget reste une entreprise qu'on ne sait pas
+      // faire tourner, et sa marge ne revient qu'en partie.
+      const quality = clamp01(line.supplier.integrationQuality ?? 1);
+      const captured = ownedCapture * quality;
+      return {
+        actorId: line.supplier.actorId,
+        bargainingPower: 100,
+        discountObtained: captured,
+        effectivePriceIndex: line.supplier.priceIndex * (1 - captured),
+        supplyDisruption: supplyDisruption(
+          Math.max(
+            line.supplier.reliability,
+            // Le plancher de fiabilité ne s'atteint que si l'intégration a
+            // été menée : sinon les équipes partent et les procédures divergent.
+            line.supplier.reliability
+              + (ownedReliabilityFloor - line.supplier.reliability) * quality,
+          ),
+          rng, params),
+      };
+    }
+
     const power = upstreamBargainingPower(
       line.committedVolume,
       line.supplier.capacityUnits,
@@ -206,7 +240,9 @@ export function totalCoverage(
   const complement = lines.reduce((acc, l) => {
     const engagement = channelEngagement(
       expectedVolume * clamp01(l.volumeShare),
-      l.distributor.minimumVolume,
+      // Une filiale n'impose pas de volume minimal à sa maison mère : le seuil
+      // était l'arme d'un tiers en position de force, et ce tiers n'existe plus.
+      l.distributor.ownedByTeam ? 0 : l.distributor.minimumVolume,
     );
     return acc * (1 - clamp01(l.distributor.coveragePct) * engagement);
   }, 1 - clamp01(ownNetworkCoverage));
@@ -246,11 +282,41 @@ export function resolveDistribution(
   const maxReduction = param(params, 'distribution.max_margin_reduction');
   const ownCoverage = ownNetworkCoverage(cumulativeNetworkCapexMad, params);
 
-  const thirdPartyShare = lines.reduce((acc, l) => acc + clamp01(l.volumeShare), 0);
-  // Ce qui ne passe pas par un tiers passe par le réseau propre.
+  // Un distributeur RACHETÉ n'est plus un tiers : son volume rejoint le réseau
+  // propre. C'est par ce seul point que l'intégration aval remonte jusqu'à
+  // l'axe `channel_control` du domaine et à l'intégration verticale du groupe
+  // — aucun calcul séparé, donc aucune divergence possible entre les deux.
+  const thirdPartyShare = lines.reduce(
+    (acc, l) => acc + (l.distributor.ownedByTeam ? 0 : clamp01(l.volumeShare)), 0);
   const channelControl = clamp100((1 - clamp01(thirdPartyShare)) * 100);
 
+  const ownedOperating = param(params, 'distribution.owned_operating_margin_pct');
+
   const results: DistributionResult[] = lines.map((line) => {
+    // Un distributeur racheté ne PRÉLÈVE plus de marge — mais il coûte à faire
+    // tourner : entrepôts, camions, forces de vente. Ramener la ligne à zéro
+    // ferait de l'intégration un gain sans contrepartie, ce qu'elle n'est
+    // jamais. Le pouvoir de négociation n'a plus d'objet : on ne négocie pas
+    // avec sa propre filiale.
+    if (line.distributor.ownedByTeam) {
+      // Une intégration ratée laisse un réseau qui coûte presque autant qu'un
+      // tiers : on interpole entre la marge exigée d'avant et le seul coût
+      // d'exploitation.
+      const quality = clamp01(line.distributor.integrationQuality ?? 1);
+      const marge = line.distributor.requiredMarginPct
+        + (ownedOperating - line.distributor.requiredMarginPct) * quality;
+      return {
+        actorId: line.distributor.actorId,
+        bargainingPower: 100,
+        effectiveMarginPct: clamp01(marge),
+        coverageContributed: clamp01(line.distributor.coveragePct) * channelEngagement(
+          expectedVolume * clamp01(line.volumeShare),
+          // Une filiale n'impose pas de volume minimal à sa maison mère.
+          0,
+        ),
+      };
+    }
+
     const power = downstreamBargainingPower(
       notoriety,
       line.volumeShare,
@@ -284,7 +350,11 @@ export function resolveDistribution(
   const serviceLevel =
     thirdPartyShare > 0
       ? lines.reduce(
-          (acc, l) => acc + (clamp01(l.volumeShare) / thirdPartyShare) * clamp100(l.distributor.serviceLevel),
+          (acc, l) =>
+            acc +
+            (l.distributor.ownedByTeam
+              ? 0
+              : (clamp01(l.volumeShare) / thirdPartyShare) * clamp100(l.distributor.serviceLevel)),
           0,
         ) *
           clamp01(thirdPartyShare) +

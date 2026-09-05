@@ -1,0 +1,15 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "regions": ["cdg1"],
+  "functions": {
+    "api/**/*.ts": {
+      "maxDuration": 60
+    }
+  }
+}

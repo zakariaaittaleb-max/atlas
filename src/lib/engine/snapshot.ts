@@ -44,6 +44,8 @@ export interface DasSnapshot {
 
 /** Effets cumulés des chocs actifs sur un DAS, déjà atténués par les réponses. */
 export interface ShockEffects {
+  /** Identifie la carte, pour que la réponse d'une équipe s'applique à elle. */
+  shockId: string;
   dasId: string;
   marketSizePct: number;
   inputCostPct: number;
@@ -178,8 +180,14 @@ export interface TeamDasSnapshot {
   /** Nombre de fournisseurs alternatifs disposant d'une capacité suffisante. */
   supplierAlternatives: number;
   launchedRound: number;
+  /**
+   * Mouvement d'Ansoff déclaré pour ce domaine. Le coefficient de risque en
+   * est DÉRIVÉ par le moteur (`ansoffRisk`) : le transmettre séparément
+   * ouvrait la porte à deux valeurs contradictoires, et c'est exactement ce
+   * qui s'est produit — la colonne d'état restait à 0 pendant que l'équipe
+   * déclarait une diversification.
+   */
   ansoffMovement: AnsoffMovement | null;
-  ansoffRiskCoefficient: number;
   blueOcean: boolean;
   blueOceanRoundsLeft: number;
   /**
@@ -227,7 +235,6 @@ export interface TeamDasSnapshot {
 export interface CorporateDecisionSnapshot {
   corporateStrategy: CorporateStrategy;
   structureType: StructureType;
-  structureTransitionCostMad: number;
   centralPurchasing: boolean;
   centralIt: boolean;
   centralRd: boolean;
@@ -238,7 +245,6 @@ export interface CorporateDecisionSnapshot {
   values: [CompanyValue, CompanyValue];
   sharedSupplierRatio: number;
   sharedDistributorRatio: number;
-  verticalIntegration: number;
 }
 
 export interface HrSnapshot {
@@ -250,7 +256,6 @@ export interface HrSnapshot {
   avgSalaryBrutMad: number;
   trainingBudgetMad: number;
   restructuringCount: number;
-  severancePaidMad: number;
   /** Part des experts et cadres dans l'effectif de départ, 0–100. */
   previousExpertShare: number;
 }
@@ -278,12 +283,26 @@ export interface TeamSnapshot {
   finance: FinanceSnapshot;
   units: TeamDasSnapshot[];
   previousClimatSocial: number;
-  previousIaScore: number;
   previousTreasuryStatus: TreasuryStatus;
   previousConsecutiveNegativeRounds: number;
   /** Nombre de tours consécutifs où le SAB progresse, pour le score temporel. */
   consecutiveImprovingRounds: number;
   previousCorporateStrategy: CorporateStrategy | null;
+  /**
+   * Structure du tour précédent. Elle seule permet de FACTURER une
+   * réorganisation : la colonne `structure_transition_cost_mad` était lue par
+   * le moteur et écrite par personne, si bien que changer de structure était
+   * gratuit en trésorerie.
+   */
+  previousStructureType: StructureType | null;
+  /**
+   * Ce que l'équipe a répondu aux cartes du tour.
+   *
+   * `effectiveness` ∈ [0,1] atténue la part DÉFAVORABLE de la carte visée ;
+   * `costMad` se paie dans tous les cas, y compris si la carte s'avère
+   * bénigne — c'est le prix de l'assurance, et c'est l'arbitrage.
+   */
+  shockResponses: { shockId: string; effectiveness: number; costMad: number }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -315,11 +334,22 @@ export interface ListingSnapshot {
  * Offre scellée pour racheter une entreprise non joueuse, et entrer ainsi dans
  * un domaine qu'on n'exploite pas encore.
  */
+/**
+ * Ce qu'une offre d'acquisition cherche à faire.
+ *
+ * `entree_das` fait ENTRER dans un domaine qu'on n'exploite pas : on hérite
+ * d'une part de marché constituée. Les deux autres INTÈGRENT un maillon de sa
+ * propre filière — on n'y gagne aucune part de marché, on y gagne de ne plus
+ * payer d'intermédiaire et de contrôler son approvisionnement ou son canal.
+ */
+export type AcquisitionOperation = 'entree_das' | 'integration_amont' | 'integration_aval';
+
 export interface AcquisitionOfferSnapshot {
   offerId: string;
   bidderTeamId: string;
   targetActorId: string;
   dasId: string;
+  operation: AcquisitionOperation;
   offerMad: number;
   integrationBudgetMad: number;
   /** Ce que la cible pèse réellement — connu du seul moteur. */

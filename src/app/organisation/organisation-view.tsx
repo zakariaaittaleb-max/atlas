@@ -9,37 +9,29 @@
  * métier de compétences où la décision doit descendre au terrain. Concevoir une
  * organisation unique pour les deux, c'est se condamner à en rater au moins une.
  *
- * ── CE QUI EST NOTÉ, ET CE QUI NE L'EST PAS ────────────────────────────────
- * Vision et mission restent du TEXTE LIBRE et ne sont jamais notées : un score
- * tiré de mots-clés serait arbitraire et l'on apprendrait à écrire pour la
- * machine. Elles nourrissent le débriefing et figurent dans l'audit.
+ * ── CE QUI SE DÉCIDE ICI, ET CE QUI SE DÉCIDE AU GROUPE ────────────────────
+ * Cet écran ne porte QUE ce qui varie d'un métier à l'autre : axes, KPI,
+ * budgets, postes clés, délégation, RH.
  *
- * Sont notés les choix STRUCTURÉS qui les traduisent — axes, KPI, budgets,
- * postes clés, délégation. L'écran le dit explicitement à l'équipe, plutôt que
- * de la laisser croire que sa prose est évaluée.
+ * La forme de structure et le couple vision/mission ont été rendus à l'écran
+ * Stratégie, où ils étaient déjà saisis. Une entreprise a UNE vision, et sa
+ * forme d'organisation est une décision d'architecture — le moteur la juge
+ * d'ailleurs en la comparant au NOMBRE de domaines, ce qui n'a de sens qu'à
+ * l'échelle du groupe. Les deux copies par domaine n'étaient lues par aucun
+ * calcul : deux commandes pour une seule question, dont une sans effet.
  * ───────────────────────────────────────────────────────────────────────────
  */
 
 import { useRouter } from 'next/navigation';
 import { useCallback, useState, useTransition } from 'react';
 
-import { SaveIndicator } from '@/components/decision-shell';
+import { useDasScope } from '@/components/das-scope';
+import { NumberInput, SaveIndicator } from '@/components/decision-shell';
 import { formatMadCompact, formatPct } from '@/lib/format';
 import type { DasOrganisation, OrgContext, PositionDraft } from '@/lib/org-types';
 import { useAutosave } from '@/lib/use-autosave';
 
 import { HrSection } from './hr-section';
-
-const STRUCTURES = [
-  ['fonctionnelle', 'Fonctionnelle',
-   'Une direction par métier. Simple et économe, elle sature dès que les arbitrages se multiplient.'],
-  ['divisionnelle', 'Divisionnelle',
-   'Des unités autonomes par produit ou marché. Réactive, mais elle duplique les fonctions support.'],
-  ['matricielle', 'Matricielle',
-   'Croise métiers et projets. Ne vaut que s’il y a réellement des ressources à partager.'],
-  ['processus', 'Par processus',
-   'Organisée autour des flux de bout en bout. Puissante pour le coût et le délai, exigeante à tenir.'],
-] as const;
 
 const PORTFOLIO_ROLES = [
   ['moteur', 'Moteur',
@@ -77,7 +69,12 @@ export function OrganisationView({ context }: { context: OrgContext }) {
   const router = useRouter();
   const autosave = useAutosave();
   const [pending, startTransition] = useTransition();
-  const [activeDas, setActiveDas] = useState(context.das[0]?.dasId ?? '');
+  // Le domaine piloté vient de la barre de navigation, jamais d'un état local :
+  // celui choisi ici doit être encore celui de la stratégie et des achats.
+  // L'écran en gardait auparavant sa propre copie, et changer de domaine ici
+  // ne changeait rien ailleurs — deux vérités pour une seule question.
+  const { activeDasId } = useDasScope();
+  const activeDas = activeDasId ?? context.das[0]?.dasId ?? '';
   const [drafts, setDrafts] = useState<Record<string, DasOrganisation>>(
     () => Object.fromEntries(context.das.map((d) => [d.dasId, d])),
   );
@@ -142,23 +139,10 @@ export function OrganisationView({ context }: { context: OrgContext }) {
           ) : null}
         </header>
 
-        {context.das.length > 1 ? (
-          <div className="mb-8 flex flex-wrap gap-2">
-            {context.das.map((d) => (
-              <button
-                key={d.dasId} type="button" onClick={() => setActiveDas(d.dasId)}
-                className="rounded-lg border px-4 py-2 text-sm"
-                style={{
-                  borderColor: d.dasId === activeDas ? 'var(--accent)' : 'var(--border)',
-                  background: d.dasId === activeDas ? 'var(--surface-muted)' : undefined,
-                  fontWeight: d.dasId === activeDas ? 600 : 400,
-                }}
-              >
-                {d.dasName}
-              </button>
-            ))}
-          </div>
-        ) : null}
+        {/* Le sélecteur de domaine n'est plus ici : il vit dans la barre de
+            navigation, où il suit l'équipe d'un écran à l'autre. En garder une
+            copie sur cette page donnait deux commandes pour une seule question,
+            et rien ne disait laquelle faisait foi. */}
 
         {/* ── Directives du Groupe ─────────────────────────────────────── */}
         <Section
@@ -347,45 +331,16 @@ export function OrganisationView({ context }: { context: OrgContext }) {
           />
         </Section>
 
-        {/* ── Identité stratégique ─────────────────────────────────────── */}
+        {/* ── Axes stratégiques ────────────────────────────────────────────
+            La vision et la mission ont été retirées d'ici : elles étaient déjà
+            saisies au niveau Groupe, sur `/strategie`. Une entreprise a UNE
+            vision ; ce qu'un domaine déclare de spécifique, ce sont ses axes —
+            et eux, contrairement à un texte libre, pèsent sur l'alignement. */}
         <Section
-          title="Identité stratégique"
-          hint="La vision et la mission ne sont PAS notées : un score tiré de mots-clés serait arbitraire. Elles servent votre débriefing. Ce sont les trois axes ci-dessous, eux, qui pèsent sur l’alignement."
+          title="Axes stratégiques"
+          hint="La vision et la mission du Groupe se déclarent dans l’écran Stratégie. Ici, ce domaine dit ce qu’il PRIORISE — et c’est cela qui est mesuré."
         >
-          <fieldset disabled={locked} className="grid gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="text-sm font-medium">Vision</span>
-              <textarea
-                rows={3} maxLength={600} value={das.vision ?? ''}
-                placeholder="Ce que cette activité veut devenir d’ici cinq ans."
-                onChange={(e) => {
-                  update({ vision: e.target.value });
-                  push('design', {
-                    structureType: das.structureType, delegationLevel: das.delegationLevel,
-                    vision: e.target.value || null, mission: das.mission,
-                  });
-                }}
-                className="mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium">Mission</span>
-              <textarea
-                rows={3} maxLength={600} value={das.mission ?? ''}
-                placeholder="Ce qu’elle apporte, à qui, et en quoi c’est différent."
-                onChange={(e) => {
-                  update({ mission: e.target.value });
-                  push('design', {
-                    structureType: das.structureType, delegationLevel: das.delegationLevel,
-                    vision: das.vision, mission: e.target.value || null,
-                  });
-                }}
-                className="mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
-              />
-            </label>
-          </fieldset>
-
-          <fieldset disabled={locked} className="mt-6">
+          <fieldset disabled={locked}>
             <legend className="mb-1 text-sm font-medium">
               Vos trois axes stratégiques, par ordre de priorité
             </legend>
@@ -429,40 +384,18 @@ export function OrganisationView({ context }: { context: OrgContext }) {
           </fieldset>
         </Section>
 
-        {/* ── Structure et délégation ──────────────────────────────────── */}
+        {/* ── Délégation ───────────────────────────────────────────────────
+            La FORME de structure a été retirée d'ici : elle se décide au niveau
+            Groupe, sur `/strategie`. Le moteur la juge en la comparant au NOMBRE
+            de domaines — « fonctionnelle au-delà de quatre métiers », « matricielle
+            pour un seul » — ce qui n'a de sens qu'à l'échelle de l'entreprise. La
+            copie par domaine n'était lue par aucun calcul : deux commandes pour
+            une seule question, dont une sans effet. */}
         <Section
-          title="Structure et délégation"
-          hint="Ni la centralisation ni la délégation ne valent mieux dans l’absolu. C’est la cohérence avec la stratégie déclarée qui est mesurée : standardiser sert les coûts, décider vite sert une niche exigeante."
+          title="Délégation"
+          hint="La forme de structure se décide au niveau Groupe, dans l’écran Stratégie. Ce qui se règle ici est le degré d’autonomie laissé à CE métier — et ni le sommet ni le terrain n’ont raison dans l’absolu : standardiser sert les coûts, décider vite sert une niche exigeante."
         >
           <fieldset disabled={locked}>
-            <legend className="mb-2 text-sm font-medium">Forme de structure</legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {STRUCTURES.map(([value, label, description]) => (
-                <button
-                  key={value} type="button" aria-pressed={das.structureType === value}
-                  onClick={() => {
-                    update({ structureType: value });
-                    push('design', {
-                      structureType: value, delegationLevel: das.delegationLevel,
-                      vision: das.vision, mission: das.mission,
-                    });
-                  }}
-                  className="rounded-lg border p-3 text-left"
-                  style={{
-                    borderColor: das.structureType === value ? 'var(--accent)' : 'var(--border)',
-                    background: das.structureType === value ? 'var(--surface-muted)' : undefined,
-                  }}
-                >
-                  <span className="block text-sm" style={{ fontWeight: das.structureType === value ? 600 : 500 }}>
-                    {label}
-                  </span>
-                  <span className="mt-1 block text-xs text-(--foreground-muted)">{description}</span>
-                </button>
-              ))}
-            </div>
-          </fieldset>
-
-          <fieldset disabled={locked} className="mt-6">
             <legend className="mb-2 text-sm font-medium">
               Niveau de délégation : <span className="tabular">{das.delegationLevel}</span>
             </legend>
@@ -471,10 +404,7 @@ export function OrganisationView({ context }: { context: OrgContext }) {
               onChange={(e) => {
                 const delegationLevel = Number(e.target.value);
                 update({ delegationLevel });
-                push('design', {
-                  structureType: das.structureType, delegationLevel,
-                  vision: das.vision, mission: das.mission,
-                });
+                push('design', { delegationLevel });
               }}
               className="w-full"
             />
@@ -565,16 +495,15 @@ export function OrganisationView({ context }: { context: OrgContext }) {
               return (
                 <div key={direction.key} className="flex flex-wrap items-center gap-3 rounded-lg border border-(--border) p-3">
                   <span className="min-w-0 flex-1 text-sm font-medium">{direction.name}</span>
-                  <input
-                    type="number" min={0} step={100_000} disabled={locked} value={Math.round(budget)}
-                    onChange={(e) => {
-                      const value = Math.max(Number(e.target.value) || 0, 0);
+                  <NumberInput
+                    disabled={locked} value={Math.round(budget)}
+                    onChange={(value) => {
                       const budgets = das.budgets.filter((b) => b.directionKey !== direction.key);
                       budgets.push({ directionKey: direction.key, budgetMad: value });
                       update({ budgets });
                       push('budgets', { budgets });
                     }}
-                    className="tabular w-44 rounded-lg border border-(--border) bg-(--surface) px-3 py-1.5 text-sm"
+                    className="w-44 text-sm"
                   />
                   <span className="tabular w-14 text-right text-sm text-(--foreground-muted)">
                     {formatPct(share, 0)}
@@ -671,10 +600,10 @@ function PositionEditor({
                 </select>
                 <label className="flex items-center gap-1.5 text-sm">
                   <span className="text-(--foreground-muted)">Effectif</span>
-                  <input
-                    type="number" min={0} disabled={locked} value={position.headcount}
-                    onChange={(e) => patch(index, { headcount: Math.max(Number(e.target.value) || 0, 0) })}
-                    className="tabular w-20 rounded border border-(--border) bg-(--surface) px-2 py-1.5 text-sm"
+                  <NumberInput
+                    disabled={locked} value={position.headcount}
+                    onChange={(v) => patch(index, { headcount: v })}
+                    className="w-24 text-sm"
                   />
                 </label>
                 <button

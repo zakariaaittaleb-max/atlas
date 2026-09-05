@@ -32,8 +32,14 @@ const ProvisionRequest = z.object({
     )
     .min(1)
     .max(3),
-  // Le premier secteur est celui imposé à toutes les équipes en T0.
+  // L'univers de marché : tous ces secteurs sont provisionnés, avec leur
+  // écosystème et leurs segments, qu'une équipe les exploite ou non.
   sectorKeys: z.array(z.enum(SECTOR_KEYS)).min(1).max(8),
+  // Le portefeuille de départ, commun à toutes les équipes. Il doit être un
+  // SOUS-ENSEMBLE des secteurs ouverts : attribuer un domaine non provisionné
+  // produirait une équipe rattachée à un DAS inexistant. Absent, on retombe sur
+  // le premier secteur ouvert — le comportement historique.
+  startingSectorKeys: z.array(z.enum(SECTOR_KEYS)).min(1).max(8).optional(),
   plannedRounds: z.number().int().min(3).max(10).default(3),
   maxRounds: z.number().int().min(3).max(10).default(10),
 });
@@ -55,6 +61,22 @@ export async function POST(request: Request) {
   if (parsed.data.plannedRounds > parsed.data.maxRounds) {
     return NextResponse.json(
       { error: 'Le nombre de tours prévus dépasse le maximum autorisé.' },
+      { status: 400 },
+    );
+  }
+
+  // Vérifié ICI plutôt que dans `provisionSession` : à ce stade rien n'est
+  // écrit, alors qu'un échec en cours de provisionnement laisserait une session
+  // à moitié créée derrière lui.
+  const outside = (parsed.data.startingSectorKeys ?? [])
+    .filter((k) => !parsed.data.sectorKeys.includes(k));
+  if (outside.length > 0) {
+    return NextResponse.json(
+      {
+        error:
+          'Le portefeuille de départ contient des domaines qui ne sont pas ouverts '
+          + `à cette session : ${outside.join(', ')}.`,
+      },
       { status: 400 },
     );
   }

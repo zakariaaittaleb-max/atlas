@@ -1,0 +1,446 @@
+<title>Moteur de résolution Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#f7f8f6; --panel:#ffffff; --sunk:#eef1ee;
+  --ink:#141a17; --ink-2:#3d4a44; --mute:#6e7a74; --rule:#d6dcd8;
+  --accent:#0e5a57; --accent-ink:#0a3f3d; --accent-soft:#0e5a5712;
+  --crit:#8a2b18; --high:#8a6a18; --mid:#3d5a6e; --low:#5d6b64;
+  --serif:"IBM Plex Serif",Georgia,serif;
+  --cond:"IBM Plex Sans Condensed","Helvetica Neue",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --measure:66ch;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0f1412; --panel:#161d1a; --sunk:#1b2320;
+    --ink:#e8ede9; --ink-2:#b6c2bc; --mute:#8b9a93; --rule:#2b3733;
+    --accent:#4fb3ac; --accent-ink:#7fcfc8; --accent-soft:#4fb3ac1a;
+    --crit:#e08a72; --high:#d6b061; --mid:#8fb3c9; --low:#9aa8a1;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0f1412; --panel:#161d1a; --sunk:#1b2320;
+  --ink:#e8ede9; --ink-2:#b6c2bc; --mute:#8b9a93; --rule:#2b3733;
+  --accent:#4fb3ac; --accent-ink:#7fcfc8; --accent-soft:#4fb3ac1a;
+  --crit:#e08a72; --high:#d6b061; --mid:#8fb3c9; --low:#9aa8a1;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--serif); font-size:16.5px; line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 clamp(18px,4vw,44px) 96px}
+
+/* ── Masthead ───────────────────────────────────────────── */
+.mast{padding:clamp(44px,7vw,84px) 0 34px;border-bottom:2px solid var(--ink)}
+.eyebrow{font-family:var(--cond);font-size:12.5px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 18px}
+h1{font-family:var(--cond);font-weight:700;font-size:clamp(38px,7.2vw,74px);
+  line-height:.98;letter-spacing:-.018em;margin:0;text-wrap:balance}
+.thesis{max-width:var(--measure);margin:22px 0 0;font-size:1.12rem;color:var(--ink-2)}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));
+  gap:1px;background:var(--rule);border:1px solid var(--rule);margin-top:34px}
+.fig{background:var(--panel);padding:15px 17px}
+.fig b{display:block;font-family:var(--cond);font-weight:600;font-size:1.85rem;
+  line-height:1.05;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.fig span{display:block;font-family:var(--cond);font-size:11.5px;font-weight:500;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--mute);margin-top:5px}
+
+/* ── Sections ───────────────────────────────────────────── */
+section{padding-top:58px}
+.sh{display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--ink);
+  padding-bottom:9px;margin-bottom:26px}
+.sh .no{font-family:var(--mono);font-size:12.5px;color:var(--accent);
+  padding-top:5px;flex:0 0 auto}
+.sh h2{font-family:var(--cond);font-weight:600;font-size:clamp(23px,3.1vw,33px);
+  letter-spacing:-.012em;margin:0;text-wrap:balance}
+p{max-width:var(--measure)}
+p+p{margin-top:.85em}
+.lede{font-size:1.05rem;color:var(--ink-2)}
+strong{font-weight:600}
+em{font-style:italic}
+code{font-family:var(--mono);font-size:.85em;color:var(--accent-ink);
+  background:var(--accent-soft);padding:.1em .34em;border-radius:2px;
+  overflow-wrap:anywhere}
+
+/* ── Formule ────────────────────────────────────────────── */
+.formula{background:var(--panel);border:1px solid var(--rule);border-left:3px solid var(--accent);
+  padding:22px 24px;margin:26px 0;font-family:var(--mono);font-size:14px;line-height:2}
+.formula .k{color:var(--accent-ink);font-weight:500}
+.formula .c{color:var(--mute)}
+
+/* ── Tables ─────────────────────────────────────────────── */
+.scroll{overflow-x:auto;border:1px solid var(--rule);background:var(--panel);margin:24px 0}
+table{border-collapse:collapse;width:100%;font-family:var(--cond);font-size:14px}
+th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-weight:600;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--mute);background:var(--sunk);position:sticky;top:0;white-space:nowrap}
+tbody tr:last-child td,tbody tr:last-child th{border-bottom:0}
+.why{color:var(--mute);font-family:var(--serif);font-size:13.5px;line-height:1.5}
+
+.matrix td{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.matrix th[scope=row]{font-weight:500;min-width:210px}
+.matrix th[scope=row] code{display:block;font-size:10.5px;background:none;padding:0;
+  color:var(--mute);margin-top:1px}
+.matrix .t{font-weight:600;font-size:15px}
+.matrix .w{display:inline-block;min-width:38px;text-align:right;color:var(--mute);
+  font-size:11.5px;margin-left:9px}
+
+.atlas td:first-child,.atlas td:nth-child(2){white-space:nowrap}
+.atlas tr.fam th{font-family:var(--cond);font-size:11.5px;font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--accent);
+  background:var(--sunk);padding-top:13px;padding-bottom:7px}
+.atlas tr.corr td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+.atlas tr.note td{color:var(--mute)}
+.atlas td:last-child{font-family:var(--serif);font-size:14px;line-height:1.5}
+.atlas code{background:none;padding:0;color:var(--ink);font-size:12.5px}
+.atlas code.snap{color:var(--accent-ink)}
+
+.lag{font-family:var(--mono);font-size:12px;color:var(--accent-ink);white-space:nowrap}
+
+/* ── Diagramme ──────────────────────────────────────────── */
+.diagram{background:var(--panel);border:1px solid var(--rule);padding:22px 20px 16px;
+  margin:26px 0;overflow-x:auto}
+.diagram svg{display:block;width:100%;min-width:640px;max-width:920px;margin:0 auto;height:auto}
+.diagram figcaption{max-width:74ch;margin:16px auto 0;padding-top:14px;
+  border-top:1px solid var(--rule);font-size:13.5px;color:var(--mute);line-height:1.55}
+
+/* ── Constats ───────────────────────────────────────────── */
+.ledger{display:grid;gap:1px;background:var(--rule);border:1px solid var(--rule);margin-top:26px}
+.finding{background:var(--panel);padding:19px 22px}
+.finding header{display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;margin-bottom:9px}
+.finding .num{font-family:var(--mono);font-size:12px;color:var(--mute)}
+.finding h3{font-family:var(--cond);font-weight:600;font-size:1.16rem;margin:0;
+  flex:1 1 320px;letter-spacing:-.008em;text-wrap:balance}
+.sev{font-family:var(--cond);font-size:10.5px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;padding:3px 8px;border:1px solid currentColor;white-space:nowrap}
+.sev-c{color:var(--crit)} .sev-h{color:var(--high)}
+.sev-m{color:var(--mid)} .sev-l{color:var(--low)}
+.finding p{margin:0;font-size:15px;color:var(--ink-2);max-width:78ch}
+.finding .fix{margin-top:11px;padding-top:10px;border-top:1px solid var(--rule);
+  font-family:var(--cond);font-size:13.5px;color:var(--ink)}
+.finding .fix span{font-weight:700;font-size:10.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--accent);margin-right:8px}
+
+/* ── Encart ─────────────────────────────────────────────── */
+.note-box{background:var(--sunk);border:1px solid var(--rule);padding:20px 23px;margin:26px 0}
+.note-box h3{font-family:var(--cond);font-weight:600;font-size:1.05rem;margin:0 0 8px}
+.note-box p{margin:0;font-size:14.5px;color:var(--ink-2);max-width:78ch}
+.note-box p+p{margin-top:.7em}
+
+ul.checks{list-style:none;padding:0;margin:22px 0;display:grid;gap:1px;
+  background:var(--rule);border:1px solid var(--rule)}
+ul.checks li{background:var(--panel);padding:13px 18px;font-size:14.5px;
+  display:flex;gap:13px;align-items:baseline}
+ul.checks b{font-family:var(--cond);font-weight:600;color:var(--accent);
+  flex:0 0 auto;font-variant-numeric:tabular-nums}
+
+footer{margin-top:64px;padding-top:22px;border-top:2px solid var(--ink);
+  font-family:var(--cond);font-size:13px;color:var(--mute);
+  display:flex;flex-wrap:wrap;gap:8px 26px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:640px){
+  body{font-size:16px}
+  .matrix th[scope=row]{min-width:150px}
+}
+</style><div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">Atlas · simulateur de stratégie d'entreprise</p>
+  <h1>Moteur de résolution</h1>
+  <p class="thesis">Ce document cartographie la machine qui transforme les décisions d'une
+  équipe en résultats : chaque variable saisie, la colonne qui la porte, le calcul qui la
+  consomme, et le décalage temporel qui la rend enseignable. Il consigne aussi
+  <strong>dix-sept couplages rompus</strong> trouvés à l'audit — des décisions que l'interface
+  promettait et que le moteur ignorait.</p>
+
+  <div class="figs">
+    <div class="fig"><b>45</b><span>variables tracées</span></div>
+    <div class="fig"><b>151</b><span>champs d'instantané</span></div>
+    <div class="fig"><b>0</b><span>champ sans lecteur</span></div>
+    <div class="fig"><b>17</b><span>couplages réparés</span></div>
+    <div class="fig"><b>431</b><span>tests</span></div>
+  </div>
+</header>
+
+<section>
+  <div class="sh"><span class="no">01</span><h2>L'épine dorsale</h2></div>
+  <p class="lede">Le moteur ne lit jamais la base. La couche serveur assemble un instantané,
+  l'orchestrateur le transforme en huit passes ordonnées, la couche serveur écrit le résultat
+  en une transaction. C'est ce qui rend une résolution entièrement rejouable à partir d'un
+  fichier — y compris devant une classe qui conteste un résultat.</p>
+
+  <figure class="diagram">
+<svg viewBox="0 0 920 850" role="img" xmlns="http://www.w3.org/2000/svg"
+     aria-label="Les huit passes ordonnées de la résolution : les décisions et les cartes de choc entrent en phase A, le calcul descend jusqu’au marché des titres, et l’état produit revient en entrée du tour suivant. L’alignement, calculé en phase C, entre dans la compétitivité du même tour et paie une prime de marge au compte de résultat.">
+  <defs>
+    <marker id="fl" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7"
+            orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="currentColor" fill-opacity=".45"/></marker>
+    <marker id="fa" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7"
+            orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--accent)"/></marker>
+  </defs>
+  <rect x="118" y="16" width="280" height="50" rx="25"
+        fill="var(--sunk)" stroke="currentColor" stroke-opacity=".45"/>
+  <text x="258" y="37" text-anchor="middle" font-size="12.5"
+        font-weight="600" fill="currentColor">Décisions du tour</text>
+  <text x="258" y="53" text-anchor="middle" font-size="10.5"
+        fill="currentColor" fill-opacity=".62">groupe · domaine · filière · RH · finance</text>
+  <rect x="522" y="16" width="280" height="50" rx="25"
+        fill="var(--sunk)" stroke="currentColor" stroke-opacity=".45"/>
+  <text x="662" y="37" text-anchor="middle" font-size="12.5"
+        font-weight="600" fill="currentColor">Cartes PESTEL</text>
+  <text x="662" y="53" text-anchor="middle" font-size="10.5"
+        fill="currentColor" fill-opacity=".62">chocs joués par le facilitateur</text>
+  <path d="M258 66 L258 92 L460 92" fill="none" stroke="currentColor" stroke-opacity=".45"/>
+  <path d="M662 66 L662 92 L460 92 L460 114" fill="none" stroke="currentColor" stroke-opacity=".45" marker-end="url(#fl)"/>
+  <rect x="290" y="118" width="340" height="50" rx="3"
+        fill="var(--sunk)" stroke="currentColor" stroke-opacity=".45"/>
+  <text x="460" y="139" text-anchor="middle" font-size="12.5"
+        font-weight="600" fill="currentColor">Phase A — par domaine</text>
+  <text x="460" y="155" text-anchor="middle" font-size="10.5"
+        fill="currentColor" fill-opacity=".62">amont, capacité, coûts, qualité, canal</text>
+  <rect x="290" y="200" width="340" height="50" rx="3"
+        fill="var(--sunk)" stroke="currentColor" stroke-opacity=".45"/>
+  <text x="460" y="221" text-anchor="middle" font-size="12.5"
+        font-weight="600" fill="currentColor">Phase B — médianes du pool</text>
+  <text x="460" y="237" text-anchor="middle" font-size="10.5"
+        fill="currentColor" fill-opacity=".62">coût unitaire, volume, prix médians</text>
+  <rect x="290" y="282" width="340" height="50" rx="3"
+        fill="var(--sunk)" stroke="var(--accent)" stroke-opacity="1"/>
+  <text x="460" y="303" text-anchor="middle" font-size="12.5"
+        font-weight="600" fill="currentColor">Phase C — alignement</text>
+  <text x="460" y="319" text-anchor="middle" font-size="10.5"
+        fill="currentColor" fill-opacity=".62">SAB · SAG · SAC · SAT → indice</text>
+  <rect x="290" y="364" width="340" height="50" rx="3"
+        fill="var(--sunk)" stroke="currentColor" stroke-opacity=".45"/>
+  <text x="460" y="385" text-anchor="middle" font-size="12.5"
+        font-weight="600" fill="currentColor">Phase D — compétitivité</text>
+  <text x="460" y="401" text-anchor="middle" font-size="10.5"
+        fill="currentColor" fill-opacity=".62">répartition à somme nulle</text>
+  <rect x="290" y="446" width="340" height="50" rx="3"
+        fill="var(--sunk)" stroke="currentColor" stroke-opacity=".45"/>
+  <text x="460" y="467" text-anchor="middle" font-size="12.5"
+        font-weight="600" fill="currentColor">Phase E — volumes</text>
+  <text x="460" y="483" text-anchor="middle" font-size="10.5"
+        fill="currentColor" fill-opacity=".62">part adressable, ventes, chiffre d’affaires</text>
+  <rect x="290" y="528" width="340" height="50" rx="3"
+        fill="var(--sunk)" stroke="currentColor" stroke-opacity=".45"/>
+  <text x="460" y="549" text-anchor="middle" font-size="12.5"
+        font-weight="600" fill="currentColor">Phase E bis — RH par domaine</text>
+  <text x="460" y="565" text-anchor="middle" font-size="10.5"
+        fill="currentColor" fill-opacity=".62">charge, climat, compétence, indemnités</text>
+  <rect x="290" y="610" width="340" height="50" rx="3"
+        fill="var(--sunk)" stroke="currentColor" stroke-opacity=".45"/>
+  <text x="460" y="631" text-anchor="middle" font-size="12.5"
+        font-weight="600" fill="currentColor">Phase F — résultat et trésorerie</text>
+  <text x="460" y="647" text-anchor="middle" font-size="10.5"
+        fill="currentColor" fill-opacity=".62">marge, impôt, BFR, trésorerie</text>
+  <rect x="290" y="692" width="340" height="50" rx="3"
+        fill="var(--sunk)" stroke="currentColor" stroke-opacity=".45"/>
+  <text x="460" y="713" text-anchor="middle" font-size="12.5"
+        font-weight="600" fill="currentColor">Phase G — marché des titres</text>
+  <text x="460" y="729" text-anchor="middle" font-size="10.5"
+        fill="currentColor" fill-opacity=".62">acquisitions, cessions, intégration</text>
+  <line x1="460" y1="168" x2="460" y2="196" stroke="currentColor" stroke-opacity=".45" marker-end="url(#fl)"/>
+  <text x="644" y="188" font-size="10" fill="currentColor" fill-opacity=".55">les coûts de toutes les équipes</text>
+  <line x1="460" y1="250" x2="460" y2="278" stroke="currentColor" stroke-opacity=".45" marker-end="url(#fl)"/>
+  <text x="644" y="270" font-size="10" fill="currentColor" fill-opacity=".55">le pool a ses médianes</text>
+  <line x1="460" y1="332" x2="460" y2="360" stroke="currentColor" stroke-opacity=".45" marker-end="url(#fl)"/>
+  <text x="644" y="352" font-size="10" fill="currentColor" fill-opacity=".55">l’indice entre dans la compétitivité</text>
+  <line x1="460" y1="414" x2="460" y2="442" stroke="currentColor" stroke-opacity=".45" marker-end="url(#fl)"/>
+  <text x="644" y="434" font-size="10" fill="currentColor" fill-opacity=".55">la part de marché est arrêtée</text>
+  <line x1="460" y1="496" x2="460" y2="524" stroke="currentColor" stroke-opacity=".45" marker-end="url(#fl)"/>
+  <text x="644" y="516" font-size="10" fill="currentColor" fill-opacity=".55">la charge de travail est connue</text>
+  <line x1="460" y1="578" x2="460" y2="606" stroke="currentColor" stroke-opacity=".45" marker-end="url(#fl)"/>
+  <text x="644" y="598" font-size="10" fill="currentColor" fill-opacity=".55">indemnités et subventions</text>
+  <line x1="460" y1="660" x2="460" y2="688" stroke="currentColor" stroke-opacity=".45" marker-end="url(#fl)"/>
+  <text x="644" y="680" font-size="10" fill="currentColor" fill-opacity=".55">la trésorerie est arrêtée</text>
+  <line x1="460" y1="742" x2="460" y2="770" stroke="currentColor" stroke-opacity=".45" marker-end="url(#fl)"/>
+  <rect x="290" y="774" width="340" height="50" rx="25"
+        fill="var(--sunk)" stroke="currentColor" stroke-opacity=".45"/>
+  <text x="460" y="795" text-anchor="middle" font-size="12.5"
+        font-weight="600" fill="currentColor">État du tour suivant</text>
+  <text x="460" y="811" text-anchor="middle" font-size="10.5"
+        fill="currentColor" fill-opacity=".62">capacité, qualité, notoriété, climat, océan bleu</text>
+  <path d="M630 307 C 736 307, 768 340, 768 470 C 768 600, 736 635, 634 635" fill="none" stroke="var(--accent)" stroke-dasharray="4 3" marker-end="url(#fa)"/>
+  <text x="778" y="462" font-size="10" fill="var(--accent)">prime de marge</text>
+  <text x="778" y="476" font-size="10" fill="var(--accent)">jusqu’à ±8 points</text>
+  <path d="M290 799 C 188 799, 152 762, 152 600 C 152 300, 188 143, 286 143" fill="none" stroke="var(--accent)" stroke-dasharray="4 3" marker-end="url(#fa)"/>
+  <text x="140" y="455" text-anchor="end" font-size="10" fill="var(--accent)">report au</text>
+  <text x="140" y="469" text-anchor="end" font-size="10" fill="var(--accent)">tour suivant</text>
+</svg>
+<figcaption>Huit passes, dans cet ordre — et deux boucles. L’alignement n’est pas une note
+donnée à la fin : il est calculé au milieu, entre dans la compétitivité du tour même, et paie
+une prime de marge. L’état produit en sortie devient l’entrée du tour suivant : c’est ce
+décalage qui rend le jeu enseignable.</figcaption>
+</figure>
+
+  <p>L'ordre n'est pas arbitraire. L'efficience et l'échelle n'ont de sens que
+  <em>par comparaison</em> avec les concurrents du même marché : impossible de les évaluer
+  avant d'avoir calculé les coûts de tout le monde, d'où la passe des médianes. L'alignement
+  précède la compétitivité parce qu'il y entre. Et la RH par domaine précède le compte de
+  résultat parce que les indemnités s'y paient — elle vivait après, et c'est ce qui rendait
+  les licenciements gratuits.</p>
+</section>
+
+<section>
+  <div class="sh"><span class="no">02</span><h2>L'indice d'alignement</h2></div>
+  <p class="lede">Le cœur pédagogique. Il ne mesure pas la performance : il mesure la
+  <strong>cohérence</strong> entre ce qu'une équipe déclare vouloir faire et ce qu'elle fait.
+  Quatre étages, dont un par domaine et deux par groupe.</p>
+
+  <div class="formula">
+    <span class="k">IA_brut</span> = 0.44·SAB + 0.20·SAG + 0.28·SAC + 0.08·SAT<br>
+    <span class="k">IA</span> = clamp( IA_brut − 12·milieu_de_gué − 6·dérive , 0 , 100 )<br>
+    <span class="c">SAB — cohérence de chaque domaine, pondérée par son chiffre d'affaires</span><br>
+    <span class="c">SAG — conformité du domaine aux directives du groupe</span><br>
+    <span class="c">SAC — cohérence du portefeuille et de la structure</span><br>
+    <span class="c">SAT — constance dans le temps</span>
+  </div>
+
+  <div class="note-box">
+    <h3>Faute de directives saisies, le poids du SAG est redistribué</h3>
+    <p>Le compter comme un zéro punirait le silence : une session provisionnée avant
+    l'introduction des directives n'a rien à se reprocher. La redistribution au prorata
+    retombe <strong>exactement</strong> sur la formule à trois étages du cahier —
+    0,55·SAB + 0,35·SAC + 0,10·SAT. Deux promotions restent donc notées sur la même échelle,
+    et un test le vérifie.</p>
+  </div>
+
+  <p>Deux diagnostics se lisent en comparant le vecteur observé aux <em>quatre</em> profils, et
+  non au seul déclaré. Le <strong>milieu de gué</strong> — les décisions ne correspondent à
+  aucune stratégie cohérente — est une faute de gestion, sanctionnée
+  12 points. La <strong>dérive</strong> — les décisions sont
+  cohérentes, mais avec une autre stratégie que celle annoncée — est une faute de lucidité :
+  6 points, et re-déclarer au tour suivant l'efface sans coût de
+  transition.</p>
+
+  <p>La fonction de pénalité tolère 10 points d'écart
+  gratuitement — le monde réel est bruité — puis croît de façon convexe
+  jusqu'à saturer à 45 points. L'exposant
+  1.5 fait qu'un écart concentré sur un axe coûte plus cher
+  que le même écart réparti : c'est le message central du moteur.</p>
+</section>
+
+<section>
+  <div class="sh"><span class="no">03</span><h2>Les seize axes du domaine</h2></div>
+  <p class="lede">Chaque stratégie générique porte un profil-cible et une pondération. La valeur
+  en gras est la <strong>cible</strong> sur 100 ; le petit nombre gris est le <strong>poids</strong>
+  de l'axe dans le score, en pourcentage. Chaque colonne somme exactement à 100.</p>
+  <div class="scroll"><table class='matrix'><thead><tr><th scope='col'>Axe observé</th><th scope='col'>Domination coûts</th><th scope='col'>Différenciation</th><th scope='col'>Concentration coûts</th><th scope='col'>Concentration différenc.</th></tr></thead><tbody><tr><th scope='row'>Positionnement prix<code>price_position</code></th><td style="background:color-mix(in oklab, var(--accent) 6%, transparent)"><span class='t'>22</span><span class='w'>10.4</span></td><td style="background:color-mix(in oklab, var(--accent) 20%, transparent)"><span class='t'>78</span><span class='w'>9.1</span></td><td style="background:color-mix(in oklab, var(--accent) 8%, transparent)"><span class='t'>30</span><span class='w'>9.8</span></td><td style="background:color-mix(in oklab, var(--accent) 23%, transparent)"><span class='t'>88</span><span class='w'>9.1</span></td></tr><tr><th scope='row'>Intensité R&amp;D<code>rd_intensity</code></th><td style="background:color-mix(in oklab, var(--accent) 5%, transparent)"><span class='t'>20</span><span class='w'>5.2</span></td><td style="background:color-mix(in oklab, var(--accent) 21%, transparent)"><span class='t'>80</span><span class='w'>11.7</span></td><td style="background:color-mix(in oklab, var(--accent) 5%, transparent)"><span class='t'>20</span><span class='w'>3.9</span></td><td style="background:color-mix(in oklab, var(--accent) 22%, transparent)"><span class='t'>85</span><span class='w'>7.8</span></td></tr><tr><th scope='row'>Intensité marketing<code>mkt_intensity</code></th><td style="background:color-mix(in oklab, var(--accent) 8%, transparent)"><span class='t'>30</span><span class='w'>1.9</span></td><td style="background:color-mix(in oklab, var(--accent) 20%, transparent)"><span class='t'>75</span><span class='w'>7.8</span></td><td style="background:color-mix(in oklab, var(--accent) 6%, transparent)"><span class='t'>25</span><span class='w'>1.3</span></td><td style="background:color-mix(in oklab, var(--accent) 16%, transparent)"><span class='t'>60</span><span class='w'>3.9</span></td></tr><tr><th scope='row'>Qualité<code>quality</code></th><td style="background:color-mix(in oklab, var(--accent) 14%, transparent)"><span class='t'>55</span><span class='w'>4.5</span></td><td style="background:color-mix(in oklab, var(--accent) 22%, transparent)"><span class='t'>85</span><span class='w'>13.0</span></td><td style="background:color-mix(in oklab, var(--accent) 15%, transparent)"><span class='t'>58</span><span class='w'>5.9</span></td><td style="background:color-mix(in oklab, var(--accent) 23%, transparent)"><span class='t'>90</span><span class='w'>11.7</span></td></tr><tr><th scope='row'>Efficience coûts<code>cost_efficiency</code></th><td style="background:color-mix(in oklab, var(--accent) 23%, transparent)"><span class='t'>88</span><span class='w'>13.0</span></td><td style="background:color-mix(in oklab, var(--accent) 12%, transparent)"><span class='t'>45</span><span class='w'>3.9</span></td><td style="background:color-mix(in oklab, var(--accent) 20%, transparent)"><span class='t'>78</span><span class='w'>11.7</span></td><td style="background:color-mix(in oklab, var(--accent) 10%, transparent)"><span class='t'>38</span><span class='w'>2.6</span></td></tr><tr><th scope='row'>Échelle<code>scale_index</code></th><td style="background:color-mix(in oklab, var(--accent) 21%, transparent)"><span class='t'>82</span><span class='w'>11.7</span></td><td style="background:color-mix(in oklab, var(--accent) 14%, transparent)"><span class='t'>55</span><span class='w'>1.3</span></td><td style="background:color-mix(in oklab, var(--accent) 8%, transparent)"><span class='t'>30</span><span class='w'>6.5</span></td><td style="background:color-mix(in oklab, var(--accent) 6%, transparent)"><span class='t'>22</span><span class='w'>1.3</span></td></tr><tr><th scope='row'>Automatisation<code>automation_level</code></th><td style="background:color-mix(in oklab, var(--accent) 20%, transparent)"><span class='t'>78</span><span class='w'>7.8</span></td><td style="background:color-mix(in oklab, var(--accent) 14%, transparent)"><span class='t'>55</span><span class='w'>2.6</span></td><td style="background:color-mix(in oklab, var(--accent) 16%, transparent)"><span class='t'>62</span><span class='w'>6.5</span></td><td style="background:color-mix(in oklab, var(--accent) 9%, transparent)"><span class='t'>35</span><span class='w'>1.9</span></td></tr><tr><th scope='row'>Intensité compétences<code>skill_intensity</code></th><td style="background:color-mix(in oklab, var(--accent) 8%, transparent)"><span class='t'>32</span><span class='w'>5.2</span></td><td style="background:color-mix(in oklab, var(--accent) 21%, transparent)"><span class='t'>82</span><span class='w'>8.5</span></td><td style="background:color-mix(in oklab, var(--accent) 10%, transparent)"><span class='t'>38</span><span class='w'>5.2</span></td><td style="background:color-mix(in oklab, var(--accent) 23%, transparent)"><span class='t'>88</span><span class='w'>8.5</span></td></tr><tr><th scope='row'>Étendue segments<code>segment_breadth</code></th><td style="background:color-mix(in oklab, var(--accent) 21%, transparent)"><span class='t'>80</span><span class='w'>3.9</span></td><td style="background:color-mix(in oklab, var(--accent) 20%, transparent)"><span class='t'>75</span><span class='w'>1.9</span></td><td style="background:color-mix(in oklab, var(--accent) 6%, transparent)"><span class='t'>22</span><span class='w'>11.7</span></td><td style="background:color-mix(in oklab, var(--accent) 5%, transparent)"><span class='t'>18</span><span class='w'>11.7</span></td></tr><tr><th scope='row'>Contrôle du canal<code>channel_control</code></th><td style="background:color-mix(in oklab, var(--accent) 9%, transparent)"><span class='t'>35</span><span class='w'>1.3</span></td><td style="background:color-mix(in oklab, var(--accent) 18%, transparent)"><span class='t'>70</span><span class='w'>5.2</span></td><td style="background:color-mix(in oklab, var(--accent) 12%, transparent)"><span class='t'>45</span><span class='w'>2.6</span></td><td style="background:color-mix(in oklab, var(--accent) 22%, transparent)"><span class='t'>85</span><span class='w'>6.5</span></td></tr><tr><th scope='row'>Délégation<code>org_delegation</code></th><td style="background:color-mix(in oklab, var(--accent) 8%, transparent)"><span class='t'>30</span><span class='w'>5.0</span></td><td style="background:color-mix(in oklab, var(--accent) 16%, transparent)"><span class='t'>62</span><span class='w'>5.0</span></td><td style="background:color-mix(in oklab, var(--accent) 11%, transparent)"><span class='t'>42</span><span class='w'>5.0</span></td><td style="background:color-mix(in oklab, var(--accent) 20%, transparent)"><span class='t'>78</span><span class='w'>6.0</span></td></tr><tr><th scope='row'>Profondeur hiérarchique<code>org_layers</code></th><td style="background:color-mix(in oklab, var(--accent) 18%, transparent)"><span class='t'>68</span><span class='w'>4.0</span></td><td style="background:color-mix(in oklab, var(--accent) 12%, transparent)"><span class='t'>45</span><span class='w'>4.0</span></td><td style="background:color-mix(in oklab, var(--accent) 12%, transparent)"><span class='t'>48</span><span class='w'>4.0</span></td><td style="background:color-mix(in oklab, var(--accent) 6%, transparent)"><span class='t'>24</span><span class='w'>5.0</span></td></tr><tr><th scope='row'>Axes stratégiques<code>axis_fit</code></th><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>7.0</span></td><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>8.0</span></td><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>7.0</span></td><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>7.0</span></td></tr><tr><th scope='row'>KPI retenus<code>kpi_fit</code></th><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>9.0</span></td><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>9.0</span></td><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>9.0</span></td><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>8.0</span></td></tr><tr><th scope='row'>Budgets de direction<code>budget_fit</code></th><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>7.0</span></td><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>6.0</span></td><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>7.0</span></td><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>6.0</span></td></tr><tr><th scope='row'>Postes clés<code>key_roles_fit</code></th><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>3.0</span></td><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>3.0</span></td><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>3.0</span></td><td style="background:color-mix(in oklab, var(--accent) 26%, transparent)"><span class='t'>100</span><span class='w'>3.0</span></td></tr></tbody></table></div>
+  <p>La répartition est assumée : <strong>65 % aux décisions économiques, 35 % aux décisions
+  d'organisation</strong>. En deçà, structurer poste par poste et répartir ses budgets serait
+  décoratif ; au-delà, l'économie du domaine cesserait de décider du résultat.</p>
+</section>
+
+<section>
+  <div class="sh"><span class="no">04</span><h2>Les sept axes du groupe</h2></div>
+  <p class="lede">Même lecture, au niveau corporate. S'y ajoutent des pénalités catégorielles
+  structure × stratégie, et des pénalités <em>absolues</em> qui ne dépendent pas de ce que
+  l'équipe déclare : une structure fonctionnelle avec cinq métiers ne tient pas, qu'on
+  l'appelle spécialisation ou conglomérat.</p>
+  <div class="scroll"><table class='matrix'><thead><tr><th scope='col'>Axe observé</th><th scope='col'>Spécialisation</th><th scope='col'>Intégration verticale</th><th scope='col'>Diversification liée</th><th scope='col'>Diversification conglomérale</th></tr></thead><tbody><tr><th scope='row'>Étendue du portefeuille<code>portfolio_breadth</code></th><td style="background:color-mix(in oklab, var(--accent) 3%, transparent)"><span class='t'>10</span><span class='w'>22.0</span></td><td style="background:color-mix(in oklab, var(--accent) 6%, transparent)"><span class='t'>25</span><span class='w'>10.0</span></td><td style="background:color-mix(in oklab, var(--accent) 13%, transparent)"><span class='t'>50</span><span class='w'>16.0</span></td><td style="background:color-mix(in oklab, var(--accent) 20%, transparent)"><span class='t'>75</span><span class='w'>18.0</span></td></tr><tr><th scope='row'>Proximité des métiers<code>portfolio_relatedness</code></th><td style="background:color-mix(in oklab, var(--accent) 22%, transparent)"><span class='t'>85</span><span class='w'>20.0</span></td><td style="background:color-mix(in oklab, var(--accent) 21%, transparent)"><span class='t'>80</span><span class='w'>14.0</span></td><td style="background:color-mix(in oklab, var(--accent) 17%, transparent)"><span class='t'>65</span><span class='w'>20.0</span></td><td style="background:color-mix(in oklab, var(--accent) 5%, transparent)"><span class='t'>20</span><span class='w'>18.0</span></td></tr><tr><th scope='row'>Centralisation<code>centralisation_index</code></th><td style="background:color-mix(in oklab, var(--accent) 20%, transparent)"><span class='t'>75</span><span class='w'>14.0</span></td><td style="background:color-mix(in oklab, var(--accent) 21%, transparent)"><span class='t'>80</span><span class='w'>16.0</span></td><td style="background:color-mix(in oklab, var(--accent) 14%, transparent)"><span class='t'>55</span><span class='w'>12.0</span></td><td style="background:color-mix(in oklab, var(--accent) 8%, transparent)"><span class='t'>30</span><span class='w'>18.0</span></td></tr><tr><th scope='row'>Mutualisation effective<code>shared_resources_index</code></th><td style="background:color-mix(in oklab, var(--accent) 16%, transparent)"><span class='t'>60</span><span class='w'>14.0</span></td><td style="background:color-mix(in oklab, var(--accent) 18%, transparent)"><span class='t'>70</span><span class='w'>16.0</span></td><td style="background:color-mix(in oklab, var(--accent) 21%, transparent)"><span class='t'>80</span><span class='w'>26.0</span></td><td style="background:color-mix(in oklab, var(--accent) 5%, transparent)"><span class='t'>20</span><span class='w'>20.0</span></td></tr><tr><th scope='row'>Intégration verticale<code>vertical_integration</code></th><td style="background:color-mix(in oklab, var(--accent) 10%, transparent)"><span class='t'>40</span><span class='w'>8.0</span></td><td style="background:color-mix(in oklab, var(--accent) 22%, transparent)"><span class='t'>85</span><span class='w'>30.0</span></td><td style="background:color-mix(in oklab, var(--accent) 10%, transparent)"><span class='t'>40</span><span class='w'>8.0</span></td><td style="background:color-mix(in oklab, var(--accent) 5%, transparent)"><span class='t'>20</span><span class='w'>6.0</span></td></tr><tr><th scope='row'>Mix de talents<code>talent_mix</code></th><td style="background:color-mix(in oklab, var(--accent) 16%, transparent)"><span class='t'>60</span><span class='w'>10.0</span></td><td style="background:color-mix(in oklab, var(--accent) 14%, transparent)"><span class='t'>55</span><span class='w'>6.0</span></td><td style="background:color-mix(in oklab, var(--accent) 16%, transparent)"><span class='t'>60</span><span class='w'>8.0</span></td><td style="background:color-mix(in oklab, var(--accent) 12%, transparent)"><span class='t'>45</span><span class='w'>8.0</span></td></tr><tr><th scope='row'>Cohérence des valeurs<code>values_fit</code></th><td style="background:color-mix(in oklab, var(--accent) 20%, transparent)"><span class='t'>75</span><span class='w'>12.0</span></td><td style="background:color-mix(in oklab, var(--accent) 18%, transparent)"><span class='t'>70</span><span class='w'>8.0</span></td><td style="background:color-mix(in oklab, var(--accent) 18%, transparent)"><span class='t'>70</span><span class='w'>10.0</span></td><td style="background:color-mix(in oklab, var(--accent) 16%, transparent)"><span class='t'>60</span><span class='w'>12.0</span></td></tr></tbody></table></div>
+</section>
+
+<section>
+  <div class="sh"><span class="no">05</span><h2>Le SAG, ou l'arbitrage central</h2></div>
+  <p class="lede">Le SAG ne mesure pas l'obéissance. Un domaine qui applique une directive
+  inadaptée à son métier gagne du SAG et <em>perd</em> du SAB ; celui qui s'en écarte fait
+  l'inverse. Les deux sens coûtent, et c'est voulu : la seule façon d'avoir les deux scores
+  hauts est de fixer, au niveau groupe, des directives qui conviennent réellement au
+  portefeuille.</p>
+  <div class="scroll"><table><thead><tr><th scope="col">Composante</th><th scope="col">Poids</th>
+  <th scope="col">Ce qu'elle juge</th></tr></thead><tbody><tr><th scope='row'>Rôle dans le portefeuille</th><td>32</td><td class='why'>L'investissement consenti correspond-il au rôle assigné ? Mesuré en logarithme du ratio : investir du simple au double et de moitié moins sont deux fautes symétriques.</td></tr><tr><th scope='row'>Mutualisation</th><td>26</td><td class='why'>Le domaine adhère-t-il à ce que le groupe a ouvert — et seulement quand la proximité le justifie ? Sous 40 de proximité, la bonne décision est de s'abstenir.</td></tr><tr><th scope='row'>Fonctions au siège</th><td>26</td><td class='why'>Refuser une fonction centralisée se paie à hauteur de ce que la stratégie du domaine rend légitime. L'excès de zèle inverse coûte moitié moins.</td></tr><tr><th scope='row'>Identité</th><td>16</td><td class='why'>Les axes du domaine déclinent-ils les valeurs du groupe ? Le poids le plus faible : on ne veut pas qu'un score se gagne en écrivant.</td></tr></tbody></table></div>
+
+  <p>L'intensité d'investissement attendue s'exprime en ratio à la part de chiffre d'affaires
+  du domaine. Un portefeuille où tout est moteur est un portefeuille qui n'arbitre pas — et le
+  score le dira, puisque les ratios ne peuvent pas tous être tenus avec une enveloppe finie.</p>
+  <div class="scroll"><table><thead><tr><th scope="col">Rôle assigné</th>
+  <th scope="col">Ratio</th><th scope="col">Lecture</th></tr></thead>
+  <tbody><tr><th scope='row'>Moteur</th><td>×1.80</td><td class='why'>Il pèse 30 % du chiffre d’affaires ? Il doit capter 54 % de l’enveloppe.</td></tr><tr><th scope='row'>Relais</th><td>×1.00</td><td class='why'>Sa part d’investissement suit sa part de chiffre d’affaires.</td></tr><tr><th scope='row'>Soutien</th><td>×0.50</td><td class='why'>La moitié de son poids : il finance les autres.</td></tr><tr><th scope='row'>Réserve</th><td>×0.15</td><td class='why'>Presque rien — on le tient, on ne l’alimente pas.</td></tr></tbody></table></div>
+
+  <p>La tolérance à la divergence est ce qui empêche le SAG d'être une note de conformité.
+  Un domaine de niche différenciée qui garde la main sur sa R&amp;D ne fait pas une erreur :
+  il protège ce qui le distingue. Le même domaine qui refuse la centrale d'achat renonce à une
+  économie d'échelle qui ne lui coûtait rien. 0 = diverger est une faute pleine ;
+  1 = diverger est parfaitement légitime.</p>
+  <div class="scroll"><table class="matrix"><thead><tr><th scope="col">Stratégie du domaine</th>
+  <th scope="col">Achats</th><th scope="col">SI</th><th scope="col">R&amp;D</th>
+  <th scope="col">RH</th><th scope="col">Finance</th></tr></thead>
+  <tbody><tr><th scope='row'>Domination coûts</th><td>0.05</td><td>0.10</td><td>0.25</td><td>0.15</td><td>0.05</td></tr><tr><th scope='row'>Concentration coûts</th><td>0.15</td><td>0.20</td><td>0.30</td><td>0.30</td><td>0.10</td></tr><tr><th scope='row'>Différenciation</th><td>0.30</td><td>0.35</td><td>0.80</td><td>0.40</td><td>0.10</td></tr><tr><th scope='row'>Concentration différenc.</th><td>0.35</td><td>0.45</td><td>0.90</td><td>0.55</td><td>0.10</td></tr></tbody></table></div>
+</section>
+
+<section>
+  <div class="sh"><span class="no">06</span><h2>Atlas des variables</h2></div>
+  <p class="lede">La chaîne complète, saisie par saisie : la colonne qui la porte en base, le
+  champ de l'instantané qui la transporte, et le calcul qui la consomme. Les lignes marquées
+  d'un filet à gauche sont celles dont le couplage était rompu avant l'audit.</p>
+  <div class="scroll"><table class='atlas'><thead><tr><th scope='col'>Colonne de saisie</th><th scope='col'>Champ d'instantané</th><th scope='col'>Ce que le moteur en fait</th></tr></thead><tbody><tr class='fam'><th colspan='3' scope='colgroup'>Groupe</th></tr><tr><td><code>team_round_strategy.corporate_strategy</code></td><td><code class='snap'>corporate.corporateStrategy</code></td><td>scoreCorporateAlignment — profil-cible du SAC</td></tr><tr><td><code>team_round_strategy.structure_type</code></td><td><code class='snap'>corporate.structureType</code></td><td>STRUCTURE_PENALTIES + pénalités absolues ; coût de réorganisation</td></tr><tr><td><code>central_purchasing · it · rd · hr · finance</code></td><td><code class='snap'>corporate.central*</code></td><td>centralisationIndex → SAC ; hqFit → SAG ; frais de siège</td></tr><tr><td><code>shared_production · shared_rd</code></td><td><code class='snap'>corporate.shared*</code></td><td>sharedResourcesIndex → SAC ; synergyEffect → charges</td></tr><tr><td><code>value_1 · value_2</code></td><td><code class='snap'>corporate.values</code></td><td>valuesFit → SAC ; valuesProfile → identité du SAG</td></tr><tr class='note'><td><code>vision · mission</code></td><td><code class='snap'>—</code></td><td>Non noté, délibérément : un score tiré de mots-clés serait arbitraire</td></tr><tr><td><code>tax_regime</code></td><td><code class='snap'>finance.taxRegime</code></td><td>corporateTax — IS, CFC/ZAI, banque</td></tr><tr><td><code>opex_mad</code></td><td><code class='snap'>finance.opexMad</code></td><td>EBITDA, via le multiplicateur de synergie</td></tr><tr><td><code>debt_drawn_mad · debt_repaid_mad</code></td><td><code class='snap'>finance.debt*</code></td><td>Trésorerie, charge d&#x27;intérêt, levier</td></tr><tr class='fam'><th colspan='3' scope='colgroup'>DAS</th></tr><tr><td><code>das_decisions.generic_strategy</code></td><td><code class='snap'>decision.genericStrategy</code></td><td>diagnoseBusiness — comparé aux QUATRE profils, pas au seul déclaré</td></tr><tr><td><code>price_position</code></td><td><code class='snap'>decision.pricePosition</code></td><td>unitPrice → priceCompetitiveness ; axe B1 du SAB</td></tr><tr class='corr'><td><code>served_segments</code></td><td><code class='snap'>decision.servedSegments</code></td><td>addressableShare → volume ; segmentPriceSensitivity → élasticité ; axe B9</td></tr><tr><td><code>capex_capacity_mad</code></td><td><code class='snap'>decision.capexCapacityMad</code></td><td>Capacité au tour SUIVANT ; investissement du rôle (SAG)</td></tr><tr><td><code>capex_automation_mad</code></td><td><code class='snap'>decision.capexAutomationMad</code></td><td>automationLevel → coût variable, charge de travail, climat</td></tr><tr class='corr'><td><code>capex_own_network_mad</code></td><td><code class='snap'>decision.capexOwnNetworkMad</code></td><td>ownNetworkCoverage → couverture ; channelControl → intégration verticale</td></tr><tr><td><code>rd_budget_mad</code></td><td><code class='snap'>decision.rdBudgetMad</code></td><td>Qualité au tour SUIVANT (effet différé) ; axe B2</td></tr><tr><td><code>marketing_budget_mad</code></td><td><code class='snap'>decision.marketingBudgetMad</code></td><td>nextNotoriety, à rendement décroissant ; axe B3</td></tr><tr class='corr'><td><code>declare_blue_ocean</code></td><td><code class='snap'>decision.declareBlueOcean</code></td><td>Tentative de sortie du jeu à somme nulle : ticket, échec, marge ×2,5</td></tr><tr class='fam'><th colspan='3' scope='colgroup'>Directives</th></tr><tr><td><code>das_group_directives.portfolio_role</code></td><td><code class='snap'>groupStance.portfolioRole</code></td><td>roleFit — investissement consenti contre rôle assigné</td></tr><tr class='corr'><td><code>ansoff_movement</code></td><td><code class='snap'>ansoffMovement</code></td><td>ansoffRisk → compétitivité des deux premiers tours</td></tr><tr><td><code>hq_purchasing … hq_finance</code></td><td><code class='snap'>groupStance.hq*</code></td><td>hqFit — pondéré par la tolérance de la stratégie du DAS</td></tr><tr><td><code>das_shared_resources.adoption_level</code></td><td><code class='snap'>groupStance.sharedResources</code></td><td>mutualisationFit ; standardisationLevel → réduction sans perte de qualité</td></tr><tr class='fam'><th colspan='3' scope='colgroup'>Organisation</th></tr><tr><td><code>das_org_design.delegation_level</code></td><td><code class='snap'>organisation.delegationLevel</code></td><td>Axe org_delegation du SAB</td></tr><tr><td><code>das_strategic_axes.axis_key · priority</code></td><td><code class='snap'>organisation.axes</code></td><td>axis_fit du SAB ; axesProfile → identité du SAG</td></tr><tr><td><code>das_direction_kpis.kpi_key</code></td><td><code class='snap'>organisation.kpis</code></td><td>kpi_fit — affinité du KPI avec la stratégie déclarée</td></tr><tr><td><code>das_direction_budgets.budget_mad</code></td><td><code class='snap'>organisation.budgets</code></td><td>budget_fit — l&#x27;argent suit-il la stratégie annoncée ?</td></tr><tr><td><code>das_positions.hierarchy_level · reports_to</code></td><td><code class='snap'>organisation.positions</code></td><td>org_layers ; key_roles_fit</td></tr><tr class='fam'><th colspan='3' scope='colgroup'>RH</th></tr><tr><td><code>das_hr_decisions.hire_operateurs … cadres</code></td><td><code class='snap'>hr.hire*</code></td><td>Effectif, masse salariale, talent_mix, skill_intensity</td></tr><tr class='corr'><td><code>layoffs</code></td><td><code class='snap'>hr.layoffs</code></td><td>Indemnités article 53 DÉBITÉES ; climat social ; restructuring_count</td></tr><tr class='corr'><td><code>internal_transfers_in</code></td><td><code class='snap'>hr.internalTransfersIn</code></td><td>Marché interne à somme nulle : prélevé sur les autres domaines</td></tr><tr><td><code>avg_salary_brut_mad</code></td><td><code class='snap'>hr.avgSalaryBrutMad</code></td><td>Masse salariale ; climat ; skill_intensity ; barème d&#x27;indemnités</td></tr><tr><td><code>training_budget_mad</code></td><td><code class='snap'>hr.trainingBudgetMad</code></td><td>trainingIntensity → compétence, climat ; assiette OFPPT/GIAC</td></tr><tr class='corr'><td><code>training_focus</code></td><td><code class='snap'>hr.trainingFocus</code></td><td>Module compétence, qualité, climat et standardisation</td></tr><tr class='corr'><td><code>claim_ofppt · claim_giac · order_skills_audit</code></td><td><code class='snap'>hr.claim*</code></td><td>Subventions CRÉDITÉES ; le GIAC exige un bilan de compétences</td></tr><tr><td><code>restructuring</code></td><td><code class='snap'>hr.restructuring</code></td><td>Choc de climat social selon la brutalité du geste</td></tr><tr class='fam'><th colspan='3' scope='colgroup'>Filière</th></tr><tr class='corr'><td><code>procurement_contracts.committed_volume</code></td><td><code class='snap'>procurement[].committedVolume</code></td><td>Remise amont (−18 % max), qualité d&#x27;intrants, risque de rupture ; amont de l&#x27;intégration verticale</td></tr><tr><td><code>distribution_contracts.volume_share</code></td><td><code class='snap'>distribution[].volumeShare</code></td><td>Couverture → plafond de part ; marge distributeur ; channelControl</td></tr><tr class='fam'><th colspan='3' scope='colgroup'>Cession</th></tr><tr><td><code>das_listings.seller_choice</code></td><td><code class='snap'>listings[].sellerChoice</code></td><td>Vendre au NPC, à la meilleure offre, ou retirer l&#x27;annonce</td></tr><tr><td><code>das_bids.offer_mad</code></td><td><code class='snap'>bids[].offerMad</code></td><td>Enchère scellée contre le prix de réserve</td></tr><tr><td><code>integration_budget_mad</code></td><td><code class='snap'>bids[].integrationBudgetMad</code></td><td>resolveTransfer — jusqu&#x27;à 45 % de la valeur détruite sans budget</td></tr><tr class='fam'><th colspan='3' scope='colgroup'>Acquisition</th></tr><tr><td><code>acquisition_offers.offer_mad</code></td><td><code class='snap'>acquisitionOffers[].offerMad</code></td><td>Entrée dans un domaine non exploité, contre le prix de réserve de la cible</td></tr><tr class='corr'><td><code>(poids réel de la cible)</code></td><td><code class='snap'>targetRevenueMad</code></td><td>Chiffre d&#x27;affaires REPRIS — l&#x27;historique du domaine acquis</td></tr><tr class='fam'><th colspan='3' scope='colgroup'>War room</th></tr><tr class='corr'><td><code>shock_responses.response</code></td><td><code class='snap'>shockResponses[].effectiveness</code></td><td>Atténue la part défavorable de la carte visée, carte par carte</td></tr><tr class='corr'><td><code>shock_responses.cost_mad</code></td><td><code class='snap'>shockResponses[].costMad</code></td><td>DÉBITÉ, que la carte s&#x27;avère bénigne ou non</td></tr><tr class='fam'><th colspan='3' scope='colgroup'>Cabinet</th></tr><tr><td><code>consulting_orders</code></td><td><code class='snap'>finance.consultingSpendMad</code></td><td>Charge d&#x27;étude ; le benchmark lève l&#x27;asymétrie d&#x27;information</td></tr></tbody></table></div>
+</section>
+
+<section>
+  <div class="sh"><span class="no">07</span><h2>Ce qui ne se voit qu'au tour suivant</h2></div>
+  <p class="lede">Les décalages ne sont pas une commodité de calcul : ils sont la matière
+  enseignable. Une décision dont l'effet tombe le même tour s'optimise par tâtonnement ;
+  une décision dont l'effet tombe plus tard s'arbitre.</p>
+  <div class="scroll"><table><thead><tr><th scope="col">Décalage</th>
+  <th scope="col">Décision</th><th scope="col">Effet</th><th scope="col">Ce que ça enseigne</th>
+  </tr></thead><tbody><tr><td class='lag'>N+1</td><th scope='row'>Investir dans l'outil de production</th><td>La capacité entre en service au tour SUIVANT</td><td class='why'>Il faut anticiper la demande, donc se tromper d'un tour d'avance.</td></tr><tr><td class='lag'>N+1</td><th scope='row'>Recherche & développement</th><td>La qualité progresse au tour SUIVANT</td><td class='why'>Couper la R&D ne se voit pas tout de suite — c'est ce qui la rend facile à couper.</td></tr><tr><td class='lag'>N+1</td><th scope='row'>Climat social</th><td>Rotation, puis compétence, puis productivité</td><td class='why'>Trois tours pour qu'un geste social se lise dans un coût unitaire.</td></tr><tr><td class='lag'>N+1</td><th scope='row'>Rupture de stock</th><td>Notoriété du tour suivant</td><td class='why'>Les clients jugent la fiabilité sur ce qu'ils ont vécu, pas sur une pénurie à venir.</td></tr><tr><td class='lag'>N+1</td><th scope='row'>Trésorerie négative</th><td>Malus de compétitivité</td><td class='why'>Le marché apprend qu'une entreprise ne tient plus ses délais.</td></tr><tr><td class='lag'>N+2</td><th scope='row'>Océan bleu</th><td>Deux tours hors du jeu à somme nulle</td><td class='why'>Marge ×2.5, contre un ticket de 15 % du chiffre d'affaires et 35 % d'échec.</td></tr><tr><td class='lag'>N</td><th scope='row'>Automatisation</th><td>Coût variable immédiat, choc de climat immédiat</td><td class='why'>Le seul levier dont les deux effets tombent le même tour, en sens contraires.</td></tr><tr><td class='lag'>N+1</td><th scope='row'>Dérive diagnostiquée</th><td>Le changement de cap devient gratuit</td><td class='why'>Une faute de lucidité s'efface en re-déclarant ; une faute de gestion, non.</td></tr></tbody></table></div>
+</section>
+
+<section>
+  <div class="sh"><span class="no">08</span><h2>Registre d'audit</h2></div>
+  <p class="lede">Dix-sept couplages rompus, tous corrigés. Ils partagent une seule cause :
+  une variable écrite d'un côté, lue de l'autre, sans que rien ne relie les deux. Une décision
+  que l'interface annonce et que le moteur ignore est pire qu'une décision absente — l'équipe
+  croit arbitrer, et le débriefing porte sur un arbitrage qui n'a pas eu lieu.</p>
+  <div class="ledger"><article class='finding'><header><span class='num'>01</span><span class='sev sev-c'>Critique</span><h3>Le marché adressable ignorait les segments servis</h3></header><p>La normalisation par la part servie annulait exactement l&#x27;effet cherché : une seule niche à 10 % du marché rendait le même volume que les cinq segments. La concentration était donc STRICTEMENT DOMINANTE — elle ne coûtait aucun volume et rapportait des points d&#x27;alignement.</p><p class='fix'><span>Corrigé</span> addressableShare rend la part réellement adressée.</p></article><article class='finding'><header><span class='num'>02</span><span class='sev sev-c'>Critique</span><h3>L&#x27;écran et le moteur ne lisaient pas la même décision</h3></header><p>Les décisions se reconduisent, et l&#x27;interface le faisait. Le moteur ne lisait que le tour courant et retombait sur des valeurs neutres codées en dur : domination par les coûts, prix au marché, AUCUN segment, budgets à zéro. Une équipe qui relisait sa stratégie, la jugeait bonne et n&#x27;y touchait pas était calculée sur une stratégie jamais déclarée.</p><p class='fix'><span>Corrigé</span> Une seule règle, partagée : reconduction.ts.</p></article><article class='finding'><header><span class='num'>03</span><span class='sev sev-c'>Critique</span><h3>L&#x27;intégration verticale était une constante</h3></header><p>Lue du tour précédent, réécrite à l&#x27;identique, jamais initialisée : elle valait 20 pour toujours. La stratégie d&#x27;intégration verticale visait 85 sur son axe le plus lourd et encaissait un malus absolu de −14 sous 30 — injouable. Le conglomérat, lui, touchait sa cible gratuitement.</p><p class='fix'><span>Corrigé</span> Indice dérivé : réseau propre en aval, approvisionnement sous contrat en amont.</p></article><article class='finding'><header><span class='num'>04</span><span class='sev sev-c'>Critique</span><h3>Licencier ne coûtait rien en trésorerie</h3></header><p>Les indemnités étaient calculées au barème de l&#x27;article 53, AFFICHÉES à l&#x27;équipe avant qu&#x27;elle tranche, puis jamais débitées : le résultat lisait une colonne que la consolidation n&#x27;alimente pas. Licencier libérait la masse salariale sans coûter le cash annoncé.</p><p class='fix'><span>Corrigé</span> Le bloc RH par DAS est remonté avant le compte de résultat.</p></article><article class='finding'><header><span class='num'>05</span><span class='sev sev-c'>Critique</span><h3>L&#x27;océan bleu était entièrement inerte</h3></header><p>La case était écrite en base et lue par personne. Rien ne la transformait en état d&#x27;unité, si bien que le code de répartition hors somme nulle n&#x27;était jamais atteint — ni ticket d&#x27;entrée, ni risque d&#x27;échec, ni marge ×2,5, alors que l&#x27;écran promettait les trois.</p><p class='fix'><span>Corrigé</span> Mécanisme complet, persisté par atlas_persist_blue_ocean.</p></article><article class='finding'><header><span class='num'>06</span><span class='sev sev-h'>Élevé</span><h3>Répondre à une crise était strictement perdant</h3></header><p>Quatre réponses proposées, coût et efficacité calculés et écrits en base — et la table jamais relue. Ignorer était la seule réponse rationnelle, puisque les trois autres se payaient sans rien produire.</p><p class='fix'><span>Corrigé</span> Atténuation carte par carte, sur la part défavorable seule.</p></article><article class='finding'><header><span class='num'>07</span><span class='sev sev-h'>Élevé</span><h3>Les subventions OFPPT et GIAC ne rapportaient rien</h3></header><p>Calculées, persistées, jamais créditées au résultat. Le GIAC finance l&#x27;ingénierie de formation et exige un bilan de compétences : la règle était codée, sans effet.</p><p class='fix'><span>Corrigé</span> Portées en déduction de la ligne de personnel.</p></article><article class='finding'><header><span class='num'>08</span><span class='sev sev-h'>Élevé</span><h3>Les transferts internes créaient de l&#x27;effectif gratuit</h3></header><p>Aucune contrepartie sortante : un domaine gagnait des gens, aucun n&#x27;en perdait, et la consolidation les excluait de la masse salariale puisqu&#x27;il s&#x27;agit de personnes déjà payées. Ils allégeaient la charge et remontaient le climat sans coûter un dirham.</p><p class='fix'><span>Corrigé</span> Marché interne à somme nulle, prélevé au prorata des effectifs.</p></article><article class='finding'><header><span class='num'>09</span><span class='sev sev-h'>Élevé</span><h3>Le mouvement d&#x27;Ansoff le plus risqué ne risquait rien</h3></header><p>Les quatre paramètres existaient, la matrice était saisie dans das_group_directives — et le moteur lisait team_units.ansoff_risk_coefficient, colonne que seule la persistance des acquisitions alimente. Pour toute unité fondatrice : zéro.</p><p class='fix'><span>Corrigé</span> Coefficient dérivé du mouvement déclaré.</p></article><article class='finding'><header><span class='num'>10</span><span class='sev sev-h'>Élevé</span><h3>Un domaine acquis entrait sans passé commercial</h3></header><p>revenue_mad inscrit à 0 alors que le poids réel de la cible était chargé. Quatre conséquences fausses : poids nul dans le SAB pondéré, rôle injugeable, aucun apport à l&#x27;intégration verticale, océan bleu gratuit.</p><p class='fix'><span>Corrigé</span> revenueAcquired persisté (migration 0018).</p></article><article class='finding'><header><span class='num'>11</span><span class='sev sev-m'>Moyen</span><h3>La sensibilité au prix des segments ne servait à rien</h3></header><p>Elle figure au référentiel de chaque segment et n&#x27;était lue par personne : la restauration collective et le premium bio réagissaient identiquement au même geste de prix.</p><p class='fix'><span>Corrigé</span> Facteur relatif à la moyenne du DAS, pour ne pas dérégler l&#x27;élasticité.</p></article><article class='finding'><header><span class='num'>12</span><span class='sev sev-m'>Moyen</span><h3>Changer de structure était gratuit</h3></header><p>Le coût était lu depuis une colonne qu&#x27;aucune écriture n&#x27;alimentait. Une équipe pouvait basculer chaque tour et revenir le suivant, ne payant que la pénalité d&#x27;alignement.</p><p class='fix'><span>Corrigé</span> Coût dérivé du changement, assis sur la masse salariale.</p></article><article class='finding'><header><span class='num'>13</span><span class='sev sev-m'>Moyen</span><h3>Les quatre orientations de formation étaient identiques</h3></header><p>training_focus était saisi, validé, stocké, chargé — et lu par personne. L&#x27;écran annonçait quatre destinations distinctes ; les quatre avaient le même effet : aucun.</p><p class='fix'><span>Corrigé</span> Modulent compétence, qualité, climat, standardisation.</p></article><article class='finding'><header><span class='num'>14</span><span class='sev sev-m'>Moyen</span><h3>Le bonus de progression n&#x27;était jamais versé</h3></header><p>consecutiveImprovingRounds était câblé à zéro. Le seul levier du score temporel restait le malus de changement.</p><p class='fix'><span>Corrigé</span> Calculé sur l&#x27;historique des indices.</p></article><article class='finding'><header><span class='num'>15</span><span class='sev sev-m'>Moyen</span><h3>Changer de stratégie de groupe était gratuit</h3></header><p>previousCorporateStrategy était câblé à null, alors qu&#x27;un changement par DAS était bien facturé.</p><p class='fix'><span>Corrigé</span> Lu du tour précédent.</p></article><article class='finding'><header><span class='num'>16</span><span class='sev sev-m'>Moyen</span><h3>L&#x27;invariant d&#x27;océan bleu soustrayait une constante nulle</h3></header><p>Le commentaire annonçait l&#x27;exclusion des équipes hors pool ; le code retirait zéro. La somme des parts tombait juste par accident, aucune équipe n&#x27;ayant jamais quitté le pool.</p><p class='fix'><span>Corrigé</span> Filtre explicite sur blueOceanActive.</p></article><article class='finding'><header><span class='num'>17</span><span class='sev sev-l'>Faible</span><h3>Un SAG nul par artefact de division</h3></header><p>Pondéré par un chiffre d&#x27;affaires nul, le SAG rendait 0 au lieu de la moyenne simple : un domaine tout juste acquis, seul à porter des directives, perdait 20 % de l&#x27;indice.</p><p class='fix'><span>Corrigé</span> Repli explicite sur la moyenne non pondérée.</p></article></div>
+</section>
+
+<section>
+  <div class="sh"><span class="no">09</span><h2>Ce qui garantit que ça tient</h2></div>
+  <p class="lede">Une résolution qui viole un invariant est <strong>annulée en transaction</strong>,
+  journalisée et signalée au facilitateur. Jamais d'écriture partielle : mieux vaut un tour à
+  rejouer qu'un classement faux projeté en salle.</p>
+
+  <ul class="checks">
+    <li><b>Σ = 1</b><span>Les parts de marché d'un pool, plus la part non servie, somment à
+    l'unité — les équipes en océan bleu exclues, puisqu'elles jouent hors du pool.</span></li>
+    <li><b>[0,1]</b><span>Aucune part hors bornes, aucun score d'alignement hors de 0–100.</span></li>
+    <li><b>Déterminisme</b><span>Même instantané, même résultat : l'aléa est tiré d'une graine
+    qui inclut la session, le tour, l'équipe et le domaine.</span></li>
+    <li><b>151 / 0</b><span>Un balayage automatique confronte chaque champ de l'instantané au
+    code du moteur. Aucun champ chargé sans lecteur — ils étaient six, et chacun cachait un
+    mécanisme inerte.</span></li>
+    <li><b>1 règle</b><span>La reconduction des décisions vit dans un module unique, consommé
+    par l'interface <em>et</em> par le moteur. Une divergence future casse dix tests.</span></li>
+    <li><b>À blanc</b><span>Une résolution rejouée contre la base réelle, sur deux tours d'une
+    session existante : zéro invariant violé, volumes et chiffre d'affaires cohérents.</span></li>
+  </ul>
+
+  <div class="note-box">
+    <h3>Ce que le moteur ne fait pas, délibérément</h3>
+    <p>Les écrans de saisie n'annoncent <strong>aucun résultat</strong>. Ils disent le coût
+    d'une décision, jamais son effet sur la part de marché. Prédire le résultat rendrait la
+    révélation sans intérêt et le jeu deviendrait une optimisation par tâtonnement.</p>
+    <p>Vision et mission ne sont pas notées : un score tiré de mots-clés serait arbitraire.
+    C'est leur déclinaison en axes stratégiques, elle, qui pèse sur l'alignement.</p>
+    <p>Les capacités, fiabilités et marges exigées des acteurs de la filière ne sont pas
+    affichées. Elles s'achètent au cabinet — sans benchmark, une équipe choisit sur le nom, et
+    c'est exactement ce que le cabinet vend.</p>
+  </div>
+</section>
+
+<footer>
+  <span>Atlas — moteur de résolution</span>
+  <span>Cartographie établie à l'audit du 3 septembre 2026</span>
+  <span>Valeurs extraites du code, non ressaisies</span>
+</footer>
+
+</div>

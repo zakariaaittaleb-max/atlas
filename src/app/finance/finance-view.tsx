@@ -1,36 +1,43 @@
 'use client';
 
 /**
- * ATLAS — ressources humaines et finance : plans 6 et 7 du cahier.
+ * ATLAS — finance du Groupe : plan 7 du cahier, et la consolidation RH.
  *
- * Deux règles d'interface imposées ici :
+ * ── POURQUOI LA RH N'EST PLUS SAISIE ICI ───────────────────────────────────
+ * Elle l'était, en double. Cet écran demandait « combien recrutez-vous ? » au
+ * niveau du Groupe pendant que l'écran d'organisation posait la même question
+ * domaine par domaine, et les deux écrivaient dans des tables différentes. Une
+ * équipe pouvait donc recruter deux fois sans le savoir, et le total affiché
+ * dépendait de l'écran qu'elle avait ouvert en dernier.
  *
- *   • Le **coût du recrutement s'affiche en direct** — salaire brut × 1,2109,
- *     plancher SMIG appliqué côté client pour le retour immédiat, TOUJOURS
- *     revalidé côté serveur : ces taux changent par décret.
+ * Le recrutement se décide là où il a un sens — DANS un domaine, avec sa
+ * pyramide, son climat social et sa charge de travail sous les yeux. Le Groupe
+ * n'en saisit rien : il en CONSTATE la somme, et c'est cette somme qui alimente
+ * sa masse salariale. Le bloc ci-dessous est donc un relevé, avec un lien vers
+ * les domaines qui restent à renseigner.
  *
- *   • L'allocation se fait **sous contrainte de trésorerie visible**. La barre
- *     ne bloque pas la saisie — elle montre le dépassement pendant qu'on
- *     arbitre. Une équipe a le droit de plonger en trésorerie négative ; elle
- *     n'a pas le droit de le découvrir à la résolution.
+ * ── DEUX RÈGLES D'INTERFACE CONSERVÉES ─────────────────────────────────────
+ *   • L'allocation se fait sous CONTRAINTE DE TRÉSORERIE VISIBLE. La barre ne
+ *     bloque pas la saisie — elle montre le dépassement pendant qu'on arbitre.
+ *     Une équipe a le droit de plonger en trésorerie négative ; elle n'a pas le
+ *     droit de le découvrir à la résolution.
+ *   • Les résultats figurent AVANT les décisions : on arbitre en regardant d'où
+ *     l'on part, pas en découvrant après coup où l'on est arrivé.
  */
 
 import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 
-import { BudgetGauge, DecisionBar, MoneyField, type MissingDecision } from '@/components/decision-shell';
+import {
+  BudgetGauge, DecisionBar, MoneyField, SectionActions, type MissingDecision,
+} from '@/components/decision-shell';
+import { Term } from '@/components/term';
 import { formatMadCompact } from '@/lib/format';
-import type { DecisionContext } from '@/lib/decision-types';
+import type { DecisionContext, FinanceValues } from '@/lib/decision-types';
+import { deepEqual } from '@/lib/deep-equal';
 import type { MoneyBar, ResultsContext } from '@/lib/results-types';
 import { ResultsSection } from './results-section';
 import { useAutosave } from '@/lib/use-autosave';
-
-const PROFILES = [
-  ['hireOperateurs', 'Opérateurs', 'Coût bas, peu de qualification. Servent une stratégie de volume.'],
-  ['hireTechniciens', 'Techniciens', 'Cœur de l’exécution industrielle.'],
-  ['hireExperts', 'Experts', 'Coûteux. Indispensables à une différenciation crédible.'],
-  ['hireCadres', 'Cadres dirigeants', 'Structurent, coûtent cher, alourdissent le siège.'],
-] as const;
 
 const REGIMES = [
   ['droit_commun', 'Droit commun', 'IS 20 % jusqu’à 100 M DH de bénéfice, 35 % au-delà.'],
@@ -51,48 +58,21 @@ export function FinanceView({
   const autosave = useAutosave();
   const locked = !context.decisionsOpen;
 
-  const [hr, setHr] = useState(() => context.hr ?? {
-    hireOperateurs: 0, hireTechniciens: 0, hireExperts: 0, hireCadres: 0,
-    avgSalaryBrutMad: context.avgSalaryMad || context.smigMad,
-    trainingBudgetMad: 0, restructuringCount: 0,
-  });
+  const [finance, setFinance] = useState<FinanceValues>(context.finance);
 
-  const [finance, setFinance] = useState(() => context.finance ?? {
-    opexMad: 0, debtDrawnMad: 0, debtRepaidMad: 0, taxRegime: 'droit_commun',
-  });
-
-  const pushHr = useCallback((next: typeof hr) => {
-    // Plancher légal appliqué immédiatement, pour que l'équipe voie le coût
-    // réel pendant qu'elle arbitre. Le serveur le réapplique de toute façon.
-    const guarded = { ...next, avgSalaryBrutMad: Math.max(next.avgSalaryBrutMad, context.smigMad) };
-    setHr(guarded);
-    autosave.save({ plan: 'hr', ...guarded });
-  }, [autosave, context.smigMad]);
-
-  const pushFinance = useCallback((next: typeof finance) => {
+  const pushFinance = useCallback((next: FinanceValues) => {
     setFinance(next);
     autosave.save({ plan: 'finance', ...next });
   }, [autosave]);
 
-  const hires = hr.hireOperateurs + hr.hireTechniciens + hr.hireExperts + hr.hireCadres;
-  const headcountEnd = Math.max(context.headcount + hires - hr.restructuringCount, 0);
-  const payroll = headcountEnd * hr.avgSalaryBrutMad * 12 * (1 + context.chargesPatronalesPct);
-
-  // Un recrutement supérieur à 20 % de l'effectif désorganise : le climat social
-  // en pâtit. Le seuil est annoncé, pas caché.
-  const recruitmentRatio = context.headcount > 0 ? hires / context.headcount : 0;
-  const shockRecruitment = recruitmentRatio > 0.2;
+  const hr = context.hr;
 
   // Une seule définition de « engagé ce tour », partagée avec la barre du haut.
-  // Deux calculs parallèles affichaient deux nombres différents sous des
-  // libellés presque identiques — de quoi faire douter du moteur entier.
-  // La part des DAS vient du serveur (elle se décide ailleurs) ; les champs de
-  // CET écran restent vivants sous la frappe. Deux calculs parallèles
-  // affichaient auparavant deux nombres différents sous des libellés presque
-  // identiques — de quoi faire douter du moteur entier.
+  // La part des DAS et la masse salariale viennent du serveur — elles se
+  // décident ailleurs ; les champs de CET écran restent vivants sous la frappe.
   const engaged =
     (money?.dasEngagedMad ?? 0) +
-    payroll + finance.opexMad + hr.trainingBudgetMad + finance.debtRepaidMad;
+    hr.payrollMad + hr.trainingBudgetMad + finance.opexMad + finance.debtRepaidMad;
   const available = context.treasuryMad + finance.debtDrawnMad;
 
   return (
@@ -100,14 +80,19 @@ export function FinanceView({
       <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-10">
         <header className="mb-8">
           <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
-            Tour {context.roundNumber}
+            Tour {context.roundNumber} · Niveau Groupe
           </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Organisation &amp; finance</h1>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Finance du Groupe</h1>
           <p className="tabular mt-3 text-(--foreground-muted)">
             Trésorerie d’ouverture : <strong>{formatMadCompact(context.treasuryMad)}</strong>
             {context.debtOutstandingMad > 0 ? (
               <> · dette en cours : <strong>{formatMadCompact(context.debtOutstandingMad)}</strong></>
             ) : null}
+          </p>
+          <p className="mt-3 max-w-3xl text-sm text-(--foreground-muted)">
+            Cet écran ne porte que des décisions de niveau Groupe : elles valent pour tous vos
+            domaines à la fois. Ce qui se décide domaine par domaine — stratégie,
+            investissements, recrutement — se saisit sur les écrans dédiés.
           </p>
         </header>
 
@@ -117,91 +102,72 @@ export function FinanceView({
           available={available}
         />
 
-        {/* Les résultats AVANT les décisions : on arbitre en regardant d'où
-            l'on part, pas en découvrant après coup où l'on est arrivé. */}
+        {/* Les résultats AVANT les décisions. */}
         <ResultsSection results={results} />
 
-        {/* ── Plan 6 : ressources humaines ──────────────────────────────── */}
+        {/* ── Consolidation RH — un RELEVÉ, pas une saisie ──────────────── */}
         <section className="mt-8 rounded-xl border border-(--border) bg-(--surface) p-6">
-          <h2 className="text-xl font-medium">Ressources humaines</h2>
-          <p className="tabular mt-1 text-sm text-(--foreground-muted)">
-            Effectif de départ : {context.headcount.toLocaleString('fr-FR')} personnes
+          <h2 className="text-xl font-medium">Masse salariale consolidée</h2>
+          <p className="mt-1 text-sm text-(--foreground-muted)">
+            Somme de ce que vous avez décidé sur chaque domaine. Le recrutement se saisit
+            là où il a un sens — dans le domaine concerné, avec son climat social et sa
+            charge de travail sous les yeux.
           </p>
 
-          <fieldset disabled={locked} className="mt-5">
-            <legend className="mb-3 text-sm font-medium">Recrutement par profil</legend>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {PROFILES.map(([key, label, hint]) => (
-                <label key={key} className="block">
-                  <span className="text-sm font-medium">{label}</span>
-                  <input
-                    type="number" min={0} step={10} value={hr[key]}
-                    onChange={(e) => pushHr({ ...hr, [key]: Math.max(Number(e.target.value) || 0, 0) })}
-                    className="tabular mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2"
-                  />
-                  <span className="mt-1 block text-xs text-(--foreground-muted)">{hint}</span>
-                </label>
-              ))}
-            </div>
-
-            {shockRecruitment ? (
-              <p className="mt-3 rounded-lg border border-(--warning) px-4 py-2.5 text-sm text-(--warning)">
-                Vous recrutez {(recruitmentRatio * 100).toFixed(0)} % de votre effectif en un tour.
-                Au-delà de 20 %, l’intégration désorganise : le climat social en pâtira.
-              </p>
-            ) : null}
-          </fieldset>
-
-          <fieldset disabled={locked} className="mt-6 grid gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="text-sm font-medium">Salaire brut mensuel moyen</span>
-              <input
-                type="number" min={context.smigMad} step={100} value={hr.avgSalaryBrutMad}
-                onChange={(e) => pushHr({ ...hr, avgSalaryBrutMad: Number(e.target.value) || 0 })}
-                className="tabular mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2"
-              />
-              <span className="mt-1 block text-xs text-(--foreground-muted)">
-                Plancher SMIG : {context.smigMad.toLocaleString('fr-FR')} DH. Charges patronales
-                de {(context.chargesPatronalesPct * 100).toFixed(2)} % en sus.
-              </span>
-            </label>
-
-            <MoneyField
-              label="Budget de formation"
-              value={hr.trainingBudgetMad}
-              onChange={(v) => pushHr({ ...hr, trainingBudgetMad: v })}
-              hint="Améliore le climat social et l’intensité de compétences."
+          <dl className="tabular mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat term="Effectif de départ" value={hr.headcountStart.toLocaleString('fr-FR')} />
+            <Stat
+              term="Variation d'effectif"
+              value={
+                hr.hires === 0 && hr.layoffs === 0
+                  ? 'aucun'
+                  : [
+                      hr.hires > 0 ? `+${hr.hires.toLocaleString('fr-FR')}` : null,
+                      hr.layoffs > 0 ? `−${hr.layoffs.toLocaleString('fr-FR')}` : null,
+                    ].filter(Boolean).join(' · ')
+              }
+              tone={hr.layoffs > 0 && hr.hires === 0 ? 'bad' : hr.hires > 0 ? 'good' : undefined}
             />
-
-            <label className="block">
-              <span className="text-sm font-medium">Postes supprimés</span>
-              <input
-                type="number" min={0} step={10} value={hr.restructuringCount}
-                onChange={(e) => pushHr({ ...hr, restructuringCount: Math.max(Number(e.target.value) || 0, 0) })}
-                className="tabular mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2"
-              />
-              <span className="mt-1 block text-xs text-(--foreground-muted)">
-                Indemnités légales à verser d’avance, et le climat social chute dès le premier départ.
-              </span>
-            </label>
-          </fieldset>
-
-          <dl className="tabular mt-6 grid gap-4 border-t border-(--border) pt-5 sm:grid-cols-3">
-            <div>
-              <dt className="text-sm text-(--foreground-muted)">Effectif en fin d’exercice</dt>
-              <dd className="mt-0.5 text-lg font-semibold">{headcountEnd.toLocaleString('fr-FR')}</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-(--foreground-muted)">Coût total des salaires</dt>
-              <dd className="mt-0.5 text-lg font-semibold">{formatMadCompact(payroll)}</dd>
-            </div>
-            <div>
-              <dt className="text-sm text-(--foreground-muted)">Dont cotisations employeur</dt>
-              <dd className="mt-0.5 text-lg font-semibold">
-                {formatMadCompact(payroll - payroll / (1 + context.chargesPatronalesPct))}
-              </dd>
-            </div>
+            <Stat term="Effectif de clôture" value={hr.headcountEnd.toLocaleString('fr-FR')} />
+            <Stat term="Masse salariale" value={formatMadCompact(hr.payrollMad)} />
+            <Stat
+              term="Salaire brut moyen"
+              value={`${Math.round(hr.avgSalaryBrutMad).toLocaleString('fr-FR')} DH`}
+              note="Pondéré par l’effectif de chaque domaine."
+            />
+            <Stat term="Budget de formation" value={formatMadCompact(hr.trainingBudgetMad)} />
+            <Stat
+              term="Charges patronales"
+              value={formatMadCompact(
+                hr.payrollMad - hr.payrollMad / (1 + context.chargesPatronalesPct),
+              )}
+              note={`${(context.chargesPatronalesPct * 100).toFixed(2)} % du brut.`}
+            />
+            <Stat
+              term="SMIG"
+              value={`${context.smigMad.toLocaleString('fr-FR')} DH`}
+              note="SMIG mensuel, réappliqué côté serveur."
+            />
           </dl>
+
+          {hr.pendingDas.length > 0 ? (
+            <p className="mt-5 rounded-lg border border-(--warning) px-4 py-3 text-sm">
+              Aucune décision RH ce tour sur{' '}
+              {hr.pendingDas.map((d, i) => (
+                <span key={d.dasId}>
+                  {i > 0 ? (i === hr.pendingDas.length - 1 ? ' et ' : ', ') : ''}
+                  <strong>{d.name}</strong>
+                </span>
+              ))}
+              . Ne rien changer est un choix légitime, mais il doit être posé :{' '}
+              <a href="/organisation" className="underline">ouvrez l’écran d’organisation</a>{' '}
+              pour le déclarer.
+            </p>
+          ) : (
+            <p className="mt-5 rounded-lg border border-(--border) px-4 py-3 text-sm text-(--foreground-muted)">
+              ✓ Tous vos domaines ont reçu une décision RH ce tour.
+            </p>
+          )}
         </section>
 
         {/* ── Plan 7 : finance ──────────────────────────────────────────── */}
@@ -254,6 +220,19 @@ export function FinanceView({
             Une équipe déficitaire paie tout de même la cotisation minimale de 0,25 % du
             chiffre d’affaires. Perdre de l’argent tranquillement n’est pas une stratégie.
           </p>
+
+          <SectionActions
+            what="le budget du Groupe"
+            locked={locked}
+            changed={!deepEqual(finance, context.financeBaseline)}
+            recorded={context.financeRecorded}
+            onValidate={async () => {
+              autosave.save({ plan: 'finance', ...finance });
+              await autosave.flush();
+              router.refresh();
+            }}
+            onReset={() => pushFinance(context.financeBaseline)}
+          />
         </section>
       </main>
 
@@ -263,5 +242,27 @@ export function FinanceView({
         onValidate={async () => { await autosave.flush(); router.refresh(); }}
       />
     </>
+  );
+}
+
+function Stat({
+  term, value, note, tone,
+}: { term: string; value: string; note?: string; tone?: 'good' | 'bad' }) {
+  return (
+    <div>
+      <dt className="text-sm text-(--foreground-muted)"><Term>{term}</Term></dt>
+      <dd
+        className="mt-0.5 text-lg font-semibold"
+        style={{
+          color:
+            tone === 'bad' ? 'var(--negative)'
+            : tone === 'good' ? 'var(--positive)'
+            : undefined,
+        }}
+      >
+        {value}
+      </dd>
+      {note ? <p className="mt-0.5 text-xs text-(--foreground-muted)">{note}</p> : null}
+    </div>
   );
 }

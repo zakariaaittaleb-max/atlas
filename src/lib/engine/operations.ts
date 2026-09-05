@@ -249,30 +249,3 @@ export function automationLevel(
   const fullAutomationCost = capacityUnits * unitCapacityCostMad;
   return clamp100((cumulativeAutomationCapexMad / fullAutomationCost) * 100);
 }
-
-// ===========================================================================
-// Climat social (doc 00 §3.6)
-// ===========================================================================
-
-export function nextClimateSocial(
-  previousClimate: number,
-  headcountStart: number,
-  recruitmentCount: number,
-  restructuringCount: number,
-  trainingBudgetMad: number,
-  params: EngineParams,
-): number {
-  const shockThreshold = param(params, 'social.recruitment_shock_threshold_pct');
-  const recruitmentMalus = param(params, 'climate.recruitment_shock_malus');
-  const restructuringMalus = param(params, 'climate.restructuring_malus');
-  const trainingBonus = param(params, 'climate.training_bonus');
-
-  const recruitmentRatio = headcountStart > 0 ? recruitmentCount / headcountStart : 0;
-
-  return clamp100(
-    previousClimate -
-      (recruitmentRatio > shockThreshold ? recruitmentMalus : 0) -
-      (restructuringCount > 0 ? restructuringMalus : 0) +
-      (trainingBudgetMad > 0 ? trainingBonus : 0),
-  );
-}

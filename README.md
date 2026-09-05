@@ -17,7 +17,7 @@ entreprise marocaine multi-DAS en concurrence directe à somme nulle.
 ## État d'avancement
 
 **L'application est complète et fonctionnelle de bout en bout.**
-25 routes · 158 tests · types, lint et build propres.
+29 routes · 307 tests · types, lint et build propres.
 
 | Domaine | État |
 |---|---|
@@ -47,8 +47,8 @@ plusieurs applications, et des noms aussi génériques que `teams`, `regions` ou
 `market_segments` entreraient sinon en collision. Tous les clients Supabase sont
 construits avec `db: { schema: 'atlas' }`.
 
-Les six migrations de `supabase/migrations/` sont appliquées :
-40 tables, 2 vues, 33 politiques, 8 fonctions.
+Les dix-sept migrations de `supabase/migrations/` sont appliquées :
+56 tables, 5 vues, 48 politiques, 13 fonctions.
 
 ### Mise en route sur un nouvel environnement
 
@@ -57,7 +57,7 @@ cp .env.example .env.local
 ```
 
 Renseigner l'URL, la clé publiable et la clé `service_role`
-(*Settings → API Keys*), appliquer les six migrations, puis **activer la
+(*Settings → API Keys*), appliquer les dix-sept migrations, puis **activer la
 connexion anonyme** (*Authentication → Providers → Anonymous*) : Atlas ne
 manipule aucun mot de passe, les étudiants entrent deux codes.
 
@@ -124,6 +124,32 @@ Le formateur dispose de trois écrans :
 | `/facilitateur/[id]` | avancement équipe par équipe, conduite du tour, déclenchement des crises, export |
 | `/projecteur/[id]` | classement en très grands caractères, rafraîchi tout seul à la résolution |
 
+### Le portefeuille de départ, et la réserve
+
+Le formulaire de création sépare deux choses qu'il confondait auparavant :
+
+- **les domaines ouverts** — provisionnés avec leurs segments, leur écosystème
+  et leurs cibles de rachat. Ouvrir un domaine le fait *exister* ;
+- **le portefeuille de départ** — ce que toutes les équipes exploitent au tour 1,
+  à l'identique. Il peut compter plusieurs domaines ; chacun apporte sa dotation.
+
+Un domaine ouvert mais non attribué est précisément ce qui reste **à acquérir**.
+Jusqu'à la migration 0016, seul le PREMIER secteur sélectionné était attribué :
+un facilitateur qui en ouvrait quatre voyait ses équipes n'en piloter qu'un, sans
+que rien à l'écran ne l'explique.
+
+**Le facilitateur ouvre la réserve quand il le décide** (`ecosystem_actors.
+market_open`). C'est un levier pédagogique, pas un réglage : tant qu'un domaine
+reste fermé, les équipes règlent le métier qu'elles ont ; ouvert trop tôt, il
+devient une échappatoire pour celle qui n'arrive pas à redresser le sien. Le
+filtre vit dans la vue `acquisition_targets_public` et non dans la requête de
+l'écran — une cible fermée doit être hors de portée, pas seulement masquée — et
+le Route Handler d'acquisition le revérifie, puisqu'il écrit avec `service_role`
+et contourne donc la RLS.
+
+Un DAS **acquis en cours de partie se pilote exactement comme les autres** :
+il apparaît dans le sélecteur et reçoit tous les volets de saisie.
+
 **Les gestes irréversibles sont confirmés.** Verrouiller un tour ou lancer une résolution
 engage toute la salle : le bouton s'arme, affiche ce qui va se passer — *« verrouiller fige
 les 3 équipes au même instant, 2 n'ont pas fini leur saisie »* — puis se confirme.
@@ -156,9 +182,43 @@ Les sept plans du cahier tiennent sur trois pages — deux niveaux de navigation
 
 | Page | Plans |
 |---|---|
-| `/strategie` | portefeuille corporate, structure, centralisation, valeurs · par DAS : stratégie générique, prix, segments, investissements |
-| `/marches` | achats (fournisseurs, volumes engagés) · distribution (canaux, parts de volume) |
-| `/finance` | recrutement par profil, salaires, formation, restructuration · OPEX, dette, régime fiscal |
+| `/strategie` | **Groupe** : portefeuille, structure, centralisation, valeurs, vision · **domaine piloté** : stratégie générique, prix, segments, investissements |
+| `/organisation` | **domaine piloté** : structure, axes, KPI, budgets, postes clés · RH — effectif visé, profils, formation, restructuration |
+| `/marches` | **domaine piloté** : achats (fournisseurs, volumes engagés) · distribution (canaux, parts de volume) |
+| `/finance` | **Groupe** : OPEX, dette, régime fiscal · consolidation RH, en lecture seule |
+
+### Un domaine à la fois
+
+Le geste central de la saisie est **« je choisis un domaine, je le renseigne sur
+tous les volets, je passe au suivant »**. Le sélecteur vit dans la barre de
+navigation et non dans les pages : le domaine choisi sur la stratégie est encore
+celui des achats. Il est porté par un cookie plutôt que par `localStorage`, pour
+que le serveur le connaisse AU MOMENT DU RENDU — sinon chaque navigation
+afficherait d'abord le premier domaine puis basculerait après hydratation.
+
+Les décisions **se reconduisent** : un écran de tour N s'ouvre sur ce que
+l'équipe avait arrêté au tour N−1, comme dans une entreprise réelle où ne rien
+changer, c'est conserver l'an dernier. D'où deux boutons par bloc :
+
+- **Valider** écrit les valeurs AFFICHÉES, même si personne n'y a touché — le
+  geste de l'équipe qui reconduit sciemment ;
+- **Réinitialiser** ramène le bloc à son état d'ouverture de tour. Après vingt
+  minutes d'hypothèses empilées, plus personne ne se souvient de ce qui a été
+  changé ; « annuler » doit avoir une définition. Le geste est confirmé.
+
+### Le recrutement part de l'effectif en place
+
+On ne décide pas « de recruter quarante personnes » : on décide de passer de
+1 240 à 1 280. Le compteur porte donc l'effectif du dernier exercice clos, et
+l'équipe l'augmente ou le baisse ; l'écart se répartit ensuite entre profils, ou
+se traduit en départs.
+
+La RH était auparavant saisie **en double** — `/finance` écrivait `hr_metrics`
+pendant que `/organisation` écrivait `das_hr_decisions`. Une équipe pouvait
+recruter deux fois sans le savoir, et le total dépendait du dernier écran
+ouvert. `das_hr_decisions` est désormais la seule source ; `hr_metrics` en est
+une projection recalculée à chaque écriture (`lib/server/hr-rollup.ts`), parce
+que le moteur la lit encore pour la masse salariale et le talent_mix.
 
 **Aucun bouton « enregistrer ».** Chaque champ déclenche une auto-sauvegarde temporisée. Le
 bouton du bas ne sauvegarde rien — il déclare le tour prêt, et l'étiquette le dit

@@ -1,18 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  HOURS_PER_MONTH,
-  RESTRUCTURING_CLIMATE_COST,
-  giacSupport,
-  nextClimatSocial,
-  nextSkillIndex,
-  ofpptReimbursement,
-  qualityLossFromCuts,
-  safeHeadcountReduction,
-  severancePerHead,
-  standardisationLevel,
-  turnoverRate,
-  workloadIndex,
+  HOURS_PER_MONTH, RESTRUCTURING_CLIMATE_COST, consolidateClimate, consolidateHeadcount, giacSupport, nextClimatSocial, nextSkillIndex, ofpptReimbursement, qualityLossFromCuts, safeHeadcountReduction, severancePerHead, standardisationLevel, trainingFocusEffects, turnoverRate, workloadIndex,
 } from './hr';
 import { buildParams } from './params';
 
@@ -232,5 +221,150 @@ describe('standardisation et réduction d’effectif', () => {
   it('plafonne la perte de qualité, sans jamais l’annuler', () => {
     expect(qualityLossFromCuts(900, 0, 1000)).toBeLessThanOrEqual(30);
     expect(qualityLossFromCuts(900, 0, 1000)).toBeGreaterThan(20);
+  });
+});
+
+// ===========================================================================
+// Orientation de la formation — quatre décisions, quatre effets
+// ===========================================================================
+
+describe('orientation de la formation', () => {
+  /**
+   * Le défaut corrigé : `training_focus` était saisi, validé, stocké, chargé
+   * dans l'instantané — et lu par personne. Les quatre orientations avaient
+   * rigoureusement le même effet : aucun. L'écran en annonçait pourtant quatre
+   * distincts, ce qui en faisait une décision d'apparence.
+   */
+  it('donne à chaque orientation un profil distinct', () => {
+    const profils = (['technique', 'management', 'qualite', 'polyvalence'] as const)
+      .map((f) => JSON.stringify(trainingFocusEffects(f)));
+    expect(new Set(profils).size).toBe(4);
+  });
+
+  it('fait de la technique la meilleure voie vers la compétence', () => {
+    const technique = trainingFocusEffects('technique').skill;
+    for (const autre of ['management', 'qualite', 'polyvalence'] as const) {
+      expect(technique).toBeGreaterThan(trainingFocusEffects(autre).skill);
+    }
+  });
+
+  it('fait du management la meilleure voie vers le climat', () => {
+    const management = trainingFocusEffects('management').climat;
+    for (const autre of ['technique', 'qualite', 'polyvalence'] as const) {
+      expect(management).toBeGreaterThan(trainingFocusEffects(autre).climat);
+    }
+  });
+
+  it('fait de la qualité la meilleure voie vers la montée en gamme', () => {
+    const qualite = trainingFocusEffects('qualite').quality;
+    for (const autre of ['technique', 'management', 'polyvalence'] as const) {
+      expect(qualite).toBeGreaterThan(trainingFocusEffects(autre).quality);
+    }
+  });
+
+  it('fait de la polyvalence la meilleure voie vers la standardisation', () => {
+    // C'est le seul chemin par lequel un effectif se réduit sans perte de
+    // qualité : l'orientation qui le sert doit être identifiable.
+    const polyvalence = trainingFocusEffects('polyvalence').standardisation;
+    for (const autre of ['technique', 'management', 'qualite'] as const) {
+      expect(polyvalence).toBeGreaterThan(trainingFocusEffects(autre).standardisation);
+    }
+  });
+
+  it('spécialiser rend PLUS sur sa cible que la polyvalence partout', () => {
+    // Sans cet écart, choisir n'aurait aucune conséquence.
+    const cible = trainingFocusEffects('qualite').quality;
+    const partout = trainingFocusEffects('polyvalence').quality;
+    expect(cible).toBeGreaterThan(partout * 1.2);
+  });
+
+  it('retombe sur la technique faute d’orientation saisie', () => {
+    expect(trainingFocusEffects(null)).toEqual(trainingFocusEffects('technique'));
+    expect(trainingFocusEffects(undefined)).toEqual(trainingFocusEffects('technique'));
+  });
+
+  it('module réellement le gain de compétence', () => {
+    const base = {
+      previousSkill: 50, trainingIntensity: 0.04, skillsAuditOrdered: false,
+      hiringRatio: 0, internalHiringRatio: 0, turnoverRate: 0,
+    };
+    const technique = nextSkillIndex(
+      { ...base, focusMultiplier: trainingFocusEffects('technique').skill }, params,
+    );
+    const management = nextSkillIndex(
+      { ...base, focusMultiplier: trainingFocusEffects('management').skill }, params,
+    );
+    expect(technique).toBeGreaterThan(management);
+  });
+});
+
+// ===========================================================================
+// Consolidation d'équipe — une seule source, pas deux modèles
+// ===========================================================================
+
+describe('consolidateClimate', () => {
+  /**
+   * Le défaut corrigé : deux modèles de climat coexistaient, et le plus
+   * grossier alimentait le cockpit ET le Balanced Scorecard. Sans décision RH
+   * il rendait exactement la valeur précédente — sur une partie de dix tours,
+   * le climat de groupe restait figé à sa valeur de départ, quelle que soit la
+   * charge que les équipes faisaient peser sur leurs effectifs.
+   */
+  it('pondère par l’effectif : un petit domaine ne fait pas la loi', () => {
+    const climat = consolidateClimate(
+      [{ climatSocial: 20, headcount: 40 }, { climatSocial: 80, headcount: 1_000 }],
+      70,
+    );
+    expect(climat).toBeCloseTo((20 * 40 + 80 * 1000) / 1040, 6);
+    expect(climat).toBeGreaterThan(75);
+  });
+
+  it('ne laisse pas mille personnes sereines effacer un domaine en souffrance', () => {
+    // La pondération reste une moyenne : la souffrance pèse à proportion des
+    // gens qui la vivent, ni plus ni moins.
+    const sain = consolidateClimate([{ climatSocial: 80, headcount: 1_000 }], 70);
+    const mixte = consolidateClimate(
+      [{ climatSocial: 80, headcount: 1_000 }, { climatSocial: 15, headcount: 300 }], 70,
+    );
+    expect(mixte).toBeLessThan(sain);
+  });
+
+  it('SUIT le climat des domaines, sans décision RH', () => {
+    // C'est tout l'objet du correctif : le climat de groupe bouge parce que
+    // celui des domaines a bougé, pas parce qu'on a coché quelque chose.
+    expect(consolidateClimate([{ climatSocial: 42, headcount: 500 }], 80)).toBeCloseTo(42, 6);
+  });
+
+  it('retombe sur la valeur précédente sans aucun domaine', () => {
+    expect(consolidateClimate([], 63)).toBe(63);
+  });
+
+  it('rend la moyenne simple quand aucun domaine n’a d’effectif', () => {
+    expect(consolidateClimate(
+      [{ climatSocial: 40, headcount: 0 }, { climatSocial: 60, headcount: 0 }], 70,
+    )).toBeCloseTo(50, 6);
+  });
+
+  it('borne le résultat sur 0–100', () => {
+    expect(consolidateClimate([{ climatSocial: 140, headcount: 10 }], 70)).toBe(100);
+    expect(consolidateClimate([], -20)).toBe(0);
+  });
+});
+
+describe('consolidateHeadcount', () => {
+  it('additionne ce que le moteur a réellement calculé par domaine', () => {
+    // Le calcul d'équipe ignorait les transferts internes et le plancher
+    // appliqué par domaine : deux chemins, deux nombres.
+    expect(consolidateHeadcount(
+      [{ headcount: 1_200 }, { headcount: 340 }, { headcount: 8 }], 0,
+    )).toBe(1_548);
+  });
+
+  it('retombe sur la valeur de repli sans aucun domaine', () => {
+    expect(consolidateHeadcount([], 900)).toBe(900);
+  });
+
+  it('n’additionne jamais un effectif négatif', () => {
+    expect(consolidateHeadcount([{ headcount: 100 }, { headcount: -50 }], 0)).toBe(100);
   });
 });

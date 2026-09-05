@@ -30,8 +30,24 @@ export interface ProvisionRequest {
   facilitatorId: string;
   /** Un pool = une ligue. Plusieurs pools simulent des marchés parallèles. */
   pools: { name: string; teamNames: string[] }[];
-  /** Secteurs ouverts à cette session. Le premier est imposé à toutes les équipes en T0. */
+  /**
+   * Secteurs ouverts à cette session : l'univers de marché. Tous existent, avec
+   * leur écosystème et leurs segments, qu'une équipe les exploite ou non.
+   */
   sectorKeys: string[];
+  /**
+   * Le PORTEFEUILLE DE DÉPART, commun à toutes les équipes.
+   *
+   * Distinct de `sectorKeys`, et c'est tout l'objet de la séparation : un
+   * secteur peut être ouvert sans appartenir à personne — c'est ce qui laisse
+   * une réserve à acquérir. Auparavant seul `sectorKeys[0]` était attribué, si
+   * bien qu'un facilitateur qui ouvrait quatre domaines en voyait ses équipes
+   * n'en piloter qu'un, sans que rien à l'écran ne l'explique.
+   *
+   * Vide ou absent : on retombe sur le premier secteur ouvert, c'est-à-dire le
+   * comportement historique.
+   */
+  startingSectorKeys?: string[];
   plannedRounds: number;
   maxRounds: number;
 }
@@ -147,6 +163,7 @@ export async function provisionSession(
         valuation_multiple: das.valuationMultiple,
         working_capital_days: das.workingCapitalDays,
         vrio_entry_barrier: das.vrioEntryBarrier,
+        substitution_pressure: das.substitutionPressure,
         unit_capacity_cost_mad: das.unitCapacityCostMad,
         capacity_depreciation: 0.06,
         capacity_from_headcount: das.capacityFromHeadcount,
@@ -249,11 +266,43 @@ export async function provisionSession(
   }
 
   // --- Pools, équipes, dotation --------------------------------------------
-  const startingSector = request.sectorKeys[0];
-  const startingDasId = dasIdBySector.get(startingSector)!;
-  const startingDas = catalog.find((d) => d.sectorKey === startingSector)!;
+  //
+  // Le portefeuille de départ peut compter PLUSIEURS domaines. Chacun reçoit sa
+  // propre dotation ; ce qui est de niveau équipe — trésorerie, capitaux,
+  // effectif, dette — en est la SOMME, parce qu'un groupe qui exploite trois
+  // métiers a bien trois fois des usines, des salariés et du besoin en fonds de
+  // roulement. Ce qui est un indice — climat social, indice d'alignement — en
+  // est la moyenne pondérée par l'effectif : additionner des scores sur 100
+  // n'aurait aucun sens.
+  const requestedStart = request.startingSectorKeys?.length
+    ? request.startingSectorKeys
+    : [request.sectorKeys[0]];
+
+  // On n'attribue que des secteurs réellement provisionnés : un identifiant
+  // fantaisiste doit échouer ici, pas produire une équipe sans DAS.
+  const startingSectors = requestedStart.filter((k) => dasIdBySector.has(k));
+  if (startingSectors.length === 0) {
+    throw new Error(
+      'Le portefeuille de départ ne contient aucun domaine ouvert à cette session.',
+    );
+  }
 
   const teams: ProvisionResult['teams'] = [];
+
+  /**
+   * Interrompt le provisionnement sur la première écriture refusée.
+   *
+   * Les inserts de dotation étaient lancés sans regarder leur résultat. Une
+   * contrainte violée — un indice hors de ses bornes, par exemple — laissait
+   * donc une table VIDE sans que rien ne le signale, et le défaut ne se voyait
+   * qu'en séance, sur un écran affichant zéro. Mieux vaut un provisionnement
+   * qui échoue bruyamment qu'une session à moitié dotée.
+   */
+  const fail = (result: { error: { message: string } | null }, what: string) => {
+    if (result.error) {
+      throw new Error(`Écriture impossible (${what}) : ${result.error.message}`);
+    }
+  };
 
   for (const pool of request.pools) {
     const { data: insertedPool, error: poolError } = await admin
@@ -266,31 +315,62 @@ export async function provisionSession(
       throw new Error(`Création du pool ${pool.name} impossible : ${poolError?.message}`);
     }
 
-    const dasParams: DasParameters = {
-      dasId: startingDasId, sectorKey: startingSector,
-      referenceUnitPriceMad: startingDas.referenceUnitPriceMad,
-      referenceUnitCostMad: startingDas.referenceUnitCostMad,
-      fixedCostBaseMad: startingDas.fixedCostBaseMad,
-      priceElasticity: startingDas.priceElasticity,
-      learningRate: startingDas.learningRate,
-      valuationMultiple: startingDas.valuationMultiple,
-      workingCapitalDays: startingDas.workingCapitalDays,
-      vrioEntryBarrier: startingDas.vrioEntryBarrier,
-      unitCapacityCostMad: startingDas.unitCapacityCostMad,
-      capacityDepreciation: 0.06,
-      capacityFromHeadcount: startingDas.capacityFromHeadcount,
-      headcountProductivity: startingDas.headcountProductivity,
-      referenceCumulativeVolumeUnits: 1,
-    };
+    // UNE dotation par domaine pour tout le pool : les mêmes valeurs sont
+    // écrites pour chaque équipe, jamais recalculées par équipe. La fonction ne
+    // prend aucun identifiant d'équipe — l'asymétrie reste impossible par
+    // construction (doc 03 §7).
+    const perDas = startingSectors.map((sectorKey) => {
+      const dasId = dasIdBySector.get(sectorKey)!;
+      const das = catalog.find((d) => d.sectorKey === sectorKey)!;
 
-    // UNE dotation pour tout le pool : la même valeur est écrite pour chaque
-    // équipe, jamais recalculée par équipe.
-    const endowment = computeEndowment(
-      dasParams,
-      startingDas.baseMarketSizeMad,
-      pool.teamNames.length,
-      params,
-    );
+      const dasParams: DasParameters = {
+        dasId, sectorKey,
+        referenceUnitPriceMad: das.referenceUnitPriceMad,
+        referenceUnitCostMad: das.referenceUnitCostMad,
+        fixedCostBaseMad: das.fixedCostBaseMad,
+        priceElasticity: das.priceElasticity,
+        learningRate: das.learningRate,
+        valuationMultiple: das.valuationMultiple,
+        workingCapitalDays: das.workingCapitalDays,
+        vrioEntryBarrier: das.vrioEntryBarrier,
+        unitCapacityCostMad: das.unitCapacityCostMad,
+        capacityDepreciation: 0.06,
+        capacityFromHeadcount: das.capacityFromHeadcount,
+        headcountProductivity: das.headcountProductivity,
+        referenceCumulativeVolumeUnits: 1,
+      };
+
+      return {
+        sectorKey,
+        dasId,
+        das,
+        endowment: computeEndowment(
+          dasParams, das.baseMarketSizeMad, pool.teamNames.length, params,
+        ),
+      };
+    });
+
+    const totalHeadcount = perDas.reduce((a, e) => a + e.endowment.headcount, 0);
+    const weightOf = (headcount: number) =>
+      totalHeadcount > 0 ? headcount / totalHeadcount : 1 / perDas.length;
+
+    // Agrégats de niveau équipe.
+    const group = {
+      treasuryMad: perDas.reduce((a, e) => a + e.endowment.treasuryMad, 0),
+      workingCapitalMad: perDas.reduce((a, e) => a + e.endowment.workingCapitalMad, 0),
+      revenueMad: perDas.reduce((a, e) => a + e.endowment.expectedRevenueMad, 0),
+      equityMad: perDas.reduce((a, e) => a + e.endowment.equityMad, 0),
+      debtMad: perDas.reduce((a, e) => a + e.endowment.debtMad, 0),
+      headcount: totalHeadcount,
+      climatSocial: perDas.reduce(
+        (a, e) => a + e.endowment.climatSocial * weightOf(e.endowment.headcount), 0),
+      iaScore: perDas.reduce(
+        (a, e) => a + e.endowment.iaScore * weightOf(e.endowment.headcount), 0),
+      expertShare: perDas.reduce(
+        (a, e) => a + e.endowment.expertShare * weightOf(e.endowment.headcount), 0),
+      avgSalaryMad: perDas.reduce(
+        (a, e) => a + e.endowment.avgSalaryMad * weightOf(e.endowment.headcount), 0),
+    };
 
     for (const teamName of pool.teamNames) {
       const joinCode = code(rng, 5);
@@ -310,12 +390,17 @@ export async function provisionSession(
       }
       const teamId = team.id as string;
 
-      await admin.from('team_units').insert({
-        team_id: teamId,
-        das_id: startingDasId,
-        launched_round: 0,
-        status: 'active',
-      });
+      fail(
+        await admin.from('team_units').insert(
+          perDas.map((e) => ({
+            team_id: teamId,
+            das_id: e.dasId,
+            launched_round: 0,
+            status: 'active',
+          })),
+        ),
+        `portefeuille de ${teamName}`,
+      );
 
       // ── DEUX exercices clos, pas un seul ────────────────────────────────
       //
@@ -334,103 +419,143 @@ export async function provisionSession(
       const HISTORY_GROWTH = 1.06;
 
       for (const [round, scale] of [[-1, 1 / HISTORY_GROWTH], [0, 1]] as const) {
-        await admin.from('team_das_round_metrics').insert({
-          team_id: teamId,
-          das_id: startingDasId,
-          round_number: round,
-          quality: endowment.quality,
-          perceived_quality: endowment.quality,
-          notoriety: endowment.notoriety,
-          capacity_units: endowment.capacityUnits * scale,
-          cumulative_volume: endowment.cumulativeVolumeUnits * scale,
-          volume_sold: endowment.capacityUnits * scale,
-          stockout_rate: 0,
-          revenue_mad: endowment.expectedRevenueMad * scale,
-          market_share_pct: 1 / pool.teamNames.length,
-          market_size_mad: startingDas.baseMarketSizeMad * scale,
-          automation_level: 0,
-        });
+        // ── Ce qui est propre à chaque domaine ────────────────────────────
+        fail(await admin.from('team_das_round_metrics').insert(
+          perDas.map((e) => ({
+            team_id: teamId,
+            das_id: e.dasId,
+            round_number: round,
+            quality: e.endowment.quality,
+            perceived_quality: e.endowment.quality,
+            notoriety: e.endowment.notoriety,
+            capacity_units: e.endowment.capacityUnits * scale,
+            cumulative_volume: e.endowment.cumulativeVolumeUnits * scale,
+            volume_sold: e.endowment.capacityUnits * scale,
+            stockout_rate: 0,
+            revenue_mad: e.endowment.expectedRevenueMad * scale,
+            market_share_pct: 1 / pool.teamNames.length,
+            market_size_mad: e.das.baseMarketSizeMad * scale,
+            automation_level: 0,
+          })),
+        ), `indicateurs de ${teamName}`);
 
-        await admin.from('pnl_statements').insert({
-          team_id: teamId,
-          round_number: round,
-          revenue_mad: endowment.expectedRevenueMad * scale,
-          treasury_end_mad: endowment.treasuryMad * scale,
-          working_capital_mad: endowment.workingCapitalMad * scale,
-        });
-
-        await admin.from('team_round_state').insert({
-          team_id: teamId,
-          round_number: round,
-          climat_social: endowment.climatSocial,
-          ia_score: endowment.iaScore,
-          headcount: Math.round(endowment.headcount * scale),
-          talent_mix: endowment.expertShare,
-          treasury_status: 'sain',
-          consecutive_negative_treasury_rounds: 0,
-        });
+        // L'état social de DÉPART, domaine par domaine. C'est lui que l'écran
+        // de saisie affiche comme « effectif en place » : sans ces lignes, une
+        // équipe ouvrirait son premier tour devant un effectif de zéro et
+        // croirait devoir recruter toute son entreprise.
+        fail(await admin.from('das_hr_state').insert(
+          perDas.map((e) => ({
+            team_id: teamId,
+            das_id: e.dasId,
+            round_number: round,
+            headcount: Math.round(e.endowment.headcount * scale),
+            climat_social: e.endowment.climatSocial,
+            productivity: e.endowment.headcount > 0
+              ? (e.endowment.capacityUnits * scale) / (e.endowment.headcount * scale)
+              : 0,
+            standardisation_level: 0,
+            automation_level: 0,
+            turnover_rate: 0.08,
+            payroll_mad:
+              e.endowment.headcount * scale * e.endowment.avgSalaryMad * 12 * 1.2109,
+            workload_index: 100,
+            overstaffing_pct: 0,
+            // `expertShare` est DÉJÀ une valeur sur 100 — `endowment.expert_share`
+            // vaut 20, pas 0,2. La multiplier par cent produisait 2 000 et
+            // violait `skill_index between 0 and 100` : l'insert échouait, et
+            // sans contrôle d'erreur toute la table restait vide en silence.
+            // C'est ce qui aurait affiché un effectif de zéro à l'écran.
+            skill_index: e.endowment.expertShare,
+            severance_paid_mad: 0,
+            subsidies_mad: 0,
+          })),
+        ), `état social de ${teamName}`);
 
         // Les contrats amont et aval de l'exercice. Une entreprise qui a vendu
         // pendant deux ans a des fournisseurs et un réseau : les omettre
         // faisait produire sans acheter et vendre sans distribuer.
-        const inherited = buildInheritedContracts(
-          actorsByArchetype.get(startingSector) ?? {
-            suppliers: new Map(),
-            distributors: new Map(),
-          },
-          endowment.capacityUnits * scale,
-        );
-
-        if (inherited.procurement.length > 0) {
-          await admin.from('procurement_contracts').insert(
-            inherited.procurement.map((c) => ({
-              team_id: teamId,
-              das_id: startingDasId,
-              round_number: round,
-              supplier_id: c.supplierId,
-              committed_volume: c.committedVolume,
-            })),
+        for (const e of perDas) {
+          const inherited = buildInheritedContracts(
+            actorsByArchetype.get(e.sectorKey) ?? {
+              suppliers: new Map(),
+              distributors: new Map(),
+            },
+            e.endowment.capacityUnits * scale,
           );
+
+          if (inherited.procurement.length > 0) {
+            fail(await admin.from('procurement_contracts').insert(
+              inherited.procurement.map((c) => ({
+                team_id: teamId,
+                das_id: e.dasId,
+                round_number: round,
+                supplier_id: c.supplierId,
+                committed_volume: c.committedVolume,
+              })),
+            ), 'contrats d’approvisionnement');
+          }
+
+          if (inherited.distribution.length > 0) {
+            fail(await admin.from('distribution_contracts').insert(
+              inherited.distribution.map((c) => ({
+                team_id: teamId,
+                das_id: e.dasId,
+                round_number: round,
+                distributor_id: c.distributorId,
+                volume_share: c.volumeShare,
+              })),
+            ), 'contrats de distribution');
+          }
         }
 
-        if (inherited.distribution.length > 0) {
-          await admin.from('distribution_contracts').insert(
-            inherited.distribution.map((c) => ({
-              team_id: teamId,
-              das_id: startingDasId,
-              round_number: round,
-              distributor_id: c.distributorId,
-              volume_share: c.volumeShare,
-            })),
-          );
-        }
+        // ── Ce qui est de niveau ÉQUIPE : la somme, pas une ligne par DAS ──
+        fail(await admin.from('pnl_statements').insert({
+          team_id: teamId,
+          round_number: round,
+          revenue_mad: group.revenueMad * scale,
+          treasury_end_mad: group.treasuryMad * scale,
+          working_capital_mad: group.workingCapitalMad * scale,
+        }), 'compte de résultat');
+
+        fail(await admin.from('team_round_state').insert({
+          team_id: teamId,
+          round_number: round,
+          climat_social: group.climatSocial,
+          ia_score: group.iaScore,
+          headcount: Math.round(group.headcount * scale),
+          talent_mix: group.expertShare,
+          treasury_status: 'sain',
+          consecutive_negative_treasury_rounds: 0,
+        }), 'état de tour');
       }
 
-      // L'organisation héritée du dernier exercice clos. Elle PERSISTE tant que
-      // l'équipe ne la change pas : ne rien faire, c'est conserver la structure
-      // de l'an dernier.
-      await seedOrganisation(
-        admin, teamId, startingDasId, 0,
-        endowment.headcount,
-        // Budget de fonctionnement de référence : la marge brute attendue,
-        // c'est-à-dire ce qu'il y a effectivement à répartir entre directions.
-        endowment.expectedRevenueMad * 0.30,
-      );
+      // L'organisation héritée du dernier exercice clos, domaine par domaine.
+      // Elle PERSISTE tant que l'équipe ne la change pas : ne rien faire, c'est
+      // conserver la structure de l'an dernier.
+      for (const e of perDas) {
+        await seedOrganisation(
+          admin, teamId, e.dasId, 0,
+          e.endowment.headcount,
+          // Budget de fonctionnement de référence : la marge brute attendue,
+          // c'est-à-dire ce qu'il y a effectivement à répartir entre directions.
+          e.endowment.expectedRevenueMad * 0.30,
+        );
+      }
 
-      await admin.from('financial_budgets').insert({
+      fail(await admin.from('financial_budgets').insert({
         team_id: teamId,
         round_number: 0,
-        treasury_start_mad: endowment.treasuryMad,
-        equity_mad: endowment.equityMad,
-        debt_outstanding_mad: endowment.debtMad,
-      });
+        treasury_start_mad: group.treasuryMad,
+        equity_mad: group.equityMad,
+        debt_outstanding_mad: group.debtMad,
+      }), 'budget');
 
-      await admin.from('hr_metrics').insert({
+      fail(await admin.from('hr_metrics').insert({
         team_id: teamId,
         round_number: 0,
-        headcount_start: endowment.headcount,
-        avg_salary_brut_mad: endowment.avgSalaryMad,
-      });
+        headcount_start: Math.round(group.headcount),
+        avg_salary_brut_mad: group.avgSalaryMad,
+      }), 'consolidation RH');
 
       teams.push({ teamId, name: teamName, poolName: pool.name, joinCode });
     }

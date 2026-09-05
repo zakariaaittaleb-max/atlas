@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import {
-  EFFECT_KEYS, EFFECT_SPECS, describeLevers, emptyLevers, mergeLevers, sanitiseLevers,
+  EFFECT_KEYS, EFFECT_SPECS, describeLevers, emptyLevers, mergeLevers, mitigateShock,
+  sanitiseLevers,
 } from './shocks';
 
 describe('vocabulaire des chocs', () => {
@@ -129,5 +130,48 @@ describe('sens de la phrase', () => {
       expect(spec.negativeMeans.length).toBeGreaterThan(5);
       expect(spec.negativeMeans).not.toBe(spec.positiveMeans);
     }
+  });
+});
+
+describe('atténuation par la réponse de l’équipe', () => {
+  // Le sens n'est pas devinable : +20 % de marché est une aubaine, +20 % de
+  // coût d'intrants une tuile. C'est le catalogue qui tranche.
+  const carte = {
+    dasId: 'das-1',
+    marketSizePct: -0.20,   // défavorable : le marché se contracte
+    inputCostPct: 0.30,     // défavorable : les achats renchérissent
+    capacityPct: 0.10,      // FAVORABLE : l'outil produit davantage
+    payrollPct: 0.15,       // défavorable
+    qualityFloor: 60,       // défavorable : un seuil s'impose
+  };
+
+  it('laisse la carte intacte quand l’équipe ignore', () => {
+    expect(mitigateShock(carte, 0)).toEqual(carte);
+  });
+
+  it('réduit de moitié l’effet adverse à efficacité 0,5', () => {
+    const out = mitigateShock(carte, 0.5);
+    expect(out.inputCostPct).toBeCloseTo(0.15, 9);
+    expect(out.payrollPct).toBeCloseTo(0.075, 9);
+    expect(out.marketSizePct).toBeCloseTo(-0.10, 9);
+    expect(out.qualityFloor).toBeCloseTo(30, 9);
+  });
+
+  it('NE TOUCHE PAS ce qui joue en faveur de l’équipe', () => {
+    // « Absorber » un choc favorable effacerait la bonne nouvelle que
+    // l'équipe vient de payer pour garder.
+    expect(mitigateShock(carte, 1).capacityPct).toBeCloseTo(0.10, 9);
+  });
+
+  it('neutralise l’adversité à efficacité 1, sans la convertir en gain', () => {
+    const out = mitigateShock(carte, 1);
+    expect(out.inputCostPct).toBe(0);
+    expect(out.marketSizePct).toBe(0);
+    expect(out.qualityFloor).toBe(0);
+  });
+
+  it('borne les efficacités aberrantes', () => {
+    expect(mitigateShock(carte, 5).inputCostPct).toBe(0);
+    expect(mitigateShock(carte, -3)).toEqual(carte);
   });
 });

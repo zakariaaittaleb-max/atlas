@@ -72,6 +72,16 @@ export const DEFAULT_PARAMS = {
   'alignment.sat_change_malus': 20,
   'alignment.sat_improvement_bonus': 10,
   'alignment.initial_ia': 70,
+  // Réorganiser coûte : cabinets, doublons transitoires, mois de flottement.
+  // Exprimé en part de la masse salariale, seule assiette qui suive la taille
+  // de l'entreprise sans dépendre d'un chiffre d'affaires encore inconnu.
+  'structure.transition_cost_pct_of_payroll': 0.18,
+  // Contracter n'est pas intégrer : un contrat sécurise l'amont tant qu'il
+  // court, détenir le maillon le sécurise tout court. Un contrat vaut donc
+  // la moitié d'une détention dans l'indice d'intégration verticale.
+  'integration.contract_equivalence': 0.5,
+  'integration.downstream_weight': 0.55,
+  'integration.upstream_weight': 0.45,
 
   // --- Marché et prix (doc 02 §2) -------------------------------------------
   // Molettes de difficulté. Neutres par défaut : une session qui ne règle rien
@@ -112,6 +122,15 @@ export const DEFAULT_PARAMS = {
   'procurement.power_alternatives_pivot': 5,
   'procurement.power_switching_weight': 25,
   'procurement.max_discount': 0.18,
+  // ── Intégration verticale par rachat de maillon ──────────────────────────
+  // Ce qu'on capte en rachetant son fournisseur : sa MARGE, qui cesse de
+  // sortir de la maison. C'est structurellement plus qu'une remise de volume
+  // (18 % au mieux), et c'est ce qui rend l'opération attractive — au prix de
+  // l'immobilisation d'un maillon qu'il faut désormais faire tourner.
+  'procurement.owned_margin_captured': 0.26,
+  // Un fournisseur intégré ne rompt plus pour cause de désaccord commercial :
+  // il reste le risque industriel, qu'on ne supprime jamais.
+  'procurement.owned_reliability_floor': 92,
   // Amplitude des ruptures d'approvisionnement. Sans ce facteur, un fournisseur
   // à 45 % de fiabilité amputait jusqu'à 83 % de la capacité en un seul tour :
   // le signal était juste, son amplitude caricaturale.
@@ -127,6 +146,10 @@ export const DEFAULT_PARAMS = {
   'distribution.max_margin_reduction': 0.35,
   'distribution.coverage_headroom': 1.15,
   'distribution.own_network_coverage_per_mad': 6e-8,
+  // Un distributeur racheté ne prend plus de marge, mais il coûte à faire
+  // tourner : entrepôts, camions, vendeurs. On ne descend pas à zéro, sinon
+  // l'intégration serait un gain sans contrepartie.
+  'distribution.owned_operating_margin_pct': 0.06,
 
   // --- Qualité et notoriété (doc 02 §7) -------------------------------------
   'quality.obsolescence_per_round': 0.04,

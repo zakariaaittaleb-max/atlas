@@ -103,7 +103,6 @@ function unit(over: Partial<TeamDasSnapshot> = {}): TeamDasSnapshot {
     supplierAlternatives: 3,
     launchedRound: 0,
     ansoffMovement: null,
-    ansoffRiskCoefficient: 0,
     blueOcean: false,
     blueOceanRoundsLeft: 0,
     commissionedCapexMad: 30_000_000,
@@ -160,7 +159,6 @@ function team(id: string, over: Partial<TeamSnapshot> = {}): TeamSnapshot {
     corporate: {
       corporateStrategy: 'specialisation',
       structureType: 'fonctionnelle',
-      structureTransitionCostMad: 0,
       centralPurchasing: true,
       centralIt: true,
       centralRd: false,
@@ -171,7 +169,6 @@ function team(id: string, over: Partial<TeamSnapshot> = {}): TeamSnapshot {
       values: ['accessibilite_prix', 'efficience_operationnelle'],
       sharedSupplierRatio: 0,
       sharedDistributorRatio: 0,
-      verticalIntegration: 30,
       ...over.corporate,
     },
     hr: {
@@ -183,7 +180,6 @@ function team(id: string, over: Partial<TeamSnapshot> = {}): TeamSnapshot {
       avgSalaryBrutMad: 5_800,
       trainingBudgetMad: 500_000,
       restructuringCount: 0,
-      severancePaidMad: 0,
       previousExpertShare: 20,
       ...over.hr,
     },
@@ -202,11 +198,12 @@ function team(id: string, over: Partial<TeamSnapshot> = {}): TeamSnapshot {
     },
     units: over.units ?? [unit()],
     previousClimatSocial: 70,
-    previousIaScore: 70,
     previousTreasuryStatus: 'sain',
     previousConsecutiveNegativeRounds: 0,
     consecutiveImprovingRounds: 0,
     previousCorporateStrategy: 'specialisation',
+    previousStructureType: 'fonctionnelle',
+    shockResponses: [],
     ...over,
   };
 }
@@ -506,6 +503,7 @@ describe('chocs PESTEL', () => {
       baseInput({
         shocks: [
           {
+            shockId: 'shock-secheresse',
             dasId: 'das-agro',
             marketSizePct: -0.12,
             inputCostPct: 0.22,
@@ -536,6 +534,7 @@ describe('chocs PESTEL', () => {
       baseInput({
         shocks: [
           {
+            shockId: 'shock-redistribution',
             dasId: 'das-agro',
             marketSizePct: 0,
             inputCostPct: 0,
@@ -708,5 +707,573 @@ describe('détection des invariants', () => {
       [],
     );
     expect(failures.map((f) => f.code)).toContain('non_finite');
+  });
+});
+
+// ===========================================================================
+// La RH atteint-elle la trésorerie ?
+// ===========================================================================
+
+const hrDecision = (over: Partial<NonNullable<TeamDasSnapshot['hr']>> = {}) => ({
+  hireOperateurs: 0, hireTechniciens: 0, hireExperts: 0, hireCadres: 0,
+  layoffs: 0, internalTransfersIn: 0,
+  avgSalaryBrutMad: 5_800, trainingBudgetMad: 0,
+  trainingFocus: 'technique' as const,
+  claimOfppt: false, claimGiac: false, orderSkillsAudit: false,
+  restructuring: 'aucune' as const,
+  ...over,
+});
+
+const treasuryOf = (result: ReturnType<typeof resolveRound>, teamId: string) =>
+  result.teams.find((t) => t.teamId === teamId)!.pnl.treasuryEndMad;
+
+describe('décisions RH et trésorerie', () => {
+  /**
+   * Le défaut corrigé : les indemnités étaient calculées au barème de
+   * l'article 53, affichées à l'équipe AVANT qu'elle ne tranche, puis jamais
+   * débitées — le compte de résultat lisait une colonne que personne
+   * n'alimentait. Licencier libérait la masse salariale sans coûter le cash
+   * annoncé, soit l'inverse exact de ce que l'écran enseigne.
+   */
+  it('débite les indemnités de licenciement de la trésorerie', () => {
+    const sans = resolveRound(
+      baseInput({ teams: [team('t1', { units: [unit({ hr: hrDecision() })] }), team('t2'), team('t3')] }),
+      params,
+    );
+    const avec = resolveRound(
+      baseInput({
+        teams: [
+          team('t1', { units: [unit({ hr: hrDecision({ layoffs: 60 }) })] }),
+          team('t2'), team('t3'),
+        ],
+      }),
+      params,
+    );
+
+    expect(treasuryOf(avec, 't1')).toBeLessThan(treasuryOf(sans, 't1'));
+  });
+
+  it('rend les indemnités proportionnelles au nombre de départs', () => {
+    const build = (layoffs: number) =>
+      treasuryOf(
+        resolveRound(
+          baseInput({
+            teams: [
+              team('t1', { units: [unit({ hr: hrDecision({ layoffs }) })] }),
+              team('t2'), team('t3'),
+            ],
+          }),
+          params,
+        ),
+        't1',
+      );
+
+    const [zero, peu, beaucoup] = [build(0), build(30), build(90)];
+    expect(peu).toBeLessThan(zero);
+    expect(beaucoup).toBeLessThan(peu);
+  });
+
+  /**
+   * L'OFPPT rembourse la formation, le GIAC finance l'ingénierie de formation
+   * — et seulement contre un bilan de compétences. Les deux étaient calculés
+   * puis persistés sans jamais être crédités.
+   */
+  it('crédite les subventions OFPPT et GIAC', () => {
+    const build = (over: Partial<NonNullable<TeamDasSnapshot['hr']>>) =>
+      treasuryOf(
+        resolveRound(
+          baseInput({
+            teams: [
+              team('t1', {
+                units: [unit({ hr: hrDecision({ trainingBudgetMad: 4_000_000, ...over }) })],
+              }),
+              team('t2'), team('t3'),
+            ],
+          }),
+          params,
+        ),
+        't1',
+      );
+
+    const sansRien = build({});
+    expect(build({ claimOfppt: true })).toBeGreaterThan(sansRien);
+    expect(build({ claimGiac: true, orderSkillsAudit: true })).toBeGreaterThan(sansRien);
+  });
+
+  it('ne verse pas le GIAC sans bilan de compétences', () => {
+    // Le GIAC finance l'INGÉNIERIE de formation : sans audit, il n'y a
+    // rien à rembourser. C'est la règle du dispositif, et l'écran le dit.
+    const build = (orderSkillsAudit: boolean) =>
+      treasuryOf(
+        resolveRound(
+          baseInput({
+            teams: [
+              team('t1', {
+                units: [unit({
+                  hr: hrDecision({
+                    trainingBudgetMad: 4_000_000, claimGiac: true, orderSkillsAudit,
+                  }),
+                })],
+              }),
+              team('t2'), team('t3'),
+            ],
+          }),
+          params,
+        ),
+        't1',
+      );
+
+    expect(build(true)).toBeGreaterThan(build(false));
+  });
+});
+
+// ===========================================================================
+// Répondre à une crise : un coût ET un effet
+// ===========================================================================
+
+const secheresse = {
+  shockId: 'shock-secheresse',
+  dasId: 'das-agro',
+  marketSizePct: -0.12,
+  inputCostPct: 0.35,
+  capacityPct: -0.10,
+  qualityFloor: null,
+  rateDelta: 0, supplierPowerPct: 0, distributorPowerPct: 0,
+  payrollPct: 0, severancePct: 0, capexCostPct: 0,
+  workingCapitalDaysDelta: 0, priceElasticityDelta: 0, notorietyPct: 0,
+  trainingSubsidyPct: 0, subsidyPctOfRevenue: 0,
+  shareRedistributionPts: 0, beneficiaryTeamIds: [] as string[],
+};
+
+describe('réponses aux chocs', () => {
+  /**
+   * Le défaut corrigé : la war room proposait quatre réponses, la route
+   * calculait leur coût et leur efficacité, les écrivait en base — et
+   * personne ne relisait la table. Ignorer était donc la seule réponse
+   * rationnelle, puisque les trois autres se payaient sans rien produire.
+   */
+  it('protège la part de marché de qui répond, face à qui ignore', () => {
+    const result = resolveRound(
+      baseInput({
+        shocks: [secheresse],
+        teams: [
+          team('t1', { shockResponses: [
+            { shockId: 'shock-secheresse', effectiveness: 0.75, costMad: 0 },
+          ] }),
+          team('t2'),
+          team('t3'),
+        ],
+      }),
+      params,
+    );
+
+    expect(shareOf(result.dasMetrics, 't1')).toBeGreaterThan(shareOf(result.dasMetrics, 't2'));
+  });
+
+  it('fait payer la réponse, même quand la carte s’avère bénigne', () => {
+    const build = (costMad: number) =>
+      treasuryOf(
+        resolveRound(
+          baseInput({
+            shocks: [secheresse],
+            teams: [
+              team('t1', { shockResponses: [
+                { shockId: 'shock-secheresse', effectiveness: 0.4, costMad },
+              ] }),
+              team('t2'), team('t3'),
+            ],
+          }),
+          params,
+        ),
+        't1',
+      );
+
+    expect(build(20_000_000)).toBeCloseTo(build(0) - 20_000_000, 0);
+  });
+
+  it('n’atténue une carte que pour l’équipe qui l’a payée', () => {
+    const result = resolveRound(
+      baseInput({
+        shocks: [secheresse],
+        teams: [
+          team('t1', { shockResponses: [
+            { shockId: 'shock-secheresse', effectiveness: 1, costMad: 0 },
+          ] }),
+          team('t2'), team('t3'),
+        ],
+      }),
+      params,
+    );
+
+    // t2 et t3 subissent la même chose : la réponse de t1 ne les couvre pas.
+    expect(shareOf(result.dasMetrics, 't2')).toBeCloseTo(shareOf(result.dasMetrics, 't3'), 9);
+  });
+
+  it('ne laisse pas une réponse rétrécir le marché des autres', () => {
+    // La taille du marché est PARTAGÉE : elle ne peut pas valoir deux choses
+    // selon l'équipe qui la regarde. Seuls les effets subis par l'entreprise
+    // s'atténuent.
+    const sansReponse = resolveRound(baseInput({ shocks: [secheresse] }), params);
+    const avecReponse = resolveRound(
+      baseInput({
+        shocks: [secheresse],
+        teams: [
+          team('t1', { shockResponses: [
+            { shockId: 'shock-secheresse', effectiveness: 1, costMad: 0 },
+          ] }),
+          team('t2'), team('t3'),
+        ],
+      }),
+      params,
+    );
+
+    const taille = (r: ReturnType<typeof resolveRound>) => r.poolSummaries[0].marketSizeMad;
+    expect(taille(avecReponse)).toBeCloseTo(taille(sansReponse), 6);
+  });
+
+  it('ignore une réponse qui vise une carte absente du tour', () => {
+    const result = resolveRound(
+      baseInput({
+        shocks: [secheresse],
+        teams: [
+          team('t1', { shockResponses: [
+            { shockId: 'carte-inexistante', effectiveness: 1, costMad: 0 },
+          ] }),
+          team('t2'), team('t3'),
+        ],
+      }),
+      params,
+    );
+
+    expect(result.invariantFailures).toEqual([]);
+    expect(shareOf(result.dasMetrics, 't1')).toBeCloseTo(shareOf(result.dasMetrics, 't2'), 9);
+  });
+});
+
+// ===========================================================================
+// Océan bleu : une déclaration qui engage enfin quelque chose
+// ===========================================================================
+
+const metricOf = (result: ReturnType<typeof resolveRound>, teamId: string) =>
+  result.dasMetrics.find((m) => m.teamId === teamId)!;
+
+/** Rejoue la même équipe jusqu'à trouver une graine où l'entrée réussit. */
+function findRound(predicate: (m: DasMetricsOutput) => boolean): DasMetricsOutput {
+  for (let i = 0; i < 60; i += 1) {
+    const result = resolveRound(
+      baseInput({
+        sessionId: `sess-${i}`,
+        teams: [
+          team('t1', {
+            units: [unit({
+              decision: { ...unitDefaults().decision, declareBlueOcean: true },
+            })],
+          }),
+          team('t2'), team('t3'),
+        ],
+      }),
+      params,
+    );
+    const m = metricOf(result, 't1');
+    if (predicate(m)) return m;
+  }
+  throw new Error('Aucune graine ne satisfait le cas recherché.');
+}
+
+describe('océan bleu', () => {
+  /**
+   * Le défaut corrigé : la case était écrite en base et lue par personne.
+   * `team_units.blue_ocean` restait faux pour toujours, si bien que le code de
+   * répartition hors somme nulle n'était jamais atteint — et que ni le ticket
+   * d'entrée, ni le risque d'échec, ni la marge ×2,5 n'existaient, alors que
+   * l'écran promettait les trois au moment de décider.
+   */
+  it('ne fait rien tant que l’équipe ne déclare rien', () => {
+    const m = metricOf(resolveRound(baseInput(), params), 't1');
+    expect(m.blueOceanActive).toBe(false);
+    expect(m.blueOceanEntryCostMad).toBe(0);
+    expect(m.blueOceanFailed).toBe(false);
+  });
+
+  it('fait payer le ticket d’entrée, que la tentative réussisse ou non', () => {
+    expect(findRound((m) => m.blueOceanActive).blueOceanEntryCostMad).toBeGreaterThan(0);
+    expect(findRound((m) => m.blueOceanFailed).blueOceanEntryCostMad).toBeGreaterThan(0);
+  });
+
+  it('peut échouer — l’entrée n’est pas un achat', () => {
+    const echec = findRound((m) => m.blueOceanFailed);
+    expect(echec.blueOceanActive).toBe(false);
+    expect(echec.blueOceanRoundsLeft).toBe(0);
+  });
+
+  it('ouvre une fenêtre de deux tours quand elle réussit', () => {
+    expect(findRound((m) => m.blueOceanActive).blueOceanRoundsLeft)
+      .toBe(params['blue_ocean.rounds']);
+  });
+
+  it('sort le domaine de la somme nulle et lui donne sa propre part', () => {
+    const succes = findRound((m) => m.blueOceanActive);
+    // Hors pool : la part n'est plus une fraction disputée mais la
+    // compétitivité propre de l'équipe sur un marché vierge.
+    expect(succes.marketSharePct).toBeCloseTo(succes.competitivenessScore, 6);
+  });
+
+  it('décompte la fenêtre héritée, puis la referme', () => {
+    const build = (roundsLeft: number) =>
+      metricOf(
+        resolveRound(
+          baseInput({
+            teams: [
+              team('t1', {
+                units: [unit({ blueOcean: roundsLeft > 0, blueOceanRoundsLeft: roundsLeft })],
+              }),
+              team('t2'), team('t3'),
+            ],
+          }),
+          params,
+        ),
+        't1',
+      );
+
+    expect(build(2).blueOceanActive).toBe(true);
+    expect(build(2).blueOceanRoundsLeft).toBe(1);
+    expect(build(1).blueOceanActive).toBe(true);
+    expect(build(1).blueOceanRoundsLeft).toBe(0);
+    expect(build(0).blueOceanActive).toBe(false);
+  });
+
+  it('ne fait pas repayer le ticket pendant une fenêtre déjà ouverte', () => {
+    const m = metricOf(
+      resolveRound(
+        baseInput({
+          teams: [
+            team('t1', {
+              units: [unit({
+                blueOcean: true, blueOceanRoundsLeft: 2,
+                decision: { ...unitDefaults().decision, declareBlueOcean: true },
+              })],
+            }),
+            team('t2'), team('t3'),
+          ],
+        }),
+        params,
+      ),
+      't1',
+    );
+
+    expect(m.blueOceanActive).toBe(true);
+    expect(m.blueOceanEntryCostMad).toBe(0);
+  });
+
+  it('respecte les invariants du pool malgré une équipe hors somme nulle', () => {
+    const result = resolveRound(
+      baseInput({
+        teams: [
+          team('t1', { units: [unit({ blueOcean: true, blueOceanRoundsLeft: 2 })] }),
+          team('t2'), team('t3'),
+        ],
+      }),
+      params,
+    );
+    expect(result.invariantFailures).toEqual([]);
+  });
+});
+
+// ===========================================================================
+// Marché interne, réorganisation, score temporel
+// ===========================================================================
+
+const hrStateOf = (result: ReturnType<typeof resolveRound>, dasId: string) =>
+  result.dasHr.find((h) => h.dasId === dasId)!;
+
+describe('marché interne du travail', () => {
+  const deuxDas = (transfersIn: number) =>
+    resolveRound(
+      baseInput({
+        das: [das(), das({ parameters: dasParameters({ dasId: 'das-num', sectorKey: 'retail' }) })],
+        teams: [
+          team('t1', {
+            units: [
+              unit({ dasId: 'das-agro', hr: hrDecision({ internalTransfersIn: transfersIn }) }),
+              unit({ dasId: 'das-num', hr: hrDecision() }),
+            ],
+          }),
+          team('t2'), team('t3'),
+        ],
+      }),
+      params,
+    );
+
+  /**
+   * Le défaut corrigé : `internalTransfersIn` n'avait aucune contrepartie
+   * sortante. Un domaine gagnait des gens, aucun autre n'en perdait, et la
+   * consolidation excluait ces transferts de la masse salariale — puisqu'il
+   * s'agit de personnes déjà payées. C'était de l'effectif GRATUIT, qui
+   * allégeait la charge et remontait le climat sans coûter un dirham.
+   */
+  it('prélève sur le domaine d’origine ce que l’autre reçoit', () => {
+    const sans = deuxDas(0);
+    const avec = deuxDas(80);
+
+    expect(hrStateOf(avec, 'das-agro').headcount)
+      .toBeGreaterThan(hrStateOf(sans, 'das-agro').headcount);
+    expect(hrStateOf(avec, 'das-num').headcount)
+      .toBeLessThan(hrStateOf(sans, 'das-num').headcount);
+  });
+
+  it('conserve l’effectif total de l’équipe', () => {
+    const total = (r: ReturnType<typeof resolveRound>) =>
+      r.dasHr
+        .filter((h) => h.teamId === 't1')
+        .reduce((acc, h) => acc + h.headcount, 0);
+
+    expect(total(deuxDas(80))).toBeCloseTo(total(deuxDas(0)), 6);
+  });
+
+  it('ne prélève rien quand le domaine est seul — il n’y a personne à débaucher', () => {
+    const seul = resolveRound(
+      baseInput({
+        teams: [
+          team('t1', { units: [unit({ hr: hrDecision({ internalTransfersIn: 50 }) })] }),
+          team('t2'), team('t3'),
+        ],
+      }),
+      params,
+    );
+    expect(seul.invariantFailures).toEqual([]);
+  });
+});
+
+describe('coût de réorganisation', () => {
+  /**
+   * Le défaut corrigé : le coût était lu depuis une colonne qu'aucune écriture
+   * n'alimentait. Changer de structure ne coûtait rien en trésorerie — une
+   * équipe pouvait basculer chaque tour et revenir le suivant, ne payant
+   * jamais que la pénalité d'alignement.
+   */
+  it('fait payer un changement de structure', () => {
+    const stable = treasuryOf(
+      resolveRound(
+        baseInput({
+          teams: [
+            team('t1', { previousStructureType: 'fonctionnelle' }),
+            team('t2'), team('t3'),
+          ],
+        }),
+        params,
+      ),
+      't1',
+    );
+    const reorganise = treasuryOf(
+      resolveRound(
+        baseInput({
+          teams: [
+            team('t1', { previousStructureType: 'matricielle' }),
+            team('t2'), team('t3'),
+          ],
+        }),
+        params,
+      ),
+      't1',
+    );
+
+    expect(reorganise).toBeLessThan(stable);
+  });
+
+  it('ne fait rien payer au premier tour, faute de structure antérieure', () => {
+    const premier = treasuryOf(
+      resolveRound(
+        baseInput({
+          teams: [team('t1', { previousStructureType: null }), team('t2'), team('t3')],
+        }),
+        params,
+      ),
+      't1',
+    );
+    const stable = treasuryOf(
+      resolveRound(
+        baseInput({
+          teams: [
+            team('t1', { previousStructureType: 'fonctionnelle' }),
+            team('t2'), team('t3'),
+          ],
+        }),
+        params,
+      ),
+      't1',
+    );
+
+    expect(premier).toBeCloseTo(stable, 0);
+  });
+});
+
+describe('score temporel', () => {
+  const iaOf = (r: ReturnType<typeof resolveRound>, teamId: string) =>
+    r.teams.find((t) => t.teamId === teamId)!.alignment;
+
+  /**
+   * Le champ `consecutiveImprovingRounds` était câblé à zéro : le bonus de
+   * progression n'était JAMAIS versé.
+   *
+   * Il ne se lit pas sur une équipe stable — la constance vaut déjà 100, et le
+   * cahier plafonne là (§6.1). Ce que le bonus permet, c'est de RATTRAPER un
+   * changement de cap : une équipe qui vire de bord en se redressant paie
+   * moins cher que celle qui vire de bord en stagnant. C'est cette différence
+   * qui n'existait pas.
+   */
+  it('laisse une progression soutenue rattraper un changement de cap', () => {
+    const build = (improving: number) =>
+      iaOf(
+        resolveRound(
+          baseInput({
+            teams: [
+              team('t1', {
+                previousCorporateStrategy: 'diversification_conglomerale',
+                consecutiveImprovingRounds: improving,
+              }),
+              team('t2'), team('t3'),
+            ],
+          }),
+          params,
+        ),
+        't1',
+      ).sat;
+
+    expect(build(0)).toBeLessThan(100);
+    expect(build(1)).toBeGreaterThan(build(0));
+    expect(build(2)).toBeGreaterThan(build(1));
+  });
+
+  it('plafonne à 100 : la constance ne se dépasse pas', () => {
+    // Conforme au cahier (§6.1) : le bonus offre un rattrapage, pas une prime
+    // cumulable sur une équipe qui n'a rien changé.
+    const stable = iaOf(
+      resolveRound(
+        baseInput({
+          teams: [team('t1', { consecutiveImprovingRounds: 5 }), team('t2'), team('t3')],
+        }),
+        params,
+      ),
+      't1',
+    );
+    expect(stable.sat).toBe(100);
+  });
+
+  it('facture un changement de stratégie de groupe', () => {
+    const stable = iaOf(resolveRound(baseInput(), params), 't1');
+    const vire = iaOf(
+      resolveRound(
+        baseInput({
+          teams: [
+            team('t1', { previousCorporateStrategy: 'diversification_conglomerale' }),
+            team('t2'), team('t3'),
+          ],
+        }),
+        params,
+      ),
+      't1',
+    );
+
+    expect(vire.sat).toBeLessThan(stable.sat);
   });
 });

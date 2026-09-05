@@ -145,6 +145,21 @@ export interface PnlInput {
   rateDelta?: number;
   /** Subvention directe, en part du chiffre d'affaires. */
   subsidyPctOfRevenue?: number;
+  /**
+   * Marge SUPPLÉMENTAIRE tirée des domaines en océan bleu.
+   *
+   * Sortir du calcul à somme nulle multiplie la marge par 2,5 — c'est la
+   * promesse que l'écran fait à l'équipe. Elle est passée en MONTANT et non
+   * en pourcentage : la fenêtre s'ouvre par domaine, alors que le résultat se
+   * tient au niveau du groupe, et un pourcentage global l'étendrait à des
+   * domaines qui n'ont rien tenté.
+   */
+  blueOceanMarginMad?: number;
+  /**
+   * Ticket d'entrée en océan bleu, payé que la tentative réussisse ou non.
+   * C'est une exploration, pas un achat : elle passe en charge.
+   */
+  blueOceanEntryMad?: number;
 }
 
 export function buildPnl(input: PnlInput, params: EngineParams): PnlStatement {
@@ -153,7 +168,9 @@ export function buildPnl(input: PnlInput, params: EngineParams): PnlStatement {
 
   // La prime d'alignement joue sur la marge brute : une entreprise cohérente
   // exécute mieux — moins de gaspillage, meilleure acceptation du prix.
-  const grossMarginMad = (netRevenueMad - input.cogsMad) * (1 + input.marginPremiumPct);
+  const grossMarginMad =
+    (netRevenueMad - input.cogsMad) * (1 + input.marginPremiumPct) +
+    (input.blueOceanMarginMad ?? 0);
 
   const overheadMad = input.overheadMad * input.overheadMultiplier;
 
@@ -164,7 +181,8 @@ export function buildPnl(input: PnlInput, params: EngineParams): PnlStatement {
     input.rdMad -
     overheadMad -
     input.fixedProductionMad -
-    input.consultingMad;
+    input.consultingMad -
+    (input.blueOceanEntryMad ?? 0);
 
   const ebitMad = ebitdaMad - input.depreciationMad;
   const interestMad = interestExpense(

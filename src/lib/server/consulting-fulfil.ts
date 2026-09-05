@@ -138,12 +138,48 @@ async function pestel(
   // C'est LE signal faible de cette étude — absent des deux paliers bon marché.
   const shockRisk = Math.min((shocks?.length ?? 0) * 60, 100);
 
+  // ── L'exposition PESTEL, dimension par dimension ─────────────────────────
+  //
+  // L'étude portait le nom « PESTEL » et livrait cinq indicateurs de marché :
+  // ni politique, ni écologique, ni légal. Impossible d'en tirer la grille que
+  // son propre nom promettait.
+  //
+  // Ce qu'on vend ici n'est pas l'événement à venir — cela reste le signal
+  // faible ci-dessus — mais l'EXPOSITION STRUCTURELLE de la filière : combien
+  // de menaces, dans le catalogue du facilitateur, peuvent la frapper sur
+  // chaque dimension. Un consultant sait qu'un secteur est exposé au risque
+  // réglementaire sans savoir quel décret tombera au prochain trimestre.
+  const sector = str(das?.sector_key);
+  const { data: cards } = await input.admin
+    .from('shock_cards')
+    .select('pestel_dimension, nature, target_sectors')
+    .or(`session_id.eq.${input.sessionId},session_id.is.null`);
+
+  const DIMENSIONS = ['politique', 'economique', 'socioculturel',
+                      'technologique', 'ecologique', 'legal'] as const;
+
+  const exposure = Object.fromEntries(DIMENSIONS.map((dim) => {
+    const relevant = ((cards ?? []) as Row[]).filter((c) => {
+      if (str(c.pestel_dimension) !== dim) return false;
+      const targets = (c.target_sectors as string[] | null) ?? [];
+      // Une carte sans filière cible frappe tout le monde.
+      return targets.length === 0 || targets.includes(sector);
+    });
+    // Une menace expose, une opportunité aussi : les deux rendent la filière
+    // VOLATILE sur cette dimension, et c'est ce qu'une grille PESTEL relève.
+    // La menace pèse deux fois plus — on se prépare à ce qui peut coûter.
+    const weight = relevant.reduce(
+      (acc, c) => acc + (str(c.nature) === 'menace' ? 2 : 1), 0);
+    return [`exposure_${dim}`, Math.min(weight * 12, 100)];
+  }));
+
   const values = {
     market_size_mad: num(summary?.market_size_mad, num(das?.base_market_size_mad)),
     growth_rate: growth,
     price_elasticity: num(das?.price_elasticity, 1.5),
     reference_unit_price_mad: num(das?.reference_unit_price_mad),
     next_round_shock_risk: shockRisk,
+    ...exposure,
   };
 
   return {
@@ -153,7 +189,11 @@ async function pestel(
       fields: buildStudyDeliverable(
         'pestel_sectoriel', input.tier, values, context(String(input.dasId)), input.params),
     }],
-    notes: ['Données du tour écoulé. Les bornes de croissance sont annuelles.'],
+    notes: [
+      'Données du tour écoulé. Les bornes de croissance sont annuelles.',
+      'L’exposition mesure la VOLATILITÉ de la filière sur chaque dimension — combien d’événements peuvent l’y frapper — et non la probabilité qu’un événement précis survienne.',
+      'Croisée avec la part relative — étude concurrentielle — la croissance du marché place le domaine sur la matrice BCG.',
+    ],
   };
 }
 
@@ -173,6 +213,26 @@ async function competitive(
 
   const concentration = herfindahl((metrics ?? []).map((m) => num(m.market_share_pct)));
 
+  // Barrière à l'entrée et menace des substituts sont des propriétés de
+  // FILIÈRE : elles valent pour tous les concurrents, et c'est bien ce qui en
+  // fait des forces au sens de Porter plutôt que des traits d'entreprise.
+  const { data: unit } = await input.admin
+    .from('strategic_units').select('vrio_entry_barrier, substitution_pressure')
+    .eq('id', input.dasId!).maybeSingle();
+  const entryBarrier = num(unit?.vrio_entry_barrier) * 100;
+  const substitution = num(unit?.substitution_pressure, 40);
+
+  // Abscisse de la matrice BCG : la part du concurrent RAPPORTÉE au leader du
+  // pool. Une part absolue ne dit rien — 20 % fait un poids mort face à un
+  // leader à 60 %, et une vache à lait face à un second à 8 %.
+  const { data: mine } = await input.admin
+    .from('team_das_round_metrics').select('market_share_pct')
+    .eq('team_id', input.teamId).eq('das_id', input.dasId!)
+    .eq('round_number', round).maybeSingle();
+  const allShares = [...(metrics ?? []).map((m) => num(m.market_share_pct)),
+                     num(mine?.market_share_pct)];
+  const leader = Math.max(...allShares, 0);
+
   const subjects: DeliverableSubject[] = (rivals ?? []).map((rival) => {
     const m = (metrics ?? []).find((x) => String(x.team_id) === String(rival.id)) as Row | undefined;
     return {
@@ -185,6 +245,11 @@ async function competitive(
         competitor_market_share: num(m?.market_share_pct),
         pool_concentration: concentration,
         competitor_capacity: num(m?.capacity_units),
+        entry_barrier: entryBarrier,
+        substitution_pressure: substitution,
+        // Rapportée au leader, l'équipe incluse : c'est le leader du marché
+        // qui fait la référence, pas le plus fort des autres.
+        relative_market_share: leader > 0 ? num(m?.market_share_pct) / leader : 0,
       }, context(String(rival.id)), input.params),
     };
   });
@@ -194,6 +259,8 @@ async function competitive(
     notes: [
       'Indicateurs reconstitués par le cabinet à partir d’observations de marché.',
       'La capacité installée des concurrents n’est couverte qu’en étude approfondie.',
+      'Barrière à l’entrée et menace des substituts valent pour la filière entière : elles sont identiques pour chaque concurrent listé.',
+      'La part relative se lit contre le leader du pool. Croisée avec la croissance du marché — étude PESTEL — elle place le domaine sur la matrice BCG.',
     ],
   };
 }

@@ -145,7 +145,7 @@ function ParticipantForm() {
       </button>
 
       <p className="text-sm text-(--foreground-muted)">
-        Les deux codes vous sont remis par votre formateur. Aucun mot de passe n'est demande.
+        Les deux codes vous sont remis par votre formateur. Aucun mot de passe n’est demandé.
       </p>
     </form>
   );
@@ -209,7 +209,7 @@ function FacilitatorForm() {
       </button>
 
       <p className="text-sm text-(--foreground-muted)">
-        Compte reserve a l'animation des sessions. Demandez vos identifiants a l'administrateur.
+        Compte réservé à l’animation des sessions. Demandez vos identifiants à l’administrateur.
       </p>
     </form>
   );

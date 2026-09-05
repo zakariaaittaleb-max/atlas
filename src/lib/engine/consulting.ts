@@ -300,6 +300,24 @@ export const STUDY_FIELDS: Record<string, NumericFieldSpec[]> = {
     // Le choc à venir : réservé au palier approfondi. C'est ce qui distingue
     // une équipe qui anticipe d'une équipe qui subit.
     { key: 'next_round_shock_risk', label: 'Risque de choc au prochain tour', errorMode: 'absolute', range: 100, weakSignal: true, unit: '%' },
+
+    // ── La grille PESTEL, dimension par dimension ──────────────────────────
+    //
+    // L'étude s'appelait « PESTEL » et livrait cinq indicateurs de marché : ni
+    // politique, ni écologique, ni légal. Une équipe ne pouvait pas construire
+    // la grille que le nom de l'étude lui promettait.
+    //
+    // Ce qui est vendu n'est PAS l'événement à venir — cela reste le signal
+    // faible ci-dessus — mais l'EXPOSITION STRUCTURELLE de la filière : quelles
+    // dimensions la menacent, et avec quelle intensité. C'est exactement ce
+    // qu'un consultant sait d'un secteur sans rien savoir du trimestre
+    // prochain. L'équipe construit la grille ; le cabinet fournit la matière.
+    { key: 'exposure_politique', label: 'Exposition politique', errorMode: 'absolute', range: 100 },
+    { key: 'exposure_economique', label: 'Exposition économique', errorMode: 'absolute', range: 100 },
+    { key: 'exposure_socioculturel', label: 'Exposition socioculturelle', errorMode: 'absolute', range: 100 },
+    { key: 'exposure_technologique', label: 'Exposition technologique', errorMode: 'absolute', range: 100 },
+    { key: 'exposure_ecologique', label: 'Exposition écologique', errorMode: 'absolute', range: 100 },
+    { key: 'exposure_legal', label: 'Exposition légale et réglementaire', errorMode: 'absolute', range: 100 },
   ],
 
   concurrentielle: [
@@ -309,6 +327,25 @@ export const STUDY_FIELDS: Record<string, NumericFieldSpec[]> = {
     { key: 'competitor_market_share', label: 'Part de marché', errorMode: 'relative', unit: '%' },
     { key: 'pool_concentration', label: 'Concentration du pool', errorMode: 'absolute', range: 100 },
     { key: 'competitor_capacity', label: 'Capacité installée du concurrent', errorMode: 'relative', weakSignal: true },
+
+    // ── Les deux forces de Porter qui manquaient ───────────────────────────
+    //
+    // Le pouvoir des fournisseurs, celui des distributeurs et la rivalité
+    // étaient tous trois achetables. Les DEUX AUTRES ne l'étaient pas :
+    //
+    //   • la menace des ENTRANTS reposait sur `vrio_entry_barrier`, qui
+    //     existait dans le moteur depuis le début et n'était divulgué nulle
+    //     part — une donnée calculée, utilisée, et invisible ;
+    //   • la menace des SUBSTITUTS n'avait aucune donnée du tout.
+    //
+    // Avec ces deux-là, la grille des cinq forces devient constructible.
+    { key: 'entry_barrier', label: 'Barrière à l’entrée du métier', errorMode: 'absolute', range: 100 },
+    { key: 'substitution_pressure', label: 'Menace des substituts', errorMode: 'absolute', range: 100 },
+
+    // Abscisse de la matrice BCG. L'ordonnée — la croissance du marché —
+    // s'achète avec l'étude PESTEL : construire un BCG demande deux missions,
+    // et c'est une leçon de coût de l'information, pas une lacune.
+    { key: 'relative_market_share', label: 'Part de marché relative au leader', errorMode: 'relative' },
   ],
 
   panel_conso: [

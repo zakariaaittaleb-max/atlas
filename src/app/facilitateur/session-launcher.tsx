@@ -6,7 +6,10 @@
  * Le formulaire décide de trois choses qui ne se rattrapent pas ensuite :
  *   • la composition des pools — un pool est une LIGUE, la concurrence à somme
  *     nulle se joue en son sein ;
- *   • les DAS ouverts — le PREMIER est imposé à toutes les équipes en T0 ;
+ *   • les DAS ouverts, et parmi eux le PORTEFEUILLE DE DÉPART — deux choses
+ *     distinctes : ouvrir un domaine le fait exister avec son écosystème et ses
+ *     segments, l'attribuer le met dans les mains des équipes. Un domaine ouvert
+ *     mais non attribué est précisément ce qui reste à acquérir ;
  *   • le nombre de tours prévu, purement indicatif : le facilitateur peut en
  *     ajouter jusqu'au maximum, et la partie ne s'arrête jamais d'elle-même.
  */
@@ -27,6 +30,10 @@ export function SessionLauncher({ sectors }: { sectors: { key: string; name: str
     { name: 'Pool A', teams: 'Équipe A\nÉquipe B\nÉquipe C' },
   ]);
   const [selected, setSelected] = useState<string[]>([sectors[0]?.key ?? '']);
+  // Le portefeuille de départ est un SOUS-ENSEMBLE des domaines ouverts, tenu
+  // comme tel : fermer un domaine le retire aussi du portefeuille, sinon on
+  // provisionnerait des équipes sur un DAS qui n'existe pas.
+  const [starting, setStarting] = useState<string[]>([sectors[0]?.key ?? '']);
   const [plannedRounds, setPlannedRounds] = useState(3);
 
   const disabled = busy || pending;
@@ -61,6 +68,15 @@ export function SessionLauncher({ sectors }: { sectors: { key: string; name: str
       setBusy(false);
       return;
     }
+    // Sans domaine de départ, les équipes n'auraient rien à piloter et tous les
+    // écrans de saisie s'ouvriraient vides.
+    if (starting.length === 0) {
+      setError(
+        'Le portefeuille de départ est vide : les équipes n’exploiteraient aucun domaine.',
+      );
+      setBusy(false);
+      return;
+    }
 
     try {
       const res = await fetch('/api/sessions/provision', {
@@ -70,6 +86,7 @@ export function SessionLauncher({ sectors }: { sectors: { key: string; name: str
           sessionName: name,
           pools: payload,
           sectorKeys: selected,
+          startingSectorKeys: starting,
           plannedRounds,
           maxRounds: 10,
         }),
@@ -183,21 +200,27 @@ export function SessionLauncher({ sectors }: { sectors: { key: string; name: str
         <fieldset>
           <legend className="text-sm font-medium">Domaines d’activité ouverts</legend>
           <p className="mt-1 mb-2 text-xs text-(--foreground-muted)">
-            Le premier sélectionné est celui que toutes les équipes exploitent au départ.
+            Ces domaines sont <strong>provisionnés</strong> : segments, fournisseurs,
+            distributeurs et cibles de rachat. Ouvrir un domaine le fait exister — cela ne
+            l’attribue à personne.
           </p>
           <div className="flex flex-wrap gap-2">
             {sectors.map((s) => {
               const on = selected.includes(s.key);
-              const first = selected[0] === s.key;
               return (
                 <button
                   key={s.key} type="button"
                   onClick={() =>
-                    setSelected((prev) =>
-                      prev.includes(s.key)
-                        ? prev.length > 1 ? prev.filter((k) => k !== s.key) : prev
-                        : [...prev, s.key],
-                    )
+                    setSelected((prev) => {
+                      if (!prev.includes(s.key)) return [...prev, s.key];
+                      if (prev.length === 1) return prev;
+                      // Fermer un domaine le retire aussi du portefeuille :
+                      // sans quoi on doterait les équipes d'un DAS jamais créé.
+                      setStarting((cur) =>
+                        cur.length > 1 ? cur.filter((k) => k !== s.key) : cur,
+                      );
+                      return prev.filter((k) => k !== s.key);
+                    })
                   }
                   className="rounded-lg border px-3 py-2 text-sm"
                   style={{
@@ -206,11 +229,56 @@ export function SessionLauncher({ sectors }: { sectors: { key: string; name: str
                     fontWeight: on ? 600 : 400,
                   }}
                 >
-                  {on ? '✓ ' : ''}{s.name}{first ? ' — départ' : ''}
+                  {on ? '✓ ' : ''}{s.name}
                 </button>
               );
             })}
           </div>
+        </fieldset>
+
+        <fieldset>
+          <legend className="text-sm font-medium">Portefeuille de départ</legend>
+          <p className="mt-1 mb-2 text-xs text-(--foreground-muted)">
+            Ce que <strong>toutes les équipes exploitent au tour 1</strong>, à l’identique.
+            Chaque domaine retenu apporte sa propre dotation — trésorerie, effectif et
+            capacité s’additionnent. Les domaines ouverts que vous ne retenez pas ici
+            restent la <strong>réserve à acquérir</strong> en cours de partie.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {sectors
+              .filter((s) => selected.includes(s.key))
+              .map((s) => {
+                const on = starting.includes(s.key);
+                return (
+                  <button
+                    key={s.key} type="button"
+                    onClick={() =>
+                      setStarting((prev) =>
+                        prev.includes(s.key)
+                          ? prev.length > 1 ? prev.filter((k) => k !== s.key) : prev
+                          : [...prev, s.key],
+                      )
+                    }
+                    className="rounded-lg border px-3 py-2 text-sm"
+                    style={{
+                      borderColor: on ? 'var(--accent)' : 'var(--border)',
+                      background: on ? 'var(--surface-muted)' : undefined,
+                      fontWeight: on ? 600 : 400,
+                    }}
+                  >
+                    {on ? '✓ ' : ''}{s.name}
+                  </button>
+                );
+              })}
+          </div>
+          <p className="mt-2 text-xs text-(--foreground-muted)">
+            {starting.length === 1
+              ? 'Un seul domaine au départ : les équipes se diversifieront par acquisition.'
+              : `${starting.length} domaines au départ — les équipes arbitrent entre eux dès le premier tour.`}
+            {selected.length > starting.length
+              ? ` · ${selected.length - starting.length} domaine(s) en réserve.`
+              : ' · aucune réserve : rien à acquérir en cours de partie.'}
+          </p>
         </fieldset>
 
         <label className="block max-w-xs">

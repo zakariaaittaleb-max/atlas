@@ -1,16 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  BUSINESS_TARGETS,
-  computeAlignment,
-  diagnoseBusiness,
-  marginPremium,
-  penaltyFn,
-  scoreBusinessAlignment,
-  scoreCorporateAlignment,
-  synergyEffect,
-  valuesFit,
+  BUSINESS_TARGETS, BUSINESS_WEIGHTS, CORPORATE_WEIGHTS, computeAlignment, diagnoseBusiness, marginPremium, penaltyFn, scoreBusinessAlignment, scoreCorporateAlignment, synergyEffect, valuesFit, verticalIntegrationIndex,
 } from './alignment';
+import { SAG_WEIGHTS } from './group-alignment';
 import { buildParams, param } from './params';
 import { BUSINESS_AXES } from './types';
 import type { BusinessVector, CorporateInput } from './types';
@@ -471,5 +464,141 @@ describe('SAG dans l’indice global', () => {
       param(params, 'alignment.weight.sac') +
       param(params, 'alignment.weight.sat');
     expect(total).toBeCloseTo(1, 6);
+  });
+});
+
+// ===========================================================================
+// Intégration verticale — un indice DÉRIVÉ, plus une constante
+// ===========================================================================
+
+describe('verticalIntegrationIndex', () => {
+  const unit = (over: Partial<Parameters<typeof verticalIntegrationIndex>[0][number]> = {}) => ({
+    weight: 1_000_000,
+    channelControl: 0,
+    committedVolume: 0,
+    ownedVolume: 0,
+    expectedVolume: 1_000,
+    ...over,
+  });
+
+  it('rend zéro à qui ne contrôle ni son amont ni son aval', () => {
+    expect(verticalIntegrationIndex([unit()], params)).toBe(0);
+  });
+
+  it('rend cent à qui écoule en propre et DÉTIENT son approvisionnement', () => {
+    expect(
+      verticalIntegrationIndex(
+        [unit({ channelControl: 100, ownedVolume: 1_000 })],
+        params,
+      ),
+    ).toBeCloseTo(100, 6);
+  });
+
+  it('compte un CONTRAT pour la moitié d’une DÉTENTION', () => {
+    // Contracter n'est pas intégrer : un contrat sécurise l'amont tant qu'il
+    // court, détenir le maillon le sécurise tout court. C'est la différence
+    // que la stratégie d'intégration verticale prétend faire.
+    const contrat = verticalIntegrationIndex([unit({ committedVolume: 1_000 })], params);
+    const detention = verticalIntegrationIndex([unit({ ownedVolume: 1_000 })], params);
+    expect(contrat).toBeCloseTo(detention / 2, 6);
+  });
+
+  it('fait du rachat de son distributeur un levier d’intégration', () => {
+    // Racheter le maillon aval remonte `channelControl`, et c'est par ce seul
+    // chemin que l'opération atteint l'axe corporate.
+    const tiers = verticalIntegrationIndex([unit({ channelControl: 0 })], params);
+    const integre = verticalIntegrationIndex([unit({ channelControl: 100 })], params);
+    expect(integre).toBeGreaterThan(tiers + 50);
+  });
+
+  it('permet ENFIN d’atteindre la cible de la stratégie d’intégration verticale', () => {
+    // Le défaut corrigé : l'axe valait 20 pour toujours, alors que la cible est
+    // 85 sur le poids le plus lourd de cette stratégie (0,30), plus un malus
+    // absolu de −14 en dessous de 30. L'option était injouable.
+    const engage = verticalIntegrationIndex(
+      [unit({ channelControl: 85, ownedVolume: 900 })],
+      params,
+    );
+    expect(engage).toBeGreaterThan(80);
+  });
+
+  it('pondère par le chiffre d’affaires : un DAS marginal ne fait pas une filière', () => {
+    const index = verticalIntegrationIndex(
+      [
+        unit({ weight: 9_000_000_000, channelControl: 0, ownedVolume: 0 }),
+        unit({ weight: 1_000_000, channelControl: 100, ownedVolume: 1_000 }),
+      ],
+      params,
+    );
+    expect(index).toBeLessThan(5);
+  });
+
+  it('pondère à parts égales quand aucun DAS n’a encore de chiffre d’affaires', () => {
+    // Premier tour, ou domaine tout juste acquis : ignorer ces DAS reviendrait
+    // à supposer qu'une filière naissante n'est pas intégrée.
+    const index = verticalIntegrationIndex(
+      [
+        unit({ weight: 0, channelControl: 100, ownedVolume: 1_000 }),
+        unit({ weight: 0, channelControl: 0, ownedVolume: 0 }),
+      ],
+      params,
+    );
+    expect(index).toBeCloseTo(50, 6);
+  });
+
+  it('rend zéro sans aucun domaine', () => {
+    expect(verticalIntegrationIndex([], params)).toBe(0);
+  });
+});
+
+// ===========================================================================
+// Les poids restent ceux du cahier
+// ===========================================================================
+
+describe('poids de composition de l’IA', () => {
+  it('somment à 1 sur les quatre étages', () => {
+    const total = ['sab', 'sag', 'sac', 'sat']
+      .reduce((acc, k) => acc + params[`alignment.weight.${k}`], 0);
+    expect(total).toBeCloseTo(1, 9);
+  });
+
+  /**
+   * Le cahier (§6.2) pose une formule à TROIS étages :
+   *   IA = 0,55 SAB + 0,35 SAC + 0,10 SAT
+   *
+   * Le SAG s'y est ajouté depuis, à 0,20. La redistribution au prorata, quand
+   * aucune directive n'est saisie, doit retomber EXACTEMENT sur les trois
+   * poids du cahier — sans quoi une session ancienne et une session récente ne
+   * seraient pas notées sur la même échelle, et deux promotions ne se
+   * compareraient plus.
+   */
+  it('retombent sur la formule à trois étages du cahier sans SAG', () => {
+    const { sab, sag, sac, sat } = {
+      sab: params['alignment.weight.sab'],
+      sag: params['alignment.weight.sag'],
+      sac: params['alignment.weight.sac'],
+      sat: params['alignment.weight.sat'],
+    };
+    const scale = (sab + sac + sat + sag) / (sab + sac + sat);
+
+    expect(sab * scale).toBeCloseTo(0.55, 9);
+    expect(sac * scale).toBeCloseTo(0.35, 9);
+    expect(sat * scale).toBeCloseTo(0.10, 9);
+  });
+
+  it('somment à 1 pour les quatre composantes du SAG', () => {
+    const total = Object.values(SAG_WEIGHTS).reduce((a, v) => a + v, 0);
+    expect(total).toBeCloseTo(1, 9);
+  });
+
+  it('somment à 1 sur chaque jeu de poids business et corporate', () => {
+    for (const [strategy, weights] of Object.entries(BUSINESS_WEIGHTS)) {
+      const total = Object.values(weights).reduce((a, v) => a + v, 0);
+      expect(total, `business ${strategy}`).toBeCloseTo(1, 6);
+    }
+    for (const [strategy, weights] of Object.entries(CORPORATE_WEIGHTS)) {
+      const total = Object.values(weights).reduce((a, v) => a + v, 0);
+      expect(total, `corporate ${strategy}`).toBeCloseTo(1, 6);
+    }
   });
 });

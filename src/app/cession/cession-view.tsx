@@ -17,6 +17,7 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
+import { NumberInput } from '@/components/decision-shell';
 import { formatMadCompact, formatPct, formatUnits } from '@/lib/format';
 
 export interface SellableDas {
@@ -52,6 +53,24 @@ export interface PublicListing {
   };
 }
 
+/**
+ * Un maillon de sa PROPRE filière : un fournisseur ou un distributeur d'un
+ * domaine que l'équipe exploite déjà.
+ *
+ * Rien à voir avec une cible d'entrée. On n'y gagne aucune part de marché — on
+ * y gagne de ne plus payer d'intermédiaire, et de contrôler son
+ * approvisionnement ou son canal.
+ */
+export interface IntegrationTarget {
+  targetActorId: string;
+  targetName: string;
+  dasName: string;
+  regionKey: string | null;
+  actorType: 'fournisseur' | 'distributeur';
+  alreadyOwned: boolean;
+  ownedByMe: boolean;
+}
+
 export interface AcquisitionTarget {
   targetActorId: string;
   targetName: string;
@@ -73,6 +92,7 @@ interface MyBid {
 
 export function CessionView({
   roundNumber, decisionsOpen, sellable, ownListings, market, myBids, targets, myOffers,
+  integrationTargets,
 }: {
   roundNumber: number;
   decisionsOpen: boolean;
@@ -82,6 +102,7 @@ export function CessionView({
   myBids: MyBid[];
   targets: AcquisitionTarget[];
   myOffers: MyOffer[];
+  integrationTargets: IntegrationTarget[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -203,6 +224,50 @@ export function CessionView({
                 key={target.targetActorId}
                 target={target}
                 existingOffer={myOffers.find((o) => o.targetActorId === target.targetActorId)}
+                disabled={disabled}
+                onSend={(body) => send(body, '/api/acquisitions')}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* ── Intégrer un maillon de sa PROPRE filière ─────────────────────── */}
+      <section className="mb-10">
+        <h2 className="mb-2 text-xl font-medium">Intégrer votre filière</h2>
+        <p className="mb-4 max-w-3xl text-sm text-(--foreground-muted)">
+          Racheter un <strong>fournisseur</strong> supprime la marge qu’il prélevait et sécurise
+          votre approvisionnement : vous ne négociez plus contre lui, vous le possédez.
+          Racheter un <strong>distributeur</strong> fait passer sa couverture du canal tiers à
+          votre réseau propre — il ne prélève plus de marge et n’impose plus de volume minimal.
+        </p>
+        <p className="mb-4 max-w-3xl rounded-lg border border-(--border) px-4 py-3 text-sm text-(--foreground-muted)">
+          Ce que cela coûte, au-delà du prix : vous immobilisez du capital dans un maillon
+          qu’il faut désormais faire tourner, et l’opération <strong>déplace votre indice
+          d’alignement</strong>. Elle sert une stratégie d’intégration verticale ; elle
+          contredit une domination par les coûts, qui vise un contrôle du canal faible.
+          Le moteur relèvera l’un comme l’autre.
+        </p>
+
+        {integrationTargets.length === 0 ? (
+          <p className="rounded-xl border border-(--border) bg-(--surface) p-6 text-(--foreground-muted)">
+            Aucun maillon intégrable : cette section ne liste que les fournisseurs et
+            distributeurs des domaines que vous exploitez.
+          </p>
+        ) : (
+          <ul className="space-y-4">
+            {integrationTargets.map((link) => (
+              <AcquisitionCard
+                key={link.targetActorId}
+                target={{
+                  targetActorId: link.targetActorId,
+                  targetName: link.targetName,
+                  dasName: link.dasName,
+                  regionKey: link.regionKey,
+                }}
+                badge={link.actorType === 'fournisseur' ? 'Amont' : 'Aval'}
+                owned={link.ownedByMe ? 'moi' : link.alreadyOwned ? 'autre' : null}
+                existingOffer={myOffers.find((o) => o.targetActorId === link.targetActorId)}
                 disabled={disabled}
                 onSend={(body) => send(body, '/api/acquisitions')}
               />
@@ -367,18 +432,16 @@ function MarketCard({
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className="text-sm font-medium">Votre offre (DH)</span>
-            <input
-              type="number" min={1} step={1000} required value={offer}
-              onChange={(e) => setOffer(e.target.value)}
-              className="tabular mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2"
+            <NumberInput
+              value={offerValue} onChange={(v) => setOffer(String(v))}
+              className="mt-1.5 w-full"
             />
           </label>
           <label className="block">
             <span className="text-sm font-medium">Budget d’intégration (DH)</span>
-            <input
-              type="number" min={0} step={1000} value={integration}
-              onChange={(e) => setIntegration(e.target.value)}
-              className="tabular mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2"
+            <NumberInput
+              value={integrationValue} onChange={(v) => setIntegration(String(v))}
+              className="mt-1.5 w-full"
             />
           </label>
         </div>
@@ -399,7 +462,7 @@ function MarketCard({
 
         <button
           type="submit"
-          disabled={disabled}
+          disabled={disabled || offerValue < 1}
           className="mt-4 rounded-lg bg-(--accent) px-5 py-2.5 text-sm font-medium text-white disabled:opacity-40"
         >
           {existingBid ? 'Modifier mon offre scellée' : 'Déposer une offre scellée'}
@@ -411,12 +474,16 @@ function MarketCard({
 
 /** Fiche d'une cible acquérable, et formulaire d'offre scellée. */
 function AcquisitionCard({
-  target, existingOffer, disabled, onSend,
+  target, existingOffer, disabled, onSend, badge, owned,
 }: {
   target: AcquisitionTarget;
   existingOffer: MyOffer | undefined;
   disabled: boolean;
   onSend: (body: Record<string, unknown>) => void;
+  /** « Amont » ou « Aval » pour un maillon de filière. */
+  badge?: string;
+  /** Un maillon déjà racheté n'est plus sur le marché. */
+  owned?: 'moi' | 'autre' | null;
 }) {
   const [offer, setOffer] = useState(existingOffer ? String(existingOffer.offerMad) : '');
   const [integration, setIntegration] = useState(
@@ -431,13 +498,32 @@ function AcquisitionCard({
   return (
     <li className="rounded-xl border border-(--border) bg-(--surface) p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h3 className="text-lg font-medium">{target.targetName}</h3>
+        <h3 className="flex items-baseline gap-2.5 text-lg font-medium">
+          {badge ? (
+            <span
+              className="rounded border px-1.5 py-0.5 text-xs font-semibold tracking-wide uppercase"
+              style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+            >
+              {badge}
+            </span>
+          ) : null}
+          {target.targetName}
+        </h3>
         <p className="text-sm text-(--foreground-muted)">
           {target.dasName}
           {target.regionKey ? ` · ${target.regionKey.replace(/_/g, ' ')}` : ''}
         </p>
       </div>
 
+      {owned ? (
+        <p className="mt-3 text-sm" style={{ color: owned === 'moi' ? 'var(--positive)' : 'var(--warning)' }}>
+          {owned === 'moi'
+            ? 'Vous détenez ce maillon : il ne prélève plus de marge et ne négocie plus contre vous.'
+            : 'Racheté par une autre équipe. Il n’est plus indépendant — et son nouveau propriétaire décide de ce qu’il vous vend.'}
+        </p>
+      ) : null}
+
+      {owned ? null : (
       <form
         className="mt-5 border-t border-(--border) pt-5"
         onSubmit={(e) => {
@@ -453,10 +539,9 @@ function AcquisitionCard({
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className="text-sm font-medium">Votre offre (DH)</span>
-            <input
-              type="number" min={1} step={1_000_000} required value={offer}
-              onChange={(e) => setOffer(e.target.value)}
-              className="tabular mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2"
+            <NumberInput
+              value={offerValue} onChange={(v) => setOffer(String(v))}
+              className="mt-1.5 w-full"
             />
             <span className="mt-1 block text-xs text-(--foreground-muted)">
               La cible a un prix de réserve : en deçà, elle refuse et personne n’acquiert.
@@ -464,10 +549,9 @@ function AcquisitionCard({
           </label>
           <label className="block">
             <span className="text-sm font-medium">Budget d’intégration (DH)</span>
-            <input
-              type="number" min={0} step={1_000_000} value={integration}
-              onChange={(e) => setIntegration(e.target.value)}
-              className="tabular mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2"
+            <NumberInput
+              value={integrationValue} onChange={(v) => setIntegration(String(v))}
+              className="mt-1.5 w-full"
             />
           </label>
         </div>
@@ -486,7 +570,7 @@ function AcquisitionCard({
 
         <div className="mt-4 flex flex-wrap gap-2">
           <button
-            type="submit" disabled={disabled}
+            type="submit" disabled={disabled || offerValue < 1}
             className="rounded-lg bg-(--accent) px-5 py-2.5 text-sm font-medium text-white disabled:opacity-40"
           >
             {existingOffer ? 'Modifier mon offre scellée' : 'Déposer une offre scellée'}
@@ -502,6 +586,7 @@ function AcquisitionCard({
           ) : null}
         </div>
       </form>
+      )}
     </li>
   );
 }

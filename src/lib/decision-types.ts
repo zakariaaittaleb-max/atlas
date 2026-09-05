@@ -9,6 +9,13 @@
  * les imports de type — mais rend la frontière fragile : le jour où quelqu'un y
  * ajoute un import de valeur, la fuite est silencieuse. Le test
  * `boundaries.test.ts` refuse donc la dépendance, type ou pas.
+ *
+ * ── DEUX JEUX DE VALEURS, ET POURQUOI ──────────────────────────────────────
+ * Chaque bloc de saisie porte ses valeurs COURANTES et ses valeurs
+ * D'OUVERTURE DE TOUR. Les secondes sont la cible du bouton « Réinitialiser » :
+ * une équipe qui a passé vingt minutes à empiler des hypothèses doit pouvoir
+ * revenir à l'état dans lequel elle a pris le tour, sans se souvenir de ce
+ * qu'elle a changé. Sans elles, « annuler » n'aurait aucune définition.
  */
 
 /** Périmètre d'équipe de l'utilisateur courant. */
@@ -22,24 +29,90 @@ export interface TeamContext {
   isLiquidated: boolean;
 }
 
+export interface CorporateValues {
+  corporateStrategy: string;
+  structureType: string;
+  centralPurchasing: boolean;
+  centralIt: boolean;
+  centralRd: boolean;
+  centralHr: boolean;
+  centralFinance: boolean;
+  sharedProduction: boolean;
+  sharedRd: boolean;
+  value1: string;
+  value2: string;
+  vision: string | null;
+  mission: string | null;
+}
+
+export interface DasDecisionValues {
+  genericStrategy: string;
+  pricePosition: number;
+  servedSegments: string[];
+  capexCapacityMad: number;
+  capexAutomationMad: number;
+  capexOwnNetworkMad: number;
+  rdBudgetMad: number;
+  marketingBudgetMad: number;
+  declareBlueOcean: boolean;
+}
+
+export interface FinanceValues {
+  opexMad: number;
+  debtDrawnMad: number;
+  debtRepaidMad: number;
+  taxRegime: string;
+}
+
+export interface ProcurementLine {
+  supplierId: string;
+  committedVolume: number;
+}
+
+export interface DistributionLine {
+  distributorId: string;
+  volumeShare: number;
+}
+
+/**
+ * Ce qui reste à faire sur un domaine, volet par volet.
+ *
+ * Alimente le fil d'Ariane des écrans de saisie : le parcours attendu est
+ * « je choisis un domaine, je le renseigne partout, je passe au suivant », et
+ * il faut donc pouvoir constater d'un coup d'œil où l'on en est SUR CE
+ * DOMAINE-LÀ — pas sur l'ensemble du portefeuille.
+ */
+export interface DasProgress {
+  strategy: boolean;
+  procurement: boolean;
+  distribution: boolean;
+  organisation: boolean;
+  hr: boolean;
+}
+
 export interface DasEntry {
   dasId: string;
   name: string;
   sectorKey: string;
+  /** `listed_for_sale` : encore piloté, mais mis en vente ce tour. */
+  status: 'active' | 'listed_for_sale';
+  launchedRound: number;
+  /** Entré par rachat ou acquisition, et non par la dotation initiale. */
+  acquired: boolean;
   segments: { key: string; name: string }[];
-  decision: {
-    genericStrategy: string;
-    pricePosition: number;
-    servedSegments: string[];
-    capexCapacityMad: number;
-    capexAutomationMad: number;
-    capexOwnNetworkMad: number;
-    rdBudgetMad: number;
-    marketingBudgetMad: number;
-    declareBlueOcean: boolean;
-  } | null;
-  procurement: { supplierId: string; committedVolume: number }[];
-  distribution: { distributorId: string; volumeShare: number }[];
+  /** Valeurs affichées : celles du tour, ou celles reconduites de l'exercice clos. */
+  decision: DasDecisionValues;
+  /** Le tour a-t-il déjà reçu une décision écrite pour ce domaine ? */
+  decisionRecorded: boolean;
+  procurement: ProcurementLine[];
+  distribution: DistributionLine[];
+  /** L'état à l'ouverture du tour — cible du bouton « Réinitialiser ». */
+  baseline: {
+    decision: DasDecisionValues;
+    procurement: ProcurementLine[];
+    distribution: DistributionLine[];
+  };
+  progress: DasProgress;
   suppliers: ActorEntry[];
   distributors: ActorEntry[];
 }
@@ -48,6 +121,26 @@ export interface ActorEntry {
   id: string;
   name: string;
   regionKey: string | null;
+}
+
+/**
+ * Consolidation RH du groupe, DÉRIVÉE des saisies par domaine.
+ *
+ * Les recrutements se décident domaine par domaine — une conserverie et une
+ * société de services n'ont ni la même pyramide ni la même politique salariale.
+ * Le groupe n'en saisit donc rien : il en constate la somme, et c'est cette
+ * somme qui alimente sa masse salariale.
+ */
+export interface HrRollup {
+  headcountStart: number;
+  hires: number;
+  layoffs: number;
+  headcountEnd: number;
+  avgSalaryBrutMad: number;
+  trainingBudgetMad: number;
+  payrollMad: number;
+  /** Domaines dont les RH ne sont pas encore renseignées ce tour. */
+  pendingDas: { dasId: string; name: string }[];
 }
 
 export interface DecisionContext {
@@ -59,38 +152,54 @@ export interface DecisionContext {
   treasuryMad: number;
   headcount: number;
   avgSalaryMad: number;
-  corporate: {
-    corporateStrategy: string;
-    structureType: string;
-    centralPurchasing: boolean;
-    centralIt: boolean;
-    centralRd: boolean;
-    centralHr: boolean;
-    centralFinance: boolean;
-    sharedProduction: boolean;
-    sharedRd: boolean;
-    value1: string;
-    value2: string;
-    vision: string | null;
-    mission: string | null;
-  } | null;
-  hr: {
-    hireOperateurs: number;
-    hireTechniciens: number;
-    hireExperts: number;
-    hireCadres: number;
-    avgSalaryBrutMad: number;
-    trainingBudgetMad: number;
-    restructuringCount: number;
-  } | null;
-  finance: {
-    opexMad: number;
-    debtDrawnMad: number;
-    debtRepaidMad: number;
-    taxRegime: string;
-  } | null;
+  /** Valeurs affichées : celles du tour, ou celles reconduites de l'exercice clos. */
+  corporate: CorporateValues;
+  corporateRecorded: boolean;
+  corporateBaseline: CorporateValues;
+  finance: FinanceValues;
+  financeRecorded: boolean;
+  financeBaseline: FinanceValues;
+  hr: HrRollup;
   debtOutstandingMad: number;
   das: DasEntry[];
   smigMad: number;
   chargesPatronalesPct: number;
+}
+
+export const CORPORATE_DEFAULTS: CorporateValues = {
+  corporateStrategy: 'specialisation',
+  structureType: 'fonctionnelle',
+  centralPurchasing: false,
+  centralIt: false,
+  centralRd: false,
+  centralHr: false,
+  centralFinance: true,
+  sharedProduction: false,
+  sharedRd: false,
+  value1: 'fiabilite_service',
+  value2: 'efficience_operationnelle',
+  vision: null,
+  mission: null,
+};
+
+export const FINANCE_DEFAULTS: FinanceValues = {
+  opexMad: 0,
+  debtDrawnMad: 0,
+  debtRepaidMad: 0,
+  taxRegime: 'droit_commun',
+};
+
+export function dasDecisionDefaults(segments: { key: string }[]): DasDecisionValues {
+  return {
+    genericStrategy: 'domination_couts',
+    pricePosition: 50,
+    // Au moins un segment : sans marché adressable, il n'y a rien à calculer.
+    servedSegments: segments.slice(0, 1).map((s) => s.key),
+    capexCapacityMad: 0,
+    capexAutomationMad: 0,
+    capexOwnNetworkMad: 0,
+    rdBudgetMad: 0,
+    marketingBudgetMad: 0,
+    declareBlueOcean: false,
+  };
 }

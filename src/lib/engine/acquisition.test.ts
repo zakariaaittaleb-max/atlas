@@ -35,3 +35,32 @@ describe('acquisition externe', () => {
       .toBeCloseTo(outcome.marketShareTransferred / 0.30, 6);
   });
 });
+
+describe('historique du domaine acquis', () => {
+  /**
+   * Le chiffre d'affaires repris était inscrit à ZÉRO en base, alors que le
+   * poids réel de la cible était chargé côté serveur et transmis au moteur.
+   * Un domaine racheté entrait sans passé commercial, et le tour suivant en
+   * tirait quatre conséquences fausses : poids nul dans le SAB pondéré, rôle
+   * de portefeuille injugeable, aucun apport à l'intégration verticale, et un
+   * océan bleu déclarable gratuitement — le ticket étant proportionnel à un
+   * chiffre d'affaires nul.
+   */
+  it('reprend le chiffre d’affaires, amputé de la perte d’intégration', () => {
+    const outcome = resolveTransfer(1_000_000_000, 200_000_000, 0.25, 70, params);
+    const repris = 800_000_000 * (1 - outcome.valueLossPct);
+
+    expect(repris).toBeGreaterThan(0);
+    expect(repris).toBeLessThan(800_000_000);
+  });
+
+  it('reprend le chiffre d’affaires au même rythme que la part de marché', () => {
+    // Mal intégrer, c'est perdre des clients : le chiffre d'affaires et la
+    // part de marché suivent la même érosion, sans quoi l'un dirait une chose
+    // et l'autre son contraire au débriefing.
+    const outcome = resolveTransfer(1_000_000_000, 0, 0.30, 80, params);
+    const revenu = 500_000_000 * (1 - outcome.valueLossPct);
+
+    expect(revenu / 500_000_000).toBeCloseTo(outcome.marketShareTransferred / 0.30, 9);
+  });
+});

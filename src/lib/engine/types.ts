@@ -223,6 +223,23 @@ export interface SupplierOffer {
   capacityUnits: number;
   switchingCost: number;
   minimumVolume: number;
+  /**
+   * L'équipe a racheté ce fournisseur — intégration amont.
+   *
+   * Ce n'est pas une remise de plus : c'est la disparition d'un intermédiaire.
+   * La marge que le fournisseur prenait revient à l'acheteur, son pouvoir de
+   * négociation cesse d'exister contre son propre propriétaire, et le coût de
+   * changement n'a plus d'objet. En échange, l'équipe immobilise du capital
+   * dans un maillon qu'elle doit désormais faire tourner.
+   */
+  ownedByTeam?: boolean;
+  /**
+   * Part du bénéfice d'intégration réellement captée, figée au rachat.
+   *
+   * Racheter sans budgéter l'intégration laisse propriétaire d'une entreprise
+   * qu'on ne sait pas faire tourner. 1 = intégration réussie.
+   */
+  integrationQuality?: number;
 }
 
 export interface DistributorOffer {
@@ -232,6 +249,17 @@ export interface DistributorOffer {
   negotiatingStrength: number;
   serviceLevel: number;
   minimumVolume: number;
+  /**
+   * L'équipe a racheté ce distributeur — intégration aval.
+   *
+   * Sa couverture cesse d'être celle d'un TIERS : elle rejoint le réseau
+   * propre, ce qui remonte le contrôle du canal — et donc l'axe `channel_control`
+   * du domaine ET l'intégration verticale du groupe. La marge qu'il exigeait
+   * ne sort plus de la maison ; il reste le coût de le faire fonctionner.
+   */
+  ownedByTeam?: boolean;
+  /** Part du bénéfice d'intégration réellement captée, figée au rachat. */
+  integrationQuality?: number;
 }
 
 export interface ProcurementResult {

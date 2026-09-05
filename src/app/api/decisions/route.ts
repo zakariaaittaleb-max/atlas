@@ -26,7 +26,22 @@ const VALUES = [
   'efficience_operationnelle', 'responsabilite_sociale', 'ancrage_territorial', 'fiabilite_service',
 ] as const;
 
-const money = z.number().min(0).finite();
+/**
+ * Un montant en dirhams, tel qu'il entre en base.
+ *
+ * ── POURQUOI L'ARRONDI EST ICI, ET PAS DANS L'ÉCRAN ────────────────────────
+ * La colonne est un `numeric` : elle accepte sans broncher
+ * `578444444.4444445`, et c'est bien ce qu'elle contenait. Une fraction de
+ * centime de dirham ne veut rien dire — ni pour l'équipe, ni pour le moteur,
+ * ni pour l'export comptable — et elle ressort telle quelle partout où on la
+ * relit, y compris dans un champ de saisie.
+ *
+ * Arrondir à l'AFFICHAGE ne réglerait que l'écran où l'on a vu le défaut : la
+ * valeur sale resterait en base et reparaîtrait au prochain endroit qui la
+ * lit. La frontière d'écriture est le seul point que TOUS les chemins
+ * traversent — saisie, reconduction d'un tour à l'autre, import.
+ */
+const money = z.number().min(0).finite().transform(Math.round);
 
 const Payload = z.discriminatedUnion('plan', [
   // Plan 1 & 6 — portefeuille corporate, structure, centralisation, valeurs.
@@ -75,7 +90,7 @@ const Payload = z.discriminatedUnion('plan', [
     dasId: z.string().uuid(),
     lines: z.array(z.object({
       supplierId: z.string().uuid(),
-      committedVolume: z.number().min(0).finite(),
+      committedVolume: z.number().min(0).finite().transform(Math.round),
     })).max(5),
   }),
 
@@ -92,17 +107,9 @@ const Payload = z.discriminatedUnion('plan', [
     { message: 'La somme des parts de volume confiées ne peut pas dépasser 100 %.', path: ['lines'] },
   ),
 
-  // Plan 6 — ressources humaines.
-  z.object({
-    plan: z.literal('hr'),
-    hireOperateurs: z.number().int().min(0),
-    hireTechniciens: z.number().int().min(0),
-    hireExperts: z.number().int().min(0),
-    hireCadres: z.number().int().min(0),
-    avgSalaryBrutMad: z.number().min(0).finite(),
-    trainingBudgetMad: money,
-    restructuringCount: z.number().int().min(0),
-  }),
+  // Plan 6 — ressources humaines : DÉPLACÉ vers `/api/organisation`, bloc `hr`.
+  // Le recrutement se saisit domaine par domaine ; ce point d'entrée ne
+  // l'accepte plus. Voir le refus explicite au début du POST.
 
   // Plan 7 — finance.
   z.object({
@@ -121,7 +128,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Votre équipe est en liquidation.' }, { status: 409 });
   }
 
-  const parsed = Payload.safeParse(await request.json().catch(() => null));
+  const raw: unknown = await request.json().catch(() => null);
+
+  // Saisie RH de niveau groupe : plus produite par aucun écran depuis que le
+  // recrutement se décide domaine par domaine. Elle est refusée AVANT l'analyse
+  // — le plan ne figure plus dans le schéma, et un message générique
+  // « saisie invalide » n'apprendrait rien à une équipe dont le poste rejoue
+  // une file d'auto-sauvegarde vieille d'un déploiement.
+  //
+  // 400 et non 500 : la file traite le 400 comme définitif et retire
+  // l'écriture, là où un 500 la ferait réessayer indéfiniment.
+  if (typeof raw === 'object' && raw !== null && (raw as { plan?: unknown }).plan === 'hr') {
+    return NextResponse.json(
+      {
+        error:
+          'Le recrutement se saisit maintenant domaine par domaine, dans l’écran '
+          + 'Organisation. Cette saisie n’a pas été reprise.',
+      },
+      { status: 400 },
+    );
+  }
+
+  const parsed = Payload.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? 'Saisie invalide.' },
@@ -241,26 +269,6 @@ async function write(admin: Admin, teamId: string, round: number, body: Body): P
     return;
   }
 
-  if (body.plan === 'hr') {
-    // L'effectif de départ vient de l'état du tour précédent : il n'est pas
-    // saisissable, il est constaté.
-    const { data: previous } = await admin
-      .from('team_round_state').select('headcount')
-      .eq('team_id', teamId).eq('round_number', round - 1).maybeSingle();
-
-    fail((await admin.from('hr_metrics').upsert({
-      team_id: teamId, round_number: round,
-      headcount_start: Number(previous?.headcount ?? 0),
-      hire_operateurs: body.hireOperateurs,
-      hire_techniciens: body.hireTechniciens,
-      hire_experts: body.hireExperts,
-      hire_cadres: body.hireCadres,
-      avg_salary_brut_mad: body.avgSalaryBrutMad,
-      training_budget_mad: body.trainingBudgetMad,
-      restructuring_count: body.restructuringCount,
-    }, { onConflict: 'team_id,round_number' })).error);
-    return;
-  }
 
   // Plan finance : trésorerie, capitaux propres et dette sont REPRIS du tour
   // précédent, jamais saisis — une équipe ne décide pas de son bilan d'ouverture.

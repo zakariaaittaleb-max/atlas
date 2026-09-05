@@ -28,8 +28,8 @@ const Payload = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('bid'),
     targetActorId: z.string().uuid(),
-    offerMad: z.number().positive().finite(),
-    integrationBudgetMad: z.number().min(0).finite(),
+    offerMad: z.number().positive().finite().transform(Math.round),
+    integrationBudgetMad: z.number().min(0).finite().transform(Math.round),
   }),
   z.object({ action: z.literal('withdraw'), targetActorId: z.string().uuid() }),
 ]);
@@ -70,17 +70,31 @@ export async function POST(request: Request) {
   // La cible doit exister, appartenir à la session, et être acquérable.
   const { data: target } = await admin
     .from('ecosystem_actors')
-    .select('id, session_id, das_id, actor_type, name')
+    .select('id, session_id, das_id, actor_type, name, market_open, owner_team_id')
     .eq('id', body.targetActorId)
     .maybeSingle();
 
-  if (!target || target.session_id !== team.sessionId || target.actor_type !== 'cible_acquisition') {
+  const ACQUERABLE = ['cible_acquisition', 'fournisseur', 'distributeur'];
+
+  if (!target || target.session_id !== team.sessionId
+      || !ACQUERABLE.includes(String(target.actor_type))) {
     return NextResponse.json({ error: 'Cible introuvable.' }, { status: 404 });
   }
 
-  // On ne rachète pas une entreprise d'un domaine qu'on exploite déjà : ce
-  // serait une consolidation, pas une entrée. Le mécanisme prévu pour cela est
-  // le rachat d'un DAS mis en vente par une équipe concurrente.
+  // ── Deux opérations, deux conditions d'accès ───────────────────────────────
+  //
+  // ENTRER dans un domaine qu'on n'exploite pas se fait sur la réserve de
+  // cibles, que le facilitateur ouvre quand il le décide.
+  //
+  // INTÉGRER un maillon de sa propre filière se fait sur les fournisseurs et
+  // distributeurs du domaine — et suppose précisément qu'on l'exploite. C'est
+  // aussi ce qui garantit que l'équipe peut acheter les données de la cible :
+  // benchmark et due diligence sont des études de DAS.
+  const operation =
+    target.actor_type === 'fournisseur' ? 'integration_amont'
+      : target.actor_type === 'distributeur' ? 'integration_aval'
+        : 'entree_das';
+
   const { data: existing } = await admin
     .from('team_units')
     .select('id')
@@ -88,14 +102,52 @@ export async function POST(request: Request) {
     .in('status', ['active', 'listed_for_sale'])
     .maybeSingle();
 
-  if (existing) {
-    return NextResponse.json(
-      {
-        error: 'Vous exploitez déjà ce domaine. Pour vous renforcer, visez un DAS mis en vente '
-          + 'par une équipe concurrente.',
-      },
-      { status: 409 },
-    );
+  if (operation === 'entree_das') {
+    // La vue publique filtre déjà les cibles fermées, mais ce Route Handler
+    // écrit avec le client `service_role` — il CONTOURNE la RLS, et un POST
+    // direct atteindrait sinon une cible que personne n'a mise sur le marché.
+    if (!target.market_open) {
+      return NextResponse.json(
+        { error: 'Cette cible n’est pas ouverte à l’acquisition.' },
+        { status: 409 },
+      );
+    }
+
+    // On ne rachète pas une entreprise d'un domaine qu'on exploite déjà : ce
+    // serait une consolidation, pas une entrée.
+    if (existing) {
+      return NextResponse.json(
+        {
+          error: 'Vous exploitez déjà ce domaine. Pour vous y renforcer, rachetez un de ses '
+            + 'fournisseurs ou distributeurs, ou visez un DAS mis en vente par une équipe '
+            + 'concurrente.',
+        },
+        { status: 409 },
+      );
+    }
+  } else {
+    if (!existing) {
+      return NextResponse.json(
+        {
+          error: 'On n’intègre pas une filière dans laquelle on n’est pas. Rachetez d’abord une '
+            + 'entreprise du domaine, ou lancez-vous-y.',
+        },
+        { status: 409 },
+      );
+    }
+
+    // Un maillon déjà détenu — par vous ou par une concurrente — n'est plus à
+    // vendre : il appartient à un groupe, il n'est plus sur le marché.
+    if (target.owner_team_id) {
+      return NextResponse.json(
+        {
+          error: String(target.owner_team_id) === team.teamId
+            ? 'Vous détenez déjà ce maillon.'
+            : 'Ce maillon a été racheté par une autre équipe : il n’est plus indépendant.',
+        },
+        { status: 409 },
+      );
+    }
   }
 
   const { error } = await admin.from('acquisition_offers').upsert(
@@ -104,6 +156,7 @@ export async function POST(request: Request) {
       bidder_team_id: team.teamId,
       target_actor_id: body.targetActorId,
       das_id: target.das_id,
+      operation,
       round_number: roundNumber,
       offer_mad: body.offerMad,
       integration_budget_mad: body.integrationBudgetMad,
@@ -119,7 +172,7 @@ export async function POST(request: Request) {
   await admin.from('decisions_log').insert({
     team_id: team.teamId, round_number: roundNumber, decision_type: 'offre_acquisition',
     payload: {
-      targetActorId: body.targetActorId, dasId: target.das_id,
+      targetActorId: body.targetActorId, dasId: target.das_id, operation,
       offerMad: body.offerMad, integrationBudgetMad: body.integrationBudgetMad,
     },
     decided_by: team.userId,

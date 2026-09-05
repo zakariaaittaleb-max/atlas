@@ -1,0 +1,14 @@
+node_modules
+.git
+.gitignore
+.next
+out
+coverage
+.DS_Store
+*.log
+.env.local
+.env.*.local
+.claude
+scripts
+*.md
+!README.md

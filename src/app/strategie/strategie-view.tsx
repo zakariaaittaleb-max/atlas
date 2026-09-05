@@ -3,26 +3,46 @@
 /**
  * ATLAS — écrans de stratégie : plans 1, 2 et 3 du cahier.
  *
- * Corporate (portefeuille, structure, centralisation, valeurs) puis, pour
- * chaque DAS, la stratégie générique, le prix, les segments et les
- * investissements.
+ * ── DEUX NIVEAUX, DEUX ÉCRANS ──────────────────────────────────────────────
+ * Ce fichier porte DEUX vues, servies par deux adresses distinctes :
  *
- * Principe d'écriture : chaque champ déclenche une auto-sauvegarde. L'écran ne
- * connaît qu'un seul contrat — `POST /api/decisions` — et la file d'attente
- * locale se charge des coupures réseau.
+ *   • `/strategie`     → {@link StrategieGroupeView} — portefeuille, structure,
+ *     centralisation, mutualisation, valeurs, vision. Cela vaut pour
+ *     l'entreprise entière et ne se saisit qu'une fois.
+ *   • `/strategie/das` → {@link StrategieDasView} — stratégie générique, prix,
+ *     segments, investissements. Cela ne concerne QUE le domaine choisi dans la
+ *     barre du haut.
  *
- * Ce que l'écran NE FAIT PAS, délibérément : il n'annonce aucun résultat. Il
- * dit le coût d'une décision, jamais son effet sur la part de marché. Prédire
- * le résultat rendrait la révélation sans intérêt, et le jeu se transformerait
- * en optimisation par tâtonnement.
+ * Les deux blocs vivaient auparavant sur la même page, l'un sous l'autre, et la
+ * barre de navigation prétendait les distinguer avec deux entrées pointant vers
+ * la même adresse à une ancre près. Le résultat était le contraire de ce que le
+ * cahier demande : « Stratégie du Groupe » ouvrait un écran où la stratégie du
+ * domaine était visible juste en dessous, si bien qu'on réglait un prix — une
+ * décision de DAS — en croyant piloter le Groupe. Séparer les adresses est la
+ * seule façon de rendre la frontière vraie plutôt que décorative : chaque écran
+ * ne montre QUE son niveau, et le changement d'écran est le geste qui marque le
+ * changement de niveau de décision.
+ *
+ * ── CE QUE LES DEUX ÉCRANS NE FONT PAS, DÉLIBÉRÉMENT ───────────────────────
+ * Ils n'annoncent aucun résultat. Ils disent le coût d'une décision, jamais son
+ * effet sur la part de marché. Prédire le résultat rendrait la révélation sans
+ * intérêt, et le jeu deviendrait une optimisation par tâtonnement.
  */
 
 import { useRouter } from 'next/navigation';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
-import { BudgetGauge, DecisionBar, type MissingDecision } from '@/components/decision-shell';
-import { formatMadCompact, strategyLabel } from '@/lib/format';
-import type { DasEntry, DecisionContext } from '@/lib/decision-types';
+import { useDasScope } from '@/components/das-scope';
+import {
+  BudgetGauge, DasChecklist, DecisionBar, MoneyField as Money, SectionActions,
+  type MissingDecision,
+} from '@/components/decision-shell';
+import { formatMadCompact, formatScore, strategyLabel } from '@/lib/format';
+import {
+  dasDecisionDefaults,
+  type CorporateValues, type DasDecisionValues, type DasEntry, type DecisionContext,
+} from '@/lib/decision-types';
+import { deepEqual } from '@/lib/deep-equal';
 import { useAutosave } from '@/lib/use-autosave';
 
 const CORPORATE = [
@@ -63,84 +83,55 @@ const FUNCTIONS = [
   ['centralRd', 'R&D'], ['centralHr', 'Ressources humaines'], ['centralFinance', 'Finance'],
 ] as const;
 
-export function StrategieView({
+/* ══════════════════════════════════════════════════════════════════════════
+   NIVEAU 1 — LE GROUPE                                          `/strategie`
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Ce que décide l'entreprise entière, une fois pour toutes ses activités.
+ *
+ * Aucun sélecteur de domaine n'agit sur cet écran : rien de ce qu'il porte n'est
+ * propre à un métier. C'est précisément ce qui justifie qu'il soit seul sur sa
+ * page — tant qu'il cohabitait avec les investissements d'un DAS, le domaine
+ * affiché dans la barre semblait gouverner l'ensemble.
+ */
+export function StrategieGroupeView({
   context, missing,
 }: { context: DecisionContext; missing: MissingDecision[] }) {
   const router = useRouter();
   const autosave = useAutosave();
   const locked = !context.decisionsOpen;
 
-  const [corporate, setCorporate] = useState(() => context.corporate ?? {
-    corporateStrategy: 'specialisation', structureType: 'fonctionnelle',
-    centralPurchasing: false, centralIt: false, centralRd: false,
-    centralHr: false, centralFinance: true,
-    sharedProduction: false, sharedRd: false,
-    value1: 'fiabilite_service', value2: 'efficience_operationnelle',
-    vision: null, mission: null,
-  });
-
-  const [dasState, setDasState] = useState<Record<string, DasEntry['decision']>>(() =>
-    Object.fromEntries(
-      context.das.map((d) => [
-        d.dasId,
-        d.decision ?? {
-          genericStrategy: 'domination_couts', pricePosition: 50,
-          servedSegments: d.segments.slice(0, 1).map((s) => s.key),
-          capexCapacityMad: 0, capexAutomationMad: 0, capexOwnNetworkMad: 0,
-          rdBudgetMad: 0, marketingBudgetMad: 0, declareBlueOcean: false,
-        },
-      ]),
-    ),
-  );
+  const [corporate, setCorporate] = useState<CorporateValues>(context.corporate);
 
   const pushCorporate = useCallback(
-    (next: typeof corporate) => {
+    (next: CorporateValues) => {
       setCorporate(next);
       autosave.save({ plan: 'corporate', ...next });
     },
     [autosave],
   );
 
-  const pushDas = useCallback(
-    (dasId: string, next: NonNullable<DasEntry['decision']>) => {
-      setDasState((prev) => ({ ...prev, [dasId]: next }));
-      autosave.save({ plan: 'das', dasId, ...next });
-    },
-    [autosave],
-  );
-
-  const engaged = Object.values(dasState).reduce(
-    (acc, d) =>
-      acc + (d ? d.capexCapacityMad + d.capexAutomationMad + d.capexOwnNetworkMad
-                 + d.rdBudgetMad + d.marketingBudgetMad : 0),
-    0,
-  );
+  const changed = !deepEqual(corporate, context.corporateBaseline);
 
   return (
     <>
       <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-10">
         <header className="mb-8">
           <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
-            Tour {context.roundNumber}
+            Tour {context.roundNumber} · niveau Groupe
           </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Stratégie</h1>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Stratégie du Groupe</h1>
           <p className="mt-3 max-w-3xl text-(--foreground-muted)">
-            Ce que vous déclarez ici sera comparé à ce que vous faites. L’indice d’alignement ne
-            mesure pas votre performance — il mesure la <strong>cohérence</strong> entre les deux.
+            Ces choix valent pour l’entreprise entière. Chaque domaine devra ensuite s’y
+            situer — en les suivant ou en s’en écartant, les deux se paient. Ce que décide
+            chaque métier se règle dans{' '}
+            <a href="/strategie/das" className="underline">Stratégie du DAS</a>.
           </p>
         </header>
 
-        <BudgetGauge
-          label="Engagé sur vos DAS ce tour"
-          allocated={engaged}
-          available={context.treasuryMad}
-        />
-
-        {/* ── Plan 1 : portefeuille corporate ───────────────────────────── */}
-        <section className="mt-8 rounded-xl border border-(--border) bg-(--surface) p-6">
-          <h2 className="text-xl font-medium">Stratégie d’entreprise</h2>
-
-          <fieldset disabled={locked} className="mt-5">
+        <section className="rounded-xl border border-(--border) bg-(--surface) p-6">
+          <fieldset disabled={locked}>
             <legend className="mb-2 text-sm font-medium">Votre logique de portefeuille</legend>
             <div className="grid gap-2 sm:grid-cols-2">
               {CORPORATE.map(([value, desc]) => (
@@ -228,13 +219,12 @@ export function StrategieView({
           </fieldset>
 
           <fieldset disabled={locked} className="mt-6">
-            <legend className="mb-1 text-sm font-medium">
-              Vision et mission du Groupe
-            </legend>
+            <legend className="mb-1 text-sm font-medium">Vision et mission du Groupe</legend>
             <p className="mb-3 text-xs text-(--foreground-muted)">
-              Comme au niveau de chaque DAS, ces énoncés ne sont PAS notés : un score tiré de
-              mots-clés serait arbitraire. Ils cadrent votre débriefing, et chaque DAS devra les
-              décliner en axes — c’est cette déclinaison-là qui pèse.
+              L’entreprise n’en a qu’une, et elle se déclare ici — les domaines ne la
+              réécrivent pas, ils la déclinent en axes dans l’écran Organisation. Ces énoncés
+              ne sont PAS notés : un score tiré de mots-clés serait arbitraire. C’est la
+              déclinaison en axes, elle, qui pèse sur votre alignement.
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
@@ -259,121 +249,20 @@ export function StrategieView({
               </label>
             </div>
           </fieldset>
+
+          <SectionActions
+            what="la stratégie du Groupe"
+            locked={locked}
+            changed={changed}
+            recorded={context.corporateRecorded}
+            onValidate={async () => {
+              autosave.save({ plan: 'corporate', ...corporate });
+              await autosave.flush();
+              router.refresh();
+            }}
+            onReset={() => pushCorporate(context.corporateBaseline)}
+          />
         </section>
-
-        {/* ── Plans 2 & 3 : par domaine d'activité ──────────────────────── */}
-        {context.das.map((das) => {
-          const d = dasState[das.dasId];
-          if (!d) return null;
-          return (
-            <section key={das.dasId} className="mt-8 rounded-xl border border-(--border) bg-(--surface) p-6">
-              <h2 className="text-xl font-medium">{das.name}</h2>
-
-              <fieldset disabled={locked} className="mt-5">
-                <legend className="mb-2 text-sm font-medium">Stratégie générique</legend>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {GENERIC.map(([value, desc]) => (
-                    <Choice
-                      key={value}
-                      selected={d.genericStrategy === value}
-                      title={strategyLabel(value)}
-                      description={desc}
-                      onSelect={() => pushDas(das.dasId, { ...d, genericStrategy: value })}
-                    />
-                  ))}
-                </div>
-              </fieldset>
-
-              <fieldset disabled={locked} className="mt-6">
-                <legend className="mb-2 text-sm font-medium">
-                  Positionnement prix
-                  <span className="tabular ml-2 font-semibold">{d.pricePosition}</span>
-                </legend>
-                <input
-                  type="range" min={0} max={100} step={1} value={d.pricePosition}
-                  onChange={(e) => pushDas(das.dasId, { ...d, pricePosition: Number(e.target.value) })}
-                  className="w-full"
-                />
-                <div className="mt-1 flex justify-between text-xs text-(--foreground-muted)">
-                  <span>0 — agressif (60 % du prix marché)</span>
-                  <span>50 — prix marché</span>
-                  <span>100 — premium (140 %)</span>
-                </div>
-              </fieldset>
-
-              <fieldset disabled={locked} className="mt-6">
-                <legend className="mb-1 text-sm font-medium">Segments servis</legend>
-                <p className="mb-3 text-xs text-(--foreground-muted)">
-                  Un segment de plus élargit le marché adressable et dilue une stratégie de
-                  concentration. Chaque segment a sa propre exigence de qualité.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {das.segments.map((seg) => {
-                    const on = d.servedSegments.includes(seg.key);
-                    return (
-                      <Toggle
-                        key={seg.key}
-                        label={seg.name}
-                        on={on}
-                        onToggle={() => {
-                          const next = on
-                            ? d.servedSegments.filter((s) => s !== seg.key)
-                            : [...d.servedSegments, seg.key];
-                          // Au moins un segment : sans marché adressable, il n'y
-                          // a rien à calculer. La contrainte est aussi en base.
-                          if (next.length === 0) return;
-                          pushDas(das.dasId, { ...d, servedSegments: next });
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              </fieldset>
-
-              <fieldset disabled={locked} className="mt-6">
-                <legend className="mb-3 text-sm font-medium">Investissements du tour</legend>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <Money label="Investir dans l’outil de production" value={d.capexCapacityMad}
-                    hint="Disponible au tour SUIVANT : il faut anticiper la demande."
-                    onChange={(v) => pushDas(das.dasId, { ...d, capexCapacityMad: v })} />
-                  <Money label="Investir dans l’automatisation" value={d.capexAutomationMad}
-                    hint="Baisse le coût variable, augmente les coûts fixes."
-                    onChange={(v) => pushDas(das.dasId, { ...d, capexAutomationMad: v })} />
-                  <Money label="Investir dans votre réseau de vente" value={d.capexOwnNetworkMad}
-                    hint="Supprime la marge distributeur. Lent à construire."
-                    onChange={(v) => pushDas(das.dasId, { ...d, capexOwnNetworkMad: v })} />
-                  <Money label="Recherche & développement" value={d.rdBudgetMad}
-                    hint="Effet DIFFÉRÉ d’un tour sur la qualité."
-                    onChange={(v) => pushDas(das.dasId, { ...d, rdBudgetMad: v })} />
-                  <Money label="Marketing" value={d.marketingBudgetMad}
-                    hint="Effet immédiat sur la notoriété, à rendement décroissant."
-                    onChange={(v) => pushDas(das.dasId, { ...d, marketingBudgetMad: v })} />
-                </div>
-                <p className="tabular mt-3 text-sm text-(--foreground-muted)">
-                  Total engagé sur ce DAS :{' '}
-                  <strong>
-                    {formatMadCompact(
-                      d.capexCapacityMad + d.capexAutomationMad + d.capexOwnNetworkMad +
-                      d.rdBudgetMad + d.marketingBudgetMad,
-                    )}
-                  </strong>
-                </p>
-              </fieldset>
-
-              <fieldset disabled={locked} className="mt-6 border-t border-(--border) pt-5">
-                <Toggle
-                  label="Déclarer un océan bleu sur ce DAS"
-                  on={d.declareBlueOcean}
-                  onToggle={() => pushDas(das.dasId, { ...d, declareBlueOcean: !d.declareBlueOcean })}
-                />
-                <p className="mt-2 max-w-2xl text-xs text-(--foreground-muted)">
-                  Vous sortez du calcul à somme nulle pendant deux tours et votre marge est
-                  multipliée par 2,5 — en cas de succès. L’entrée coûte cher et peut échouer.
-                </p>
-              </fieldset>
-            </section>
-          );
-        })}
       </main>
 
       <DecisionBar
@@ -386,6 +275,265 @@ export function StrategieView({
       />
     </>
   );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   NIVEAU 2 — LE DOMAINE PILOTÉ                              `/strategie/das`
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Ce que décide UN métier, celui choisi dans la barre du haut.
+ *
+ * Le domaine piloté vient du sélecteur global, jamais d'un état local : celui
+ * retenu ici doit être encore celui des achats et de l'organisation.
+ */
+export function StrategieDasView({
+  context, missing,
+}: { context: DecisionContext; missing: MissingDecision[] }) {
+  const router = useRouter();
+  const autosave = useAutosave();
+  const { activeDasId } = useDasScope();
+  const locked = !context.decisionsOpen;
+
+  const [dasState, setDasState] = useState<Record<string, DasDecisionValues>>(() =>
+    Object.fromEntries(context.das.map((d) => [d.dasId, d.decision])),
+  );
+
+  const das = context.das.find((d) => d.dasId === activeDasId) ?? null;
+  const d = das ? dasState[das.dasId] : null;
+
+  const pushDas = useCallback(
+    (dasId: string, next: DasDecisionValues) => {
+      setDasState((prev) => ({ ...prev, [dasId]: next }));
+      autosave.save({ plan: 'das', dasId, ...next });
+    },
+    [autosave],
+  );
+
+  // L'engagement affiché reste celui de TOUT le portefeuille : la trésorerie est
+  // commune, et ne montrer que le domaine piloté laisserait croire qu'il en
+  // dispose seul.
+  const engaged = useMemo(
+    () => Object.values(dasState).reduce((acc, v) => acc + engagedOn(v), 0),
+    [dasState],
+  );
+
+  const changed = das && d ? !deepEqual(d, das.baseline.decision) : false;
+  // L'état d'ouverture du tour — c'est-à-dire ce que l'équipe a décidé à
+  // l'exercice précédent, puisque les décisions se reconduisent. Il sert de
+  // repère sous chaque champ, et non seulement de cible au bouton de remise à
+  // zéro : une saisie sans point de départ n'est pas un arbitrage.
+  const b = das?.baseline.decision ?? dasDecisionDefaults(das?.segments ?? []);
+
+  return (
+    <>
+      <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-10">
+        <header className="mb-8">
+          <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
+            Tour {context.roundNumber} · niveau domaine
+          </p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+            {das ? `Stratégie de ${das.name}` : 'Stratégie du domaine'}
+          </h1>
+          <p className="mt-3 max-w-3xl text-(--foreground-muted)">
+            Ces choix ne concernent que le domaine piloté. Changez de domaine dans la barre du
+            haut pour renseigner les autres. Ce qui vaut pour l’entreprise entière se règle
+            dans <a href="/strategie" className="underline">Stratégie du Groupe</a>.
+          </p>
+        </header>
+
+        <BudgetGauge
+          label="Engagé sur l’ensemble de vos domaines ce tour"
+          allocated={engaged}
+          available={context.treasuryMad}
+        />
+
+        {das && d ? (
+          <section className="mt-8 rounded-xl border border-(--border) bg-(--surface) p-6">
+            <fieldset disabled={locked}>
+              <legend className="mb-2 text-sm font-medium">Stratégie générique</legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {GENERIC.map(([value, desc]) => (
+                  <Choice
+                    key={value}
+                    selected={d.genericStrategy === value}
+                    title={strategyLabel(value)}
+                    description={desc}
+                    onSelect={() => pushDas(das.dasId, { ...d, genericStrategy: value })}
+                  />
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset disabled={locked} className="mt-6">
+              <legend className="mb-2 text-sm font-medium">
+                Positionnement prix
+                <span className="tabular ml-2 font-semibold">{d.pricePosition}</span>
+                {/* La position seule ne dit rien : « 72 » n'est un choix que si
+                    l'équipe voit qu'elle vend 22 % au-dessus du marché. */}
+                <span className="tabular ml-2 font-normal text-(--foreground-muted)">
+                  = {priceMultiplier(d.pricePosition)} du prix marché
+                </span>
+              </legend>
+              <input
+                type="range" min={0} max={100} step={1} value={d.pricePosition}
+                onChange={(e) => pushDas(das.dasId, { ...d, pricePosition: Number(e.target.value) })}
+                className="w-full"
+              />
+              <div className="mt-1 flex justify-between text-xs text-(--foreground-muted)">
+                <span>0 — agressif (60 % du prix marché)</span>
+                <span>50 — prix marché</span>
+                <span>100 — premium (140 %)</span>
+              </div>
+              <p className="tabular mt-2 text-xs text-(--foreground-muted)">
+                Tour précédent : {b.pricePosition} ({priceMultiplier(b.pricePosition)})
+                {d.pricePosition !== b.pricePosition ? (
+                  <> · {d.pricePosition > b.pricePosition ? '↑ +' : '↓ −'}
+                    {Math.abs(d.pricePosition - b.pricePosition)} points</>
+                ) : ' · inchangé'}
+              </p>
+            </fieldset>
+
+            <fieldset disabled={locked} className="mt-6">
+              <legend className="mb-1 text-sm font-medium">Segments servis</legend>
+              <p className="mb-3 text-xs text-(--foreground-muted)">
+                Un segment de plus élargit le marché adressable et dilue une stratégie de
+                concentration. Chaque segment a sa propre exigence de qualité.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {das.segments.map((seg) => {
+                  const on = d.servedSegments.includes(seg.key);
+                  return (
+                    <Toggle
+                      key={seg.key}
+                      label={seg.name}
+                      on={on}
+                      onToggle={() => {
+                        const next = on
+                          ? d.servedSegments.filter((s) => s !== seg.key)
+                          : [...d.servedSegments, seg.key];
+                        // Au moins un segment : sans marché adressable, il n'y
+                        // a rien à calculer. La contrainte est aussi en base.
+                        if (next.length === 0) return;
+                        pushDas(das.dasId, { ...d, servedSegments: next });
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            <fieldset disabled={locked} className="mt-6">
+              <legend className="mb-3 text-sm font-medium">Investissements du tour</legend>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <Money label="Investir dans l’outil de production" value={d.capexCapacityMad}
+                  hint="Disponible au tour SUIVANT : il faut anticiper la demande."
+                  previous={b.capexCapacityMad}
+                  shareOf={context.treasuryMad} shareLabel="de la trésorerie"
+                  onChange={(v) => pushDas(das.dasId, { ...d, capexCapacityMad: v })} />
+                <Money label="Investir dans l’automatisation" value={d.capexAutomationMad}
+                  hint="Baisse le coût variable, augmente les coûts fixes."
+                  previous={b.capexAutomationMad}
+                  shareOf={context.treasuryMad} shareLabel="de la trésorerie"
+                  onChange={(v) => pushDas(das.dasId, { ...d, capexAutomationMad: v })} />
+                <Money label="Investir dans votre réseau de vente" value={d.capexOwnNetworkMad}
+                  hint="Supprime la marge distributeur. Lent à construire."
+                  previous={b.capexOwnNetworkMad}
+                  shareOf={context.treasuryMad} shareLabel="de la trésorerie"
+                  onChange={(v) => pushDas(das.dasId, { ...d, capexOwnNetworkMad: v })} />
+                <Money label="Recherche & développement" value={d.rdBudgetMad}
+                  hint="Effet DIFFÉRÉ d’un tour sur la qualité."
+                  previous={b.rdBudgetMad}
+                  shareOf={context.treasuryMad} shareLabel="de la trésorerie"
+                  onChange={(v) => pushDas(das.dasId, { ...d, rdBudgetMad: v })} />
+                <Money label="Marketing" value={d.marketingBudgetMad}
+                  hint="Effet immédiat sur la notoriété, à rendement décroissant."
+                  previous={b.marketingBudgetMad}
+                  shareOf={context.treasuryMad} shareLabel="de la trésorerie"
+                  onChange={(v) => pushDas(das.dasId, { ...d, marketingBudgetMad: v })} />
+              </div>
+              <p className="tabular mt-3 text-sm text-(--foreground-muted)">
+                Total engagé sur ce domaine : <strong>{formatMadCompact(engagedOn(d))}</strong>
+                {' · '}l’an dernier {formatMadCompact(engagedOn(b))}
+                {context.treasuryMad > 0 ? (
+                  <>
+                    {' · '}
+                    {formatScore((engagedOn(d) / context.treasuryMad) * 100, 1)} % de la trésorerie
+                  </>
+                ) : null}
+              </p>
+            </fieldset>
+
+            <fieldset disabled={locked} className="mt-6 border-t border-(--border) pt-5">
+              <Toggle
+                label="Déclarer un océan bleu sur ce domaine"
+                on={d.declareBlueOcean}
+                onToggle={() => pushDas(das.dasId, { ...d, declareBlueOcean: !d.declareBlueOcean })}
+              />
+              <p className="mt-2 max-w-2xl text-xs text-(--foreground-muted)">
+                Vous sortez du calcul à somme nulle pendant deux tours et votre marge est
+                multipliée par 2,5 — en cas de succès. L’entrée coûte cher et peut échouer.
+              </p>
+            </fieldset>
+
+            <SectionActions
+              what={`la stratégie de ${das.name}`}
+              locked={locked}
+              changed={changed}
+              recorded={das.decisionRecorded}
+              onValidate={async () => {
+                autosave.save({ plan: 'das', dasId: das.dasId, ...d });
+                await autosave.flush();
+                router.refresh();
+              }}
+              onReset={() => pushDas(das.dasId, das.baseline.decision)}
+            />
+          </section>
+        ) : (
+          <p className="mt-8 rounded-xl border border-(--border) bg-(--surface) px-6 py-5 text-(--foreground-muted)">
+            Vous n’exploitez aucun domaine d’activité pour l’instant. Un rachat sur le{' '}
+            <a href="/cession" className="underline">marché des acquisitions</a> en ajoutera un.
+          </p>
+        )}
+
+        {das ? (
+          <div className="mt-8">
+            <DasChecklist items={checklistOf(das)} />
+          </div>
+        ) : null}
+      </main>
+
+      <DecisionBar
+        state={autosave.state}
+        pending={autosave.pending}
+        lastError={autosave.lastError}
+        missing={missing}
+        decisionsOpen={context.decisionsOpen}
+        onValidate={async () => { await autosave.flush(); router.refresh(); }}
+      />
+    </>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Éléments partagés par les deux niveaux
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Ce qu'un domaine engage, sous la même définition que la barre de trésorerie. */
+function engagedOn(d: DasDecisionValues): number {
+  return d.capexCapacityMad + d.capexAutomationMad + d.capexOwnNetworkMad
+    + d.rdBudgetMad + d.marketingBudgetMad;
+}
+
+/** Les cinq volets d'un domaine, et où les renseigner. */
+export function checklistOf(das: DasEntry) {
+  return [
+    { label: 'Stratégie', href: '/strategie/das', done: das.progress.strategy },
+    { label: 'Organisation', href: '/organisation', done: das.progress.organisation },
+    { label: 'Ressources humaines', href: '/organisation', done: das.progress.hr },
+    { label: 'Achats', href: '/marches', done: das.progress.procurement },
+    { label: 'Distribution', href: '/marches', done: das.progress.distribution },
+  ];
 }
 
 function Choice({
@@ -441,18 +589,14 @@ function ValueSelect({
   );
 }
 
-function Money({
-  label, value, hint, onChange,
-}: { label: string; value: number; hint: string; onChange: (v: number) => void }) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium">{label}</span>
-      <input
-        type="number" min={0} step={1_000_000} value={value}
-        onChange={(e) => onChange(Math.max(Number(e.target.value) || 0, 0))}
-        className="tabular mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 disabled:opacity-50"
-      />
-      <span className="mt-1 block text-xs text-(--foreground-muted)">{hint}</span>
-    </label>
-  );
+/**
+ * Traduit la position de prix (0–100) en pourcentage du prix de marché.
+ *
+ * La grille du moteur : 0 → 60 %, 50 → 100 %, 100 → 140 %. Affichée à côté du
+ * curseur, elle transforme un nombre sans unité en une décision commerciale que
+ * l'équipe peut défendre au débriefing.
+ */
+function priceMultiplier(position: number): string {
+  const pct = 60 + (position / 100) * 80;
+  return `${pct.toFixed(0)} %`;
 }

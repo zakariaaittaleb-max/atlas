@@ -18,17 +18,22 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { decisionsAreOpen, getRoundState, getTeamContext } from '@/lib/dal';
+import { refreshHrRollup } from '@/lib/server/hr-rollup';
 import { createAdminClient } from '@/lib/supabase/server';
 
 const Payload = z.discriminatedUnion('block', [
   z.object({
+    // La conception d'un domaine se réduit à son DEGRÉ DE DÉLÉGATION.
+    //
+    // La forme de structure et le couple vision/mission ont été retirés d'ici :
+    // ils étaient saisis une seconde fois au niveau Groupe, sur `/strategie`.
+    // La forme de structure est une décision d'architecture d'entreprise — le
+    // moteur la juge d'ailleurs en la comparant au NOMBRE de domaines, ce qui
+    // n'a de sens qu'au niveau du groupe — et la version par domaine n'était
+    // lue par aucun calcul. Voir la migration 0017.
     block: z.literal('design'),
     dasId: z.string().uuid(),
-    structureType: z.enum(['fonctionnelle', 'divisionnelle', 'matricielle', 'processus']),
     delegationLevel: z.number().int().min(0).max(100),
-    // Texte libre, jamais noté : un score tiré de mots-clés serait arbitraire.
-    vision: z.string().max(600).nullable(),
-    mission: z.string().max(600).nullable(),
   }),
   z.object({
     block: z.literal('axes'),
@@ -42,7 +47,7 @@ const Payload = z.discriminatedUnion('block', [
     dasId: z.string().uuid(),
     budgets: z.array(z.object({
       directionKey: z.string().min(1),
-      budgetMad: z.number().min(0).finite(),
+      budgetMad: z.number().min(0).finite().transform(Math.round),
     })).max(12),
   }),
   z.object({
@@ -90,8 +95,8 @@ const Payload = z.discriminatedUnion('block', [
     hireCadres: z.number().int().min(0).max(100000),
     layoffs: z.number().int().min(0).max(100000),
     internalTransfersIn: z.number().int().min(0).max(100000),
-    avgSalaryBrutMad: z.number().min(0).finite(),
-    trainingBudgetMad: z.number().min(0).finite(),
+    avgSalaryBrutMad: z.number().min(0).finite().transform(Math.round),
+    trainingBudgetMad: z.number().min(0).finite().transform(Math.round),
     trainingFocus: z.enum(['technique', 'management', 'qualite', 'polyvalence']),
     claimOfppt: z.boolean(),
     claimGiac: z.boolean(),
@@ -108,7 +113,7 @@ const Payload = z.discriminatedUnion('block', [
       title: z.string().trim().min(1).max(120),
       hierarchyLevel: z.number().int().min(1).max(4),
       headcount: z.number().int().min(0),
-      budgetMad: z.number().min(0).finite(),
+      budgetMad: z.number().min(0).finite().transform(Math.round),
       isKeyPosition: z.boolean(),
     })).max(40),
   }),
@@ -248,6 +253,13 @@ export async function POST(request: Request) {
           updated_at: new Date().toISOString(),
         }, { onConflict: 'team_id,das_id,round_number' });
         if (error) throw new Error(error.message);
+
+        // `hr_metrics` est la projection de niveau ÉQUIPE de ces décisions, et
+        // c'est elle que le moteur lit pour la masse salariale et le talent_mix.
+        // Personne ne la saisit : elle est recalculée ici, après chaque
+        // écriture. L'oublier ferait calculer le tour sur zéro recrutement,
+        // silencieusement.
+        await refreshHrRollup(admin, team.teamId, roundNumber);
         break;
       }
 
@@ -296,10 +308,7 @@ async function ensureDesign(admin: Admin, scope: Scope, body: Body): Promise<voi
     const { error } = await admin.from('das_org_design').upsert(
       {
         ...scope,
-        structure_type: body.structureType,
         delegation_level: body.delegationLevel,
-        vision: body.vision,
-        mission: body.mission,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'team_id,das_id,round_number' },
@@ -313,10 +322,10 @@ async function ensureDesign(admin: Admin, scope: Scope, body: Body): Promise<voi
   if (existing) return;
 
   // Reprise de la conception la plus récente : modifier ses budgets ne doit pas
-  // faire perdre la structure et la délégation décidées l'an dernier.
+  // faire perdre la délégation décidée l'an dernier.
   const { data: previous } = await admin
     .from('das_org_design')
-    .select('structure_type, delegation_level, vision, mission')
+    .select('delegation_level')
     .eq('team_id', scope.team_id).eq('das_id', scope.das_id)
     .lt('round_number', scope.round_number)
     .order('round_number', { ascending: false })
@@ -325,10 +334,7 @@ async function ensureDesign(admin: Admin, scope: Scope, body: Body): Promise<voi
 
   const { error } = await admin.from('das_org_design').insert({
     ...scope,
-    structure_type: previous?.structure_type ?? 'fonctionnelle',
     delegation_level: previous?.delegation_level ?? 50,
-    vision: previous?.vision ?? null,
-    mission: previous?.mission ?? null,
   });
   if (error) throw new Error(error.message);
 }

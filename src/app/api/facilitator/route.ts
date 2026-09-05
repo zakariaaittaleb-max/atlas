@@ -61,6 +61,16 @@ const Request = z.discriminatedUnion('action', [
     dials: z.record(z.string(), z.number()).optional(),
   }),
   z.object({
+    // La RÉSERVE mise sur le marché : quels domaines les équipes peuvent-elles
+    // acquérir, et à partir de quand. Le facilitateur ouvre la diversification
+    // au moment pédagogique qu'il choisit — avant, une équipe pouvait fuir son
+    // métier historique au tour 1 plutôt que de le régler.
+    action: z.literal('set_market'),
+    sessionId: z.string().uuid(),
+    dasId: z.string().uuid(),
+    open: z.boolean(),
+  }),
+  z.object({
     // Carte de crise ou d'opportunité composée par le facilitateur.
     action: z.literal('create_shock_card'),
     sessionId: z.string().uuid(),
@@ -100,6 +110,31 @@ export async function POST(request: Request) {
   }
 
   const roundNumber = Number(session.current_round ?? 0);
+
+  if (body.action === 'set_market') {
+    // On n'ouvre que les cibles de CE domaine et de CETTE session : le garde
+    // ci-dessus a vérifié que l'appelant en est le facilitateur, et rien ne
+    // doit permettre d'atteindre la session d'un collègue par un `dasId`
+    // emprunté.
+    const { error } = await admin
+      .from('ecosystem_actors')
+      .update({ market_open: body.open })
+      .eq('session_id', body.sessionId)
+      .eq('das_id', body.dasId)
+      .eq('actor_type', 'cible_acquisition');
+
+    if (error) {
+      return NextResponse.json(
+        { error: `Ouverture du marché impossible : ${error.message}` },
+        { status: 500 },
+      );
+    }
+
+    // Pas de trace dans `decisions_log` : cette table porte un `team_id` NOT
+    // NULL, et un geste de facilitateur n'appartient à aucune équipe. Lui en
+    // inventer une fausserait le journal des décisions du débriefing.
+    return NextResponse.json({ ok: true, dasId: body.dasId, open: body.open });
+  }
 
   if (body.action === 'set_difficulty') {
     // Le verrou n'est pas une politesse : une fois qu'un tour est résolu, les

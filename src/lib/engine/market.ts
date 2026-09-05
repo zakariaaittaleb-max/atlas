@@ -7,7 +7,7 @@
  */
 
 import { clamp, clamp01, clamp100, median } from './math';
-import { param, type EngineParams } from './params';
+import { param, paramOr, type EngineParams } from './params';
 
 // ===========================================================================
 // Prix (doc 02 §2)
@@ -46,6 +46,29 @@ export function poolMedianPrice(prices: number[]): number {
 // ===========================================================================
 // Compétitivité (doc 02 §8)
 // ===========================================================================
+
+/**
+ * Risque d'entrée d'un mouvement d'Ansoff, en coefficient 0–1.
+ *
+ * ── LE DÉFAUT CORRIGÉ ──────────────────────────────────────────────────────
+ * Les quatre paramètres `ansoff.risk.*` existaient, la matrice était saisie à
+ * l'écran d'organisation, et RIEN ne reliait le mouvement déclaré à son
+ * coefficient : le moteur lisait `team_units.ansoff_risk_coefficient`, colonne
+ * que seule la persistance des acquisitions alimente. Pour toute unité
+ * fondatrice elle valait 0. Une équipe déclarait « diversification » — le
+ * mouvement le plus risqué de la matrice — et n'en subissait aucun risque.
+ *
+ * Le coefficient s'applique les deux premiers tours du domaine
+ * (`competitivenessScore`) : entrer sur un marché qu'on ne connaît pas coûte,
+ * le temps d'apprendre.
+ */
+export function ansoffRisk(
+  movement: string | null | undefined,
+  params: EngineParams,
+): number {
+  if (!movement) return 0;
+  return clamp01(paramOr(params, `ansoff.risk.${movement}`, 0));
+}
 
 export function competitivePressure(
   activeTeamsOnDas: number,
@@ -284,23 +307,85 @@ export function nextMarketSize(
   return Math.max(previousMarketSizeMad * (1 + growthRate + shockPct), 0);
 }
 
+export interface SegmentLike {
+  qualityRequirement: number;
+  marketSharePct: number;
+}
+
 /**
- * Contrainte d'exigence de segment : on ne vend pas du haut de gamme avec un
- * produit moyen, quel que soit le budget marketing.
+ * Part du marché du DAS que l'équipe adresse RÉELLEMENT.
+ *
+ * ── CE QUE CETTE FONCTION CORRIGE ──────────────────────────────────────────
+ * Elle normalisait auparavant par la part servie (`effective / total`), ce qui
+ * ANNULAIT exactement l'effet qu'elle devait produire : servir un seul segment
+ * à 10 % du marché donnait le même volume que servir les cinq. Or les deux
+ * cahiers sont formels — « servir un segment de plus élargit le marché
+ * adressable » (doc 03 §2, doc 00 §3).
+ *
+ * La conséquence était une faute d'équilibrage, pas seulement de fidélité :
+ * restreindre ses segments ne coûtait AUCUN volume et rapportait des points
+ * d'alignement sur l'axe B9 des stratégies de concentration. La concentration
+ * était donc strictement dominante, et l'arbitrage central de Porter — un
+ * marché plus étroit contre une offre mieux ajustée — n'existait pas.
+ *
+ * Deux effets, désormais distincts :
+ *   • L'ÉTENDUE — la somme des parts servies. Cinq segments → 100 % du DAS ;
+ *     la seule niche premium → 10 %.
+ *   • L'EXIGENCE — un segment dont l'exigence de qualité n'est pas satisfaite
+ *     ne compte que pour moitié (doc 03 §2 : « la part de marché de l'équipe
+ *     SUR CE SEGMENT est divisée par deux »).
+ *
+ * Le résultat multiplie la part de marché issue de la répartition à somme
+ * nulle : on ne vend pas sur un segment qu'on ne sert pas, et le volume
+ * correspondant reste simplement non servi.
  */
-export function segmentQualityPenalty(
+export function addressableShare(
   perceivedQuality: number,
-  servedSegments: { qualityRequirement: number; marketSharePct: number }[],
+  servedSegments: SegmentLike[],
   params: EngineParams,
 ): number {
   const divisor = param(params, 'segment.quality_shortfall_divisor');
-  const total = servedSegments.reduce((acc, s) => acc + s.marketSharePct, 0);
-  if (total <= 0) return 1;
 
   const effective = servedSegments.reduce((acc, s) => {
     const meets = perceivedQuality >= s.qualityRequirement;
     return acc + s.marketSharePct * (meets ? 1 : 1 / divisor);
   }, 0);
 
-  return clamp(effective / total, 0, 1);
+  return clamp(effective, 0, 1);
+}
+
+/**
+ * Facteur de sensibilité au prix des segments servis, relatif au DAS entier.
+ *
+ * `sensibilité_prix` figure au référentiel de chaque segment (doc 03 §2) et
+ * n'était lue par personne : servir la restauration collective — qui n'achète
+ * que le prix — ou le premium bio — qui ne le regarde pas — produisait
+ * exactement la même réaction à un geste de prix. La moitié de l'intérêt du
+ * choix de segments disparaissait.
+ *
+ * Le facteur est RELATIF à la sensibilité moyenne du DAS, et non absolu :
+ * l'élasticité de branche est déjà calibrée sur le marché complet (2,0 pour
+ * l'agro-industrie, dont les segments pèsent 1,48 en moyenne). Multiplier par
+ * la sensibilité brute l'aurait gonflée de moitié sur tout le jeu. Servir tout
+ * le marché rend donc 1, et l'élasticité de branche reste ce qu'elle était.
+ */
+export function segmentPriceSensitivity(
+  servedSegments: { marketSharePct: number; priceSensitivity: number }[],
+  allSegments: { marketSharePct: number; priceSensitivity: number }[],
+): number {
+  const weighted = (list: { marketSharePct: number; priceSensitivity: number }[]) => {
+    const total = list.reduce((acc, s) => acc + s.marketSharePct, 0);
+    if (total <= 0) return 0;
+    return list.reduce((acc, s) => acc + s.marketSharePct * s.priceSensitivity, 0) / total;
+  };
+
+  const reference = weighted(allSegments);
+  if (reference <= 0) return 1;
+
+  const served = weighted(servedSegments);
+  // Un DAS sans segment servi ne vend rien : le facteur n'a pas d'usage, et
+  // rendre 1 évite d'introduire un zéro dans une multiplication d'élasticité.
+  if (served <= 0) return 1;
+
+  return served / reference;
 }

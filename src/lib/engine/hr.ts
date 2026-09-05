@@ -23,7 +23,7 @@
  * Module PUR : aucun accès base, aucun aléa.
  */
 
-import { clamp100 } from './math';
+import { clamp100, mean } from './math';
 import { param, type EngineParams } from './params';
 
 // ---------------------------------------------------------------------------
@@ -171,6 +171,8 @@ export interface ClimateInput {
   layoffRatio: number;
   /** Budget de formation rapporté à la masse salariale, 0–1. */
   trainingIntensity: number;
+  /** Multiplicateur de climat issu de l'orientation de formation. */
+  trainingFocusClimat?: number;
   /** Salaire proposé rapporté au salaire du tour précédent. */
   salaryRatio: number;
   automationDelta: number;
@@ -215,7 +217,10 @@ export function nextClimatSocial(input: ClimateInput, params: EngineParams): num
   climat -= RESTRUCTURING_CLIMATE_COST[input.restructuring];
 
   // Former et payer améliorent, avec des rendements décroissants.
-  climat += Math.min(input.trainingIntensity * 220, 12);
+  climat += Math.min(
+    input.trainingIntensity * 220 * (input.trainingFocusClimat ?? 1),
+    12,
+  );
   climat += Math.max(Math.min((input.salaryRatio - 1) * 45, 10), -18);
 
   // Automatiser sans former inquiète. Le malus est atténué quand la formation
@@ -259,6 +264,8 @@ export interface SkillInput {
   previousSkill: number;
   trainingIntensity: number;
   skillsAuditOrdered: boolean;
+  /** Multiplicateur issu de l'orientation de formation. 1 = neutre. */
+  focusMultiplier?: number;
   hiringRatio: number;
   /** Part de l'effectif recrutée depuis un autre DAS du même groupe, 0–1. */
   internalHiringRatio: number;
@@ -281,7 +288,10 @@ export function nextSkillIndex(input: SkillInput, params: EngineParams): number 
   let skill = input.previousSkill * (1 - decay);
 
   const auditBonus = input.skillsAuditOrdered ? 1.35 : 1;
-  skill += Math.min(input.trainingIntensity * 260 * auditBonus, 18);
+  skill += Math.min(
+    input.trainingIntensity * 260 * auditBonus * (input.focusMultiplier ?? 1),
+    18,
+  );
 
   // Le recrutement externe dilue, l'interne non.
   const externalRatio = Math.max(input.hiringRatio - input.internalHiringRatio, 0);
@@ -351,4 +361,107 @@ export function qualityLossFromCuts(
   const excess = Math.max(layoffs - safeReduction, 0);
   if (excess <= 0 || headcount <= 0) return 0;
   return Math.min((excess / headcount) * 120, 30);
+}
+
+// ---------------------------------------------------------------------------
+// Orientation de la formation
+// ---------------------------------------------------------------------------
+
+export type TrainingFocus = 'technique' | 'management' | 'qualite' | 'polyvalence';
+
+/**
+ * Ce que chaque orientation de formation produit RÉELLEMENT.
+ *
+ * ── LE DÉFAUT CORRIGÉ ──────────────────────────────────────────────────────
+ * `training_focus` était saisi, validé, stocké, chargé dans l'instantané — et
+ * lu par personne. Les quatre orientations avaient exactement le même effet :
+ * aucun. L'écran annonçait pourtant quatre destinations distinctes — « le
+ * geste métier », « l'encadrement intermédiaire », « normes et contrôle »,
+ * « absorbe les à-coups » — ce qui en faisait une décision d'apparence, la
+ * pire espèce dans un jeu qui enseigne l'arbitrage.
+ *
+ * Les coefficients sont des MULTIPLICATEURS de ce que la formation produit
+ * déjà, et non des primes ajoutées : une orientation ne crée pas d'effet, elle
+ * répartit un budget. Leur somme s'écarte volontairement de 4 — spécialiser
+ * rend plus sur sa cible que la polyvalence ne rend partout, sinon choisir
+ * n'aurait aucune conséquence.
+ */
+export const TRAINING_FOCUS_EFFECTS: Record<
+  TrainingFocus,
+  { skill: number; quality: number; climat: number; standardisation: number }
+> = {
+  // Le geste métier : c'est la compétence technique, et elle sert la qualité.
+  technique: { skill: 1.25, quality: 1.15, climat: 0.9, standardisation: 0.9 },
+  // L'encadrement intermédiaire : ce qui se joue est le climat et la capacité
+  // à déléguer, pas la technicité.
+  management: { skill: 0.85, quality: 0.9, climat: 1.35, standardisation: 1.0 },
+  // Normes et contrôle : la montée en gamme, au détriment de la polyvalence.
+  qualite: { skill: 0.95, quality: 1.4, climat: 0.9, standardisation: 0.95 },
+  // La polyvalence rend un peu partout et beaucoup nulle part — c'est ce qui
+  // permet de réduire un effectif sans perdre en qualité.
+  polyvalence: { skill: 1.0, quality: 0.95, climat: 1.1, standardisation: 1.35 },
+};
+
+export function trainingFocusEffects(focus: TrainingFocus | null | undefined) {
+  return TRAINING_FOCUS_EFFECTS[focus ?? 'technique'] ?? TRAINING_FOCUS_EFFECTS.technique;
+}
+
+// ---------------------------------------------------------------------------
+// Consolidation d'équipe
+// ---------------------------------------------------------------------------
+
+/**
+ * Climat social du GROUPE, consolidé depuis celui de chaque domaine.
+ *
+ * ── LE DÉFAUT CORRIGÉ ──────────────────────────────────────────────────────
+ * Deux modèles de climat coexistaient, et le mauvais gagnait.
+ *
+ * Le modèle par DOMAINE — celui de ce module — tient compte de la charge de
+ * travail, du ratio de recrutement, des départs, de l'intensité de formation,
+ * de l'écart salarial, du saut d'automatisation et du type de restructuration.
+ * Il est calculé, persisté dans `das_hr_state`, et relu au tour suivant.
+ *
+ * Le modèle de GROUPE n'avait que trois effets en marche d'escalier — un choc
+ * de recrutement au-delà d'un seuil, un malus si l'on restructure, un bonus si
+ * l'on forme — appliqués en addition sur la valeur précédente. Sans décision
+ * RH, il rendait donc EXACTEMENT la valeur précédente : sur une partie de dix
+ * tours, le climat de groupe restait figé à sa valeur de départ, quelle que
+ * soit la charge que les équipes faisaient peser sur leurs effectifs.
+ *
+ * Ce n'était pas un détail d'affichage : c'est cette valeur que lit le
+ * Balanced Scorecard pour noter la dimension sociale en fin de partie, et
+ * c'est elle que le cockpit affiche tout au long.
+ *
+ * Un groupe n'a pas de climat propre — il a celui de ses équipes, pondéré par
+ * leurs effectifs. Un domaine de quarante personnes en souffrance ne compense
+ * pas mille personnes sereines, et l'inverse non plus.
+ */
+export function consolidateClimate(
+  units: { climatSocial: number; headcount: number }[],
+  fallback: number,
+): number {
+  if (units.length === 0) return clamp100(fallback);
+
+  const total = units.reduce((acc, u) => acc + Math.max(u.headcount, 0), 0);
+  if (total <= 0) return clamp100(mean(units.map((u) => u.climatSocial)));
+
+  return clamp100(
+    units.reduce((acc, u) => acc + (Math.max(u.headcount, 0) / total) * u.climatSocial, 0),
+  );
+}
+
+/**
+ * Effectif du GROUPE : la somme de ses domaines, et rien d'autre.
+ *
+ * Il se recalculait séparément à partir de la consolidation RH, si bien que
+ * deux chemins produisaient deux nombres — celui-ci ignorait les transferts
+ * internes et le plancher appliqué par domaine. Additionner ce que le moteur a
+ * réellement calculé domaine par domaine supprime la divergence.
+ */
+export function consolidateHeadcount(
+  units: { headcount: number }[],
+  fallback: number,
+): number {
+  if (units.length === 0) return Math.max(Math.round(fallback), 0);
+  return units.reduce((acc, u) => acc + Math.max(u.headcount, 0), 0);
 }

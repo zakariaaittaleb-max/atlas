@@ -38,6 +38,15 @@ export interface DasSeed {
   valuationMultiple: number;
   workingCapitalDays: number;
   vrioEntryBarrier: number;
+  /**
+   * Menace des substituts (Porter, 5e force), 0–100.
+   *
+   * Propriété de FILIÈRE et non de tour : à quel point la demande peut se
+   * déplacer vers une autre réponse au même besoin. Stable sur une partie,
+   * donc connaissable par un consultant — contrairement à un choc, qui se
+   * subit. C'était la seule des cinq forces sans aucune donnée.
+   */
+  substitutionPressure: number;
   unitCapacityCostMad: number;
   /** Le numérique produit avec des personnes : le recrutement y remplace le CAPEX. */
   capacityFromHeadcount: boolean;
@@ -61,6 +70,8 @@ export const DAS_CATALOG: DasSeed[] = [
     valuationMultiple: 5.5,
     workingCapitalDays: 75,
     vrioEntryBarrier: 0.3,
+    // Marques distributeur et importations pèsent, mais l’alimentaire reste un besoin captif.
+    substitutionPressure: 45,
     unitCapacityCostMad: 220,
     capacityFromHeadcount: false,
     headcountProductivity: null,
@@ -88,6 +99,8 @@ export const DAS_CATALOG: DasSeed[] = [
     // 110 jours : c'est ce DAS qui enseigne « bénéficiaire mais à court de cash ».
     workingCapitalDays: 110,
     vrioEntryBarrier: 0.35,
+    // On ne remplace pas un ouvrage : la substitution porte sur les matériaux, pas sur le besoin.
+    substitutionPressure: 20,
     unitCapacityCostMad: 15_000,
     capacityFromHeadcount: false,
     headcountProductivity: null,
@@ -115,6 +128,8 @@ export const DAS_CATALOG: DasSeed[] = [
     valuationMultiple: 8.0,
     workingCapitalDays: 30,
     vrioEntryBarrier: 0.25,
+    // Une destination se remplace par une autre, et le domestique par l’international en un été.
+    substitutionPressure: 75,
     unitCapacityCostMad: 3_500,
     capacityFromHeadcount: false,
     headcountProductivity: null,
@@ -143,6 +158,8 @@ export const DAS_CATALOG: DasSeed[] = [
     // La plus haute barrière du jeu : les exclusivités constructeurs sont
     // difficiles à déloger. Entrer tard sur ce DAS se paie cher.
     vrioEntryBarrier: 0.45,
+    // Louer, réparer ou importer d’occasion : trois substituts réels au neuf.
+    substitutionPressure: 50,
     unitCapacityCostMad: 60_000,
     capacityFromHeadcount: false,
     headcountProductivity: null,
@@ -170,6 +187,8 @@ export const DAS_CATALOG: DasSeed[] = [
     valuationMultiple: 6.0,
     workingCapitalDays: 25,
     vrioEntryBarrier: 0.2,
+    // Le commerce en ligne substitue le point de vente sans le remplacer.
+    substitutionPressure: 70,
     unitCapacityCostMad: 130,
     capacityFromHeadcount: false,
     headcountProductivity: null,
@@ -198,6 +217,8 @@ export const DAS_CATALOG: DasSeed[] = [
     workingCapitalDays: 85,
     // La plus basse barrière : marché très ouvert, guerre de prix permanente.
     vrioEntryBarrier: 0.15,
+    // Le substitut est le même produit fabriqué ailleurs.
+    substitutionPressure: 80,
     unitCapacityCostMad: 260,
     capacityFromHeadcount: false,
     headcountProductivity: null,
@@ -225,6 +246,8 @@ export const DAS_CATALOG: DasSeed[] = [
     valuationMultiple: 9.0,
     workingCapitalDays: 120,
     vrioEntryBarrier: 0.40,
+    // Le fossile subventionné reste le substitut direct, et l’arbitrage est politique.
+    substitutionPressure: 60,
     unitCapacityCostMad: 190_000,
     capacityFromHeadcount: false,
     headcountProductivity: null,
@@ -251,6 +274,8 @@ export const DAS_CATALOG: DasSeed[] = [
     valuationMultiple: 8.5,
     workingCapitalDays: 55,
     vrioEntryBarrier: 0.2,
+    // L’automatisation et l’internalisation substituent la prestation elle-même.
+    substitutionPressure: 65,
     unitCapacityCostMad: 1_000,
     // SEUL DAS où la capacité vient de l'effectif : le recrutement y remplace
     // l'investissement industriel. Les équipes doivent découvrir que

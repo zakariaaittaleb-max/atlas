@@ -656,6 +656,86 @@ export function absolutePenalties(
   return penalties;
 }
 
+/**
+ * Indice d'intégration verticale, 0–100, DÉRIVÉ DES DÉCISIONS.
+ *
+ * ── CE QUE CETTE FONCTION CORRIGE ──────────────────────────────────────────
+ * L'axe `vertical_integration` était une CONSTANTE. Aucune écriture ne le
+ * calculait : la couche serveur lisait la valeur du tour précédent, le moteur
+ * la réécrivait à l'identique, et faute de valeur initiale elle valait 20 pour
+ * toujours.
+ *
+ * Les conséquences étaient sévères et à sens unique :
+ *   • `integration_verticale` vise 85 sur l'axe qui pèse le PLUS lourd pour
+ *     elle (0,30). Observé à 20, l'écart dépassait la saturation : pénalité
+ *     pleine, à quoi s'ajoutait le malus absolu `integration_proclamee` (−14),
+ *     déclenché sous 30. Déclarer cette stratégie coûtait donc une trentaine
+ *     de points d'alignement SANS AUCUN MOYEN D'Y REMÉDIER — l'option était
+ *     injouable ;
+ *   • `diversification_conglomerale` vise 20 : elle touchait la cible pile,
+ *     gratuitement, quoi qu'elle décide.
+ *
+ * ── LA DÉFINITION RETENUE ──────────────────────────────────────────────────
+ * Celle que l'écran donne lui-même de la stratégie : « contrôler les maillons
+ * amont et aval de sa propre filière ». Deux maillons, donc deux termes :
+ *
+ *   • AVAL — la part du volume qui ne passe PAS par un distributeur tiers,
+ *     c'est-à-dire le réseau propre. C'est déjà `channelControl`, construit à
+ *     coups de `capexOwnNetworkMad` ; l'axe devient ainsi le débouché
+ *     corporate d'un investissement que l'équipe fait par DAS.
+ *   • AMONT — la part du besoin sécurisée par contrat plutôt qu'achetée au
+ *     prix spot. Un industriel qui verrouille son approvisionnement contrôle
+ *     son amont ; celui qui achète au coup par coup le subit.
+ *
+ * Les deux sont pondérés par le chiffre d'affaires : l'intégration d'un DAS
+ * marginal ne fait pas une filière intégrée.
+ */
+export function verticalIntegrationIndex(
+  units: {
+    /** Poids du DAS dans le groupe — chiffre d'affaires du tour précédent. */
+    weight: number;
+    /** Part du volume écoulée par le réseau propre, 0–100. */
+    channelControl: number;
+    /** Volume engagé auprès de fournisseurs sous CONTRAT. */
+    committedVolume: number;
+    /** Volume engagé auprès de fournisseurs que l'équipe DÉTIENT. */
+    ownedVolume: number;
+    /** Besoin de référence, servant à juger si l'amont est couvert. */
+    expectedVolume: number;
+  }[],
+  params: EngineParams,
+): number {
+  if (units.length === 0) return 0;
+
+  const wDown = paramOr(params, 'integration.downstream_weight', 0.55);
+  const wUp = paramOr(params, 'integration.upstream_weight', 0.45);
+
+  // Faute de chiffre d'affaires — premier tour, domaine tout juste acquis —
+  // on pondère à parts égales : ignorer ces DAS reviendrait à dire qu'une
+  // filière naissante n'est pas intégrée, ce qui n'est pas mesuré mais supposé.
+  const totalWeight = units.reduce((acc, u) => acc + Math.max(u.weight, 0), 0);
+  const weightOf = (u: (typeof units)[number]) =>
+    totalWeight > 0 ? Math.max(u.weight, 0) / totalWeight : 1 / units.length;
+
+  return clamp100(
+    units.reduce((acc, u) => {
+      const downstream = clamp100(u.channelControl);
+      // Contracter n'est pas intégrer. Un contrat sécurise l'approvisionnement
+      // tant qu'il court ; détenir le maillon le sécurise tout court — et
+      // c'est la différence que la stratégie d'intégration verticale prétend
+      // faire. Un contrat compte donc pour MOITIÉ d'une détention.
+      const contracted = param(params, 'integration.contract_equivalence');
+      const upstream =
+        u.expectedVolume > 0
+          ? clamp100(
+              ((u.ownedVolume + contracted * u.committedVolume) / u.expectedVolume) * 100,
+            )
+          : 0;
+      return acc + weightOf(u) * (wDown * downstream + wUp * upstream);
+    }, 0),
+  );
+}
+
 export function scoreCorporateAlignment(
   input: CorporateInput,
   proximity: (a: string, b: string) => number,
@@ -773,17 +853,22 @@ export function computeAlignment(
   // SAG global : même pondération par le chiffre d'affaires que le SAB. Une
   // divergence sur le DAS principal pèse plus qu'une divergence marginale.
   const sagEntries = dasIds.filter((id) => input.sagByDas?.[id] !== undefined);
+  // Chiffre d'affaires porté par les SEULS domaines qui ont un SAG : c'est le
+  // dénominateur de leur moyenne pondérée.
+  const sagRevenue = sagEntries.reduce((acc, id) => acc + Math.max(input.revenueByDas[id] ?? 0, 0), 0);
+
   const sagGlobal =
     sagEntries.length === 0
       ? null
-      : totalRevenue > 0
+      // Pondérer par un chiffre d'affaires NUL rendait zéro, et non la moyenne
+      // simple : un domaine tout juste acquis, seul à porter des directives,
+      // écopait d'un SAG de 0 sur 20 % de l'indice — pour un artefact de
+      // division, pas pour une décision. Le repli est explicite.
+      : sagRevenue > 0
         ? sagEntries.reduce(
             (acc, id) =>
-              acc + ((input.revenueByDas[id] ?? 0) / totalRevenue) * (input.sagByDas![id]),
+              acc + ((input.revenueByDas[id] ?? 0) / sagRevenue) * input.sagByDas![id],
             0,
-          ) / Math.max(
-            sagEntries.reduce((acc, id) => acc + (input.revenueByDas[id] ?? 0), 0) / totalRevenue,
-            1e-9,
           )
         : mean(sagEntries.map((id) => input.sagByDas![id]));
 

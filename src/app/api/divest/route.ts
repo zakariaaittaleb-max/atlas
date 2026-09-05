@@ -24,8 +24,8 @@ const Request = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('bid'),
     listingId: z.string().uuid(),
-    offerMad: z.number().positive().finite(),
-    integrationBudgetMad: z.number().min(0).finite(),
+    offerMad: z.number().positive().finite().transform(Math.round),
+    integrationBudgetMad: z.number().min(0).finite().transform(Math.round),
   }),
   z.object({
     action: z.literal('choice'),

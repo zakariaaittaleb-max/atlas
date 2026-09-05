@@ -96,3 +96,46 @@ export function describeLevers(levers: ShockLevers): string[] {
     return [`${spec.label} ${shown} — ${v > 0 ? spec.positiveMeans : spec.negativeMeans}`];
   });
 }
+
+/**
+ * Atténuation d'une carte par la réponse d'une équipe.
+ *
+ * ── POURQUOI CETTE FONCTION EXISTE ─────────────────────────────────────────
+ * Répondre à une crise ne faisait RIEN. L'écran de war room proposait quatre
+ * réponses — ignorer, atténuer, absorber, retourner — la route calculait
+ * consciencieusement leur coût et leur efficacité, les écrivait dans
+ * `shock_responses`… et personne ne relisait la table. Le coût n'était jamais
+ * débité, l'efficacité jamais appliquée : la seule réponse rationnelle était
+ * d'ignorer, puisque les trois autres se payaient sans rien produire.
+ *
+ * ── CE QUI EST ATTÉNUÉ, ET CE QUI NE L'EST PAS ─────────────────────────────
+ * Seule la part DÉFAVORABLE d'un levier recule. Le sens est déclaré au
+ * catalogue (`positiveIs`), et il n'est pas devinable : +20 % de taille de
+ * marché est une aubaine, +20 % de coût des intrants une tuile. Sans cette
+ * lecture, « absorber » un choc favorable aurait effacé la bonne nouvelle que
+ * l'équipe venait de payer pour garder.
+ *
+ * Une efficacité de 1 — la réponse « retourner » — ramène l'effet adverse à
+ * zéro. Elle ne le transforme pas en gain : on neutralise une crise, on ne la
+ * convertit pas en profit.
+ */
+export function mitigateShock<T extends object>(effects: T, effectiveness: number): T {
+  const factor = 1 - Math.min(Math.max(effectiveness, 0), 1);
+  if (factor >= 1) return effects;
+
+  const out = { ...effects } as Record<string, unknown>;
+
+  for (const spec of EFFECT_SPECS) {
+    // Le catalogue est en `snake_case`, l'instantané du moteur en `camelCase`.
+    const key = spec.key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+    const value = out[key];
+    if (typeof value !== 'number' || value === 0) continue;
+
+    const adverse = spec.positiveIs === 'defavorable' ? value > 0 : value < 0;
+    // `|| 0` ramène le −0 de `x * 0` à 0 : il ressortirait tel quel en JSON,
+    // et « −0 % de coût des intrants » n'est pas une phrase.
+    if (adverse) out[key] = value * factor || 0;
+  }
+
+  return out as T;
+}

@@ -1,0 +1,478 @@
+<title>Simulateur d'impacts Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#f7f8f6; --panel:#ffffff; --sunk:#eef1ee; --rail:#e4e8e5;
+  --ink:#141a17; --ink-2:#3d4a44; --mute:#6e7a74; --rule:#d6dcd8;
+  --accent:#0e5a57; --accent-ink:#0a3f3d; --accent-soft:#0e5a5714;
+  --up:#1c6b3f; --down:#8a2b18; --warn:#8a6a18;
+  --serif:"IBM Plex Serif",Georgia,serif;
+  --cond:"IBM Plex Sans Condensed","Helvetica Neue",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0f1412; --panel:#161d1a; --sunk:#1b2320; --rail:#222c28;
+  --ink:#e8ede9; --ink-2:#b6c2bc; --mute:#8b9a93; --rule:#2b3733;
+  --accent:#4fb3ac; --accent-ink:#7fcfc8; --accent-soft:#4fb3ac1f;
+  --up:#5fc48a; --down:#e08a72; --warn:#d6b061;
+}}
+:root[data-theme="dark"]{
+  --ground:#0f1412; --panel:#161d1a; --sunk:#1b2320; --rail:#222c28;
+  --ink:#e8ede9; --ink-2:#b6c2bc; --mute:#8b9a93; --rule:#2b3733;
+  --accent:#4fb3ac; --accent-ink:#7fcfc8; --accent-soft:#4fb3ac1f;
+  --up:#5fc48a; --down:#e08a72; --warn:#d6b061;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font-family:var(--serif);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1220px;margin:0 auto;padding:0 clamp(16px,3.5vw,40px) 80px}
+
+.mast{padding:clamp(36px,6vw,64px) 0 26px;border-bottom:2px solid var(--ink)}
+.eyebrow{font-family:var(--cond);font-size:12px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+h1{font-family:var(--cond);font-weight:700;font-size:clamp(34px,6vw,62px);line-height:.98;
+  letter-spacing:-.018em;margin:0;text-wrap:balance}
+.thesis{max-width:64ch;margin:18px 0 0;color:var(--ink-2)}
+
+.grid{display:grid;gap:22px;grid-template-columns:minmax(0,340px) minmax(0,1fr);
+  align-items:start;margin-top:34px}
+@media (max-width:900px){.grid{grid-template-columns:1fr}}
+
+.panel{background:var(--panel);border:1px solid var(--rule);padding:20px}
+.panel h2{font-family:var(--cond);font-weight:600;font-size:1.15rem;margin:0 0 4px;
+  letter-spacing:-.01em}
+.panel .sub{margin:0 0 16px;font-size:13px;color:var(--mute)}
+.controls{position:sticky;top:16px}
+
+fieldset{border:0;padding:0;margin:0 0 20px}
+legend{font-family:var(--cond);font-size:11px;font-weight:700;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--accent);padding:0 0 9px}
+.ctl{margin-bottom:15px}
+.ctl label{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  font-family:var(--cond);font-size:13.5px;font-weight:500;margin-bottom:5px}
+.ctl output{font-family:var(--mono);font-size:12.5px;color:var(--accent-ink);
+  font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
+.ctl .hint{display:block;margin-top:3px;font-size:11.5px;color:var(--mute);line-height:1.45}
+select{width:100%;font-family:var(--cond);font-size:14px;padding:7px 9px;
+  background:var(--panel);color:var(--ink);border:1px solid var(--rule);border-radius:4px}
+.toggles{display:flex;flex-wrap:wrap;gap:7px}
+.toggles button{font-family:var(--cond);font-size:12.5px;font-weight:500;padding:6px 10px;
+  border:1px solid var(--rule);background:var(--panel);color:var(--ink);cursor:pointer;
+  border-radius:4px;transition:none}
+.toggles button[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft);
+  color:var(--accent-ink);font-weight:600}
+
+.out{display:grid;gap:1px;background:var(--rule);border:1px solid var(--rule)}
+.row{background:var(--panel);display:grid;grid-template-columns:minmax(0,1fr) 108px 96px;
+  align-items:center;gap:12px;padding:11px 15px}
+.row .name{font-family:var(--cond);font-size:14px;font-weight:500}
+.row .name small{display:block;font-family:var(--serif);font-size:12px;color:var(--mute);
+  font-weight:400;line-height:1.4;margin-top:2px}
+.row .val{font-family:var(--mono);font-size:15px;text-align:right;font-variant-numeric:tabular-nums}
+.row .delta{font-family:var(--mono);font-size:12.5px;text-align:right;
+  font-variant-numeric:tabular-nums}
+.up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--mute)}
+.rowhead{background:var(--sunk);font-family:var(--cond);font-size:10.5px;font-weight:700;
+  letter-spacing:.11em;text-transform:uppercase;color:var(--mute);
+  grid-template-columns:minmax(0,1fr) 108px 96px}
+.rowhead span:nth-child(2),.rowhead span:nth-child(3){text-align:right}
+
+.bar{height:5px;background:var(--rail);margin-top:6px;position:relative;overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--accent);display:block}
+.bar u{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--warn);
+  text-decoration:none}
+
+.verdict{margin-top:20px;padding:15px 17px;border:1px solid var(--rule);background:var(--sunk)}
+.verdict h3{font-family:var(--cond);font-size:1rem;font-weight:600;margin:0 0 6px}
+.verdict p{margin:0;font-size:14px;color:var(--ink-2)}
+.verdict p+p{margin-top:.55em}
+.verdict .tag{display:inline-block;font-family:var(--cond);font-size:10.5px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;padding:2px 7px;border:1px solid currentColor;
+  margin-right:8px}
+
+.chain{margin-top:22px}
+.chain h3{font-family:var(--cond);font-size:11px;font-weight:700;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 10px}
+.chain ol{list-style:none;padding:0;margin:0;display:grid;gap:1px;
+  background:var(--rule);border:1px solid var(--rule)}
+.chain li{background:var(--panel);padding:9px 14px;font-size:13.5px;display:flex;gap:11px;
+  align-items:baseline}
+.chain li b{font-family:var(--mono);font-size:11px;color:var(--accent);flex:0 0 auto}
+.chain li em{font-style:normal;color:var(--mute)}
+
+footer{margin-top:56px;padding-top:20px;border-top:2px solid var(--ink);
+  font-family:var(--cond);font-size:12.5px;color:var(--mute);
+  display:flex;flex-wrap:wrap;gap:7px 24px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style><div class="wrap">
+<header class="mast">
+  <p class="eyebrow">Atlas · moteur de résolution</p>
+  <h1>Simulateur d'impacts</h1>
+  <p class="thesis">Déplacez une décision et lisez ce qu'elle déplace ailleurs. Les coefficients
+  ne sont pas illustratifs : ils sont <strong>extraits du moteur</strong> — mêmes poids
+  d'alignement, mêmes profils-cibles, mêmes formules de compétitivité et de marge. Ce qui est
+  simulé ici est ce que la résolution calcule.</p>
+</header>
+
+<div class="grid">
+  <div class="panel controls">
+    <h2>Vos décisions</h2>
+    <p class="sub">Un domaine, un tour. La stratégie déclarée fixe les cibles.</p>
+
+    <fieldset>
+      <legend>Stratégie déclarée</legend>
+      <div class="ctl">
+        <select id="strategy" aria-label="Stratégie générique">
+          <option value="domination_couts">Domination par les coûts</option>
+          <option value="differenciation">Différenciation</option>
+          <option value="focus_couts">Concentration — coûts</option>
+          <option value="focus_differenciation">Concentration — différenciation</option>
+        </select>
+        <span class="hint" id="strategyHint"></span>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Marché</legend>
+      <div class="ctl">
+        <label for="price">Positionnement prix <output id="priceOut"></output></label>
+        <input type="range" id="price" min="0" max="100" value="50">
+        <span class="hint">0 vend à 60 % du prix marché, 50 au prix marché, 100 à 140 %.</span>
+      </div>
+      <div class="ctl">
+        <label for="segments">Segments servis <output id="segmentsOut"></output></label>
+        <input type="range" id="segments" min="1" max="5" value="5">
+        <span class="hint">Chaque segment de plus élargit le marché adressable et dilue une
+        stratégie de concentration.</span>
+      </div>
+      <div class="ctl">
+        <label for="quality">Qualité perçue <output id="qualityOut"></output></label>
+        <input type="range" id="quality" min="0" max="100" value="55">
+      </div>
+      <div class="ctl">
+        <label for="noto">Notoriété <output id="notoOut"></output></label>
+        <input type="range" id="noto" min="0" max="100" value="50">
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Moyens engagés</legend>
+      <div class="ctl">
+        <label for="rd">Intensité R&amp;D <output id="rdOut"></output></label>
+        <input type="range" id="rd" min="0" max="100" value="20">
+        <span class="hint">Part du chiffre d'affaires. Effet différé d'un tour sur la qualité.</span>
+      </div>
+      <div class="ctl">
+        <label for="mkt">Intensité marketing <output id="mktOut"></output></label>
+        <input type="range" id="mkt" min="0" max="100" value="25">
+      </div>
+      <div class="ctl">
+        <label for="auto">Automatisation <output id="autoOut"></output></label>
+        <input type="range" id="auto" min="0" max="100" value="40">
+      </div>
+      <div class="ctl">
+        <label for="cost">Efficience coûts <output id="costOut"></output></label>
+        <input type="range" id="cost" min="0" max="100" value="55">
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Filière</legend>
+      <div class="ctl">
+        <label for="channel">Contrôle du canal <output id="channelOut"></output></label>
+        <input type="range" id="channel" min="0" max="100" value="35">
+        <span class="hint">Part du volume qui ne passe pas par un tiers.</span>
+      </div>
+      <div class="toggles" role="group" aria-label="Intégration de filière">
+        <button type="button" id="ownSupplier" aria-pressed="false">Fournisseur racheté</button>
+        <button type="button" id="ownDistrib" aria-pressed="false">Distributeur racheté</button>
+      </div>
+      <div class="ctl" style="margin-top:13px">
+        <label for="integ">Qualité d'intégration <output id="integOut"></output></label>
+        <input type="range" id="integ" min="0" max="100" value="80">
+        <span class="hint">Figée au rachat : ce qu'on ne finance pas pour intégrer, on le perd.</span>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Groupe</legend>
+      <div class="ctl">
+        <label for="das">Domaines au portefeuille <output id="dasOut"></output></label>
+        <input type="range" id="das" min="1" max="6" value="3">
+      </div>
+      <div class="ctl">
+        <label for="related">Proximité des métiers <output id="relatedOut"></output></label>
+        <input type="range" id="related" min="0" max="100" value="60">
+      </div>
+      <div class="ctl">
+        <label for="central">Centralisation <output id="centralOut"></output></label>
+        <input type="range" id="central" min="0" max="100" value="40">
+      </div>
+      <div class="ctl">
+        <label for="shared">Mutualisation effective <output id="sharedOut"></output></label>
+        <input type="range" id="shared" min="0" max="100" value="40">
+      </div>
+    </fieldset>
+  </div>
+
+  <div>
+    <div class="panel" style="padding:0;border:0">
+      <div class="out" id="out"></div>
+    </div>
+    <div class="verdict" id="verdict"></div>
+    <div class="chain">
+      <h3>La chaîne que vous venez de déplacer</h3>
+      <ol id="chain"></ol>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>Coefficients extraits du moteur, non ressaisis</span>
+  <span>Un domaine, un tour, un pool de trois équipes de référence</span>
+</footer>
+</div>
+
+<script>
+const E = {"comp": {"quality": 0.3, "notoriety": 0.25, "price": 0.2, "ia": 0.15, "pressure": -0.1}, "ia": {"sab": 0.44, "sag": 0.2, "sac": 0.28, "sat": 0.08}, "band": 0.1, "sat": 0.45, "exp": 1.5, "stuckT": 55.0, "stuckM": 12.0, "driftT": 15.0, "driftM": 6.0, "premMax": 0.08, "premPivot": 70.0, "priceFloor": 0.6, "priceSpan": 0.008, "shortfall": 2.0, "maxDiscount": 0.18, "ownedCapture": 0.26, "ownedOperating": 0.06, "contractEq": 0.5, "synergyMax": 0.12, "coordMax": 0.15, "hqPerDas": 0.004, "ansoff": {"developpement_marche": 0.12, "developpement_produit": 0.15, "diversification": 0.28, "penetration": 0.0}, "blue": {"mult": 2.5, "cost": 0.15, "fail": 0.35, "rounds": 2.0}, "targets": {"domination_couts": {"price_position": 22.0, "rd_intensity": 20.0, "mkt_intensity": 30.0, "quality": 55.0, "cost_efficiency": 88.0, "scale_index": 82.0, "automation_level": 78.0, "skill_intensity": 32.0, "segment_breadth": 80.0, "channel_control": 35.0, "org_delegation": 30.0, "org_layers": 68.0, "axis_fit": 100.0, "kpi_fit": 100.0, "budget_fit": 100.0, "key_roles_fit": 100.0}, "differenciation": {"price_position": 78.0, "rd_intensity": 80.0, "mkt_intensity": 75.0, "quality": 85.0, "cost_efficiency": 45.0, "scale_index": 55.0, "automation_level": 55.0, "skill_intensity": 82.0, "segment_breadth": 75.0, "channel_control": 70.0, "org_delegation": 62.0, "org_layers": 45.0, "axis_fit": 100.0, "kpi_fit": 100.0, "budget_fit": 100.0, "key_roles_fit": 100.0}, "focus_couts": {"price_position": 30.0, "rd_intensity": 20.0, "mkt_intensity": 25.0, "quality": 58.0, "cost_efficiency": 78.0, "scale_index": 30.0, "automation_level": 62.0, "skill_intensity": 38.0, "segment_breadth": 22.0, "channel_control": 45.0, "org_delegation": 42.0, "org_layers": 48.0, "axis_fit": 100.0, "kpi_fit": 100.0, "budget_fit": 100.0, "key_roles_fit": 100.0}, "focus_differenciation": {"price_position": 88.0, "rd_intensity": 85.0, "mkt_intensity": 60.0, "quality": 90.0, "cost_efficiency": 38.0, "scale_index": 22.0, "automation_level": 35.0, "skill_intensity": 88.0, "segment_breadth": 18.0, "channel_control": 85.0, "org_delegation": 78.0, "org_layers": 24.0, "axis_fit": 100.0, "kpi_fit": 100.0, "budget_fit": 100.0, "key_roles_fit": 100.0}}, "weights": {"domination_couts": {"price_position": 0.104, "rd_intensity": 0.052, "mkt_intensity": 0.0195, "quality": 0.0455, "cost_efficiency": 0.13, "scale_index": 0.117, "automation_level": 0.078, "skill_intensity": 0.052, "segment_breadth": 0.039, "channel_control": 0.013, "org_delegation": 0.05, "org_layers": 0.04, "axis_fit": 0.07, "kpi_fit": 0.09, "budget_fit": 0.07, "key_roles_fit": 0.03}, "differenciation": {"price_position": 0.091, "rd_intensity": 0.117, "mkt_intensity": 0.078, "quality": 0.13, "cost_efficiency": 0.039, "scale_index": 0.013, "automation_level": 0.026, "skill_intensity": 0.0845, "segment_breadth": 0.0195, "channel_control": 0.052, "org_delegation": 0.05, "org_layers": 0.04, "axis_fit": 0.08, "kpi_fit": 0.09, "budget_fit": 0.06, "key_roles_fit": 0.03}, "focus_couts": {"price_position": 0.0975, "rd_intensity": 0.039, "mkt_intensity": 0.013, "quality": 0.0585, "cost_efficiency": 0.117, "scale_index": 0.065, "automation_level": 0.065, "skill_intensity": 0.052, "segment_breadth": 0.117, "channel_control": 0.026, "org_delegation": 0.05, "org_layers": 0.04, "axis_fit": 0.07, "kpi_fit": 0.09, "budget_fit": 0.07, "key_roles_fit": 0.03}, "focus_differenciation": {"price_position": 0.091, "rd_intensity": 0.078, "mkt_intensity": 0.039, "quality": 0.117, "cost_efficiency": 0.026, "scale_index": 0.013, "automation_level": 0.0195, "skill_intensity": 0.0845, "segment_breadth": 0.117, "channel_control": 0.065, "org_delegation": 0.06, "org_layers": 0.05, "axis_fit": 0.07, "kpi_fit": 0.08, "budget_fit": 0.06, "key_roles_fit": 0.03}}, "corpT": {"specialisation": {"portfolio_breadth": 10.0, "portfolio_relatedness": 85.0, "centralisation_index": 75.0, "shared_resources_index": 60.0, "vertical_integration": 40.0, "talent_mix": 60.0, "values_fit": 75.0}, "integration_verticale": {"portfolio_breadth": 25.0, "portfolio_relatedness": 80.0, "centralisation_index": 80.0, "shared_resources_index": 70.0, "vertical_integration": 85.0, "talent_mix": 55.0, "values_fit": 70.0}, "diversification_liee": {"portfolio_breadth": 50.0, "portfolio_relatedness": 65.0, "centralisation_index": 55.0, "shared_resources_index": 80.0, "vertical_integration": 40.0, "talent_mix": 60.0, "values_fit": 70.0}, "diversification_conglomerale": {"portfolio_breadth": 75.0, "portfolio_relatedness": 20.0, "centralisation_index": 30.0, "shared_resources_index": 20.0, "vertical_integration": 20.0, "talent_mix": 45.0, "values_fit": 60.0}}, "corpW": {"specialisation": {"portfolio_breadth": 0.22, "portfolio_relatedness": 0.2, "centralisation_index": 0.14, "shared_resources_index": 0.14, "vertical_integration": 0.08, "talent_mix": 0.1, "values_fit": 0.12}, "integration_verticale": {"portfolio_breadth": 0.1, "portfolio_relatedness": 0.14, "centralisation_index": 0.16, "shared_resources_index": 0.16, "vertical_integration": 0.3, "talent_mix": 0.06, "values_fit": 0.08}, "diversification_liee": {"portfolio_breadth": 0.16, "portfolio_relatedness": 0.2, "centralisation_index": 0.12, "shared_resources_index": 0.26, "vertical_integration": 0.08, "talent_mix": 0.08, "values_fit": 0.1}, "diversification_conglomerale": {"portfolio_breadth": 0.18, "portfolio_relatedness": 0.18, "centralisation_index": 0.18, "shared_resources_index": 0.2, "vertical_integration": 0.06, "talent_mix": 0.08, "values_fit": 0.12}}};
+
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const c100 = (v) => clamp(v, 0, 100);
+const fr = (v, d = 0) => v.toFixed(d).replace('.', ',');
+
+const CTL = ['price','segments','quality','noto','rd','mkt','auto','cost','channel','integ',
+             'das','related','central','shared'];
+const own = { supplier: false, distrib: false };
+
+const HINT = {
+  domination_couts: 'Vise un prix bas, une efficience forte, un contrôle du canal faible.',
+  differenciation: 'Vise une qualité et une R&D élevées, un prix premium.',
+  focus_couts: 'Un seul segment, servi moins cher que les généralistes.',
+  focus_differenciation: 'Un seul segment, sur mesure, à très forte valeur.',
+};
+
+// ── Pénalité d'alignement : bande de tolérance, convexité, saturation ────────
+function penalty(gap) {
+  const d = Math.abs(gap) / 100;
+  if (d <= E.band) return 0;
+  if (d >= E.sat) return 1;
+  return Math.pow((d - E.band) / (E.sat - E.band), E.exp);
+}
+
+function sabFor(strategy, obs) {
+  const T = E.targets[strategy], W = E.weights[strategy];
+  let total = 0;
+  for (const axis in T) {
+    if (obs[axis] === undefined) continue;
+    total += W[axis] * penalty(obs[axis] - T[axis]);
+  }
+  // Les axes d'organisation ne sont pas simulés : on renormalise sur ceux qui le sont.
+  let covered = 0;
+  for (const axis in T) if (obs[axis] !== undefined) covered += W[axis];
+  return c100(100 * (1 - total / Math.max(covered, 1e-9)));
+}
+
+function compute() {
+  const v = {};
+  for (const id of CTL) v[id] = Number($(id).value);
+  const strategy = $('strategy').value;
+
+  // ── Vecteur observé, dans le vocabulaire du moteur ────────────────────────
+  const channel = own.distrib ? c100(v.channel + 45) : v.channel;
+  const obs = {
+    price_position: v.price,
+    rd_intensity: v.rd,
+    mkt_intensity: v.mkt,
+    quality: v.quality,
+    cost_efficiency: own.supplier
+      ? c100(v.cost + 12 * (v.integ / 100)) : v.cost,
+    automation_level: v.auto,
+    segment_breadth: ((v.segments - 1) / 4) * 100,
+    channel_control: channel,
+  };
+
+  const sab = sabFor(strategy, obs);
+  const best = Object.keys(E.targets)
+    .map((s) => ({ s, score: sabFor(s, obs) }))
+    .sort((a, b) => b.score - a.score)[0];
+
+  const stuck = best.score < E.stuckT;
+  const drift = !stuck && best.score - sab > E.driftT;
+
+  // ── SAC : le groupe ───────────────────────────────────────────────────────
+  const CT = E.targets, CW = E.weights; // profils business, réutilisés plus bas
+  const corp = {
+    portfolio_breadth: ((v.das - 1) / 7) * 100,
+    portfolio_relatedness: v.related,
+    centralisation_index: v.central,
+    shared_resources_index: v.shared,
+    vertical_integration: c100(
+      0.55 * channel + 0.45 * (own.supplier ? 100 * (v.integ / 100) : 40 * E.contractEq * 2)),
+    talent_mix: 45,
+    values_fit: 70,
+  };
+  const corpStrat = corp.vertical_integration > 60 ? 'integration_verticale'
+    : v.das <= 2 ? 'specialisation'
+    : v.related >= 45 ? 'diversification_liee' : 'diversification_conglomerale';
+  let cpen = 0, cw = 0;
+  for (const axis in E.corpT[corpStrat]) {
+    cpen += E.corpW[corpStrat][axis] * penalty(corp[axis] - E.corpT[corpStrat][axis]);
+    cw += E.corpW[corpStrat][axis];
+  }
+  const sac = c100(100 * (1 - cpen / cw));
+
+  const ia = c100(
+    (E.ia.sab * sab + E.ia.sac * sac + E.ia.sat * 100) / (E.ia.sab + E.ia.sac + E.ia.sat)
+    - (stuck ? E.stuckM : 0) - (drift ? E.driftM : 0));
+
+  // ── Économie ──────────────────────────────────────────────────────────────
+  const priceFactor = E.priceFloor + E.priceSpan * v.price;
+  // Prix relatif au marché : l'écart au médian, référence 50.
+  const gap = (1 - priceFactor / (E.priceFloor + E.priceSpan * 50));
+  const priceComp = clamp(0.5 + 1.6 * gap, 0, 1);
+
+  const comp = Math.max(
+    E.comp.quality * (v.quality / 100) + E.comp.notoriety * (v.noto / 100)
+    + E.comp.price * priceComp + E.comp.ia * (ia / 100)
+    + E.comp.pressure * 0.4, 0.001);
+
+  // Trois équipes de référence à compétitivité moyenne 0,46.
+  const share = comp / (comp + 2 * 0.46);
+  const addressable = (v.segments / 5) * (v.quality >= 55 ? 1 : 1 / E.shortfall);
+  const volume = share * addressable;
+
+  const prem = clamp(E.premMax * ((ia - E.premPivot) / (100 - E.premPivot)), -E.premMax, E.premMax);
+
+  // Marge : prix, efficience, part captée à l'amont, marge non cédée à l'aval.
+  const upstream = own.supplier ? E.ownedCapture * (v.integ / 100) : E.maxDiscount * 0.45;
+  const downstream = own.distrib
+    ? (0.22 - (0.22 - E.ownedOperating) * (v.integ / 100)) : 0.22;
+  const margin = (priceFactor - (1 - upstream) * (1.05 - 0.45 * (v.cost / 100))) / priceFactor
+    - downstream * (1 - channel / 100) + prem;
+
+  const m = v.shared / 100, pr = v.related / 100;
+  const opex = Math.max(1 - m * pr * E.synergyMax + m * (1 - pr) * E.coordMax
+    + (v.central / 100) * v.das * E.hqPerDas, 0.5);
+
+  return { sab, sac, ia, stuck, drift, best, comp, share, addressable, volume,
+           margin, prem, opex, priceFactor, corpStrat, corp, obs, v, strategy };
+}
+
+// ── Rendu ───────────────────────────────────────────────────────────────────
+let base = null;
+
+function row(name, note, value, delta, pct) {
+  const cls = delta === null ? 'flat' : delta > 0.05 ? 'up' : delta < -0.05 ? 'down' : 'flat';
+  const sign = delta === null ? '—' : (delta > 0 ? '↑ +' : delta < 0 ? '↓ −' : '= ')
+    + (delta === 0 ? '' : fr(Math.abs(delta), 1));
+  return `<div class="row"><span class="name">${name}<small>${note}</small>
+    ${pct !== undefined ? `<span class="bar"><i style="width:${c100(pct)}%"></i></span>` : ''}
+    </span><span class="val">${value}</span><span class="delta ${cls}">${sign}</span></div>`;
+}
+
+function render() {
+  const r = compute();
+  if (!base) base = r;
+  const d = (k) => base === r ? null : r[k] - base[k];
+
+  $('out').innerHTML =
+    `<div class="row rowhead"><span>Ce que vos décisions produisent</span><span>Valeur</span><span>Écart</span></div>`
+    + row("Indice d'alignement", 'Cohérence entre le déclaré et le fait', fr(r.ia, 1), d('ia'), r.ia)
+    + row('Alignement business', `Contre le profil « ${$('strategy').selectedOptions[0].text.toLowerCase()} »`, fr(r.sab, 1), d('sab'), r.sab)
+    + row('Alignement corporate', `Portefeuille lu comme « ${r.corpStrat.replace(/_/g, ' ')} »`, fr(r.sac, 1), d('sac'), r.sac)
+    + row('Intégration verticale', 'Axe du groupe : amont contracté ou détenu, canal contrôlé', fr(r.corp.vertical_integration, 0), base === r ? null : r.corp.vertical_integration - base.corp.vertical_integration, r.corp.vertical_integration)
+    + row('Compétitivité', 'Qualité, notoriété, prix relatif, alignement, pression', fr(r.comp * 100, 1), base === r ? null : (r.comp - base.comp) * 100, r.comp * 100)
+    + row('Part de marché', 'À somme nulle, contre deux concurrents de référence', fr(r.share * 100, 1) + ' %', base === r ? null : (r.share - base.share) * 100, r.share * 100)
+    + row('Marché adressable', 'Ce que vos segments servis vous ouvrent', fr(r.addressable * 100, 0) + ' %', base === r ? null : (r.addressable - base.addressable) * 100, r.addressable * 100)
+    + row('Volume relatif', 'Part de marché × marché adressable', fr(r.volume * 100, 1), base === r ? null : (r.volume - base.volume) * 100, r.volume * 100)
+    + row("Marge d'exploitation", 'Prix, coûts, amont capté, marge cédée à l\'aval', fr(r.margin * 100, 1) + ' %', base === r ? null : (r.margin - base.margin) * 100, r.margin * 100)
+    + row('Prime de marge', "Bonus accordé à une entreprise cohérente", (r.prem >= 0 ? '+' : '−') + fr(Math.abs(r.prem) * 100, 1) + ' pts', base === r ? null : (r.prem - base.prem) * 100, (r.prem + E.premMax) / (2 * E.premMax) * 100)
+    + row('Charges de structure', 'Synergies moins coordination et frais de siège', '×' + fr(r.opex, 3), base === r ? null : (r.opex - base.opex) * 100, (r.opex - 0.5) / 1.2 * 100);
+
+  // ── Verdict ───────────────────────────────────────────────────────────────
+  let v = '';
+  if (r.stuck) {
+    v += `<p><span class="tag" style="color:var(--down)">Milieu de gué</span>
+      Vos décisions ne correspondent à <strong>aucune</strong> des quatre stratégies :
+      ni assez bon marché pour gagner sur les coûts, ni assez distinctif pour justifier un
+      premium. ${fr(E.stuckM, 0)} points retirés à l'indice.</p>`;
+  } else if (r.drift) {
+    v += `<p><span class="tag" style="color:var(--warn)">Dérive</span>
+      Vos décisions exécutent <strong>${r.best.s.replace(/_/g, ' ')}</strong> alors que vous
+      déclarez autre chose. ${fr(E.driftM, 0)} points — effaçables en re-déclarant au tour
+      suivant, sans coût de transition.</p>`;
+  } else {
+    v += `<p><span class="tag" style="color:var(--up)">Cohérent</span>
+      Vos décisions servent la stratégie que vous déclarez. C'est ce que l'indice mesure —
+      pas votre performance.</p>`;
+  }
+  if ((own.distrib || own.supplier) && r.strategy === 'domination_couts') {
+    // Le chiffre exact plutôt que l'effet de manche : sur cette stratégie
+    // l'axe du canal ne pèse que 1,3 %, et le dire est plus instructif que
+    // d'annoncer une catastrophe que le moteur ne produit pas.
+    const w = E.weights.domination_couts.channel_control * 100;
+    v += `<p>Vous intégrez votre filière en jouant la domination par les coûts, qui vise un
+      contrôle du canal de ${E.targets.domination_couts.channel_control} sur 100 — vous êtes à
+      ${fr(r.obs.channel_control, 0)}. Le <strong>domaine</strong> s'en aperçoit à peine :
+      cet axe ne pèse que ${fr(w, 1)} % de son alignement. C'est le <strong>groupe</strong> qui
+      bouge, par l'axe d'intégration verticale — et il ne vous en saura gré que si votre
+      stratégie corporate est bien l'intégration verticale.</p>`;
+  }
+  if ((own.distrib || own.supplier)
+      && (r.strategy === 'differenciation' || r.strategy === 'focus_differenciation')) {
+    v += `<p>L'intégration sert ici les deux étages : une stratégie de différenciation vise un
+      contrôle du canal de ${E.targets[r.strategy].channel_control} sur 100, parce que maîtriser
+      la relation client fait partie de ce qui vous distingue.</p>`;
+  }
+  if (r.v.segments <= 2 && (r.strategy === 'domination_couts' || r.strategy === 'differenciation')) {
+    v += `<p>Se concentrer sur ${r.v.segments} segment${r.v.segments > 1 ? 's' : ''} restreint votre
+      marché adressable à ${fr(r.addressable * 100, 0)} % du domaine, alors que votre stratégie
+      vise un marché large.</p>`;
+  }
+  if (r.v.quality < 55) {
+    v += `<p>Sous 55 de qualité perçue, les segments exigeants se ferment : votre marché
+      adressable est divisé par ${fr(E.shortfall, 0)}.</p>`;
+  }
+  $('verdict').innerHTML = `<h3>Ce que le moteur en dit</h3>${v}`;
+
+  // ── Chaîne causale ────────────────────────────────────────────────────────
+  $('chain').innerHTML = [
+    ['1', 'Vos décisions', 'forment un vecteur observé sur 16 axes'],
+    ['2', 'Comparé aux QUATRE profils', 'pas seulement à celui que vous déclarez'],
+    ['3', "L'écart devient une pénalité", `gratuit sous ${fr(E.band * 100, 0)} points, saturé à ${fr(E.sat * 100, 0)}`],
+    ['4', "L'indice d'alignement", `${fr(E.ia.sab * 100, 0)} % business, ${fr(E.ia.sac * 100, 0)} % corporate, ${fr(E.ia.sag * 100, 0)} % directives, ${fr(E.ia.sat * 100, 0)} % temporel`],
+    ['5', 'Il entre dans la compétitivité', `à hauteur de ${fr(E.comp.ia * 100, 0)} %`],
+    ['6', 'La compétitivité répartit le marché', 'à somme nulle, entre les équipes du pool'],
+    ['7', 'Les segments servis plafonnent le volume', "on ne vend pas sur un segment qu'on ne sert pas"],
+    ['8', 'Et il accorde une prime de marge', `jusqu'à ${fr(E.premMax * 100, 0)} points au-delà de ${fr(E.premPivot, 0)} d'indice`],
+  ].map(([n, t, e]) => `<li><b>${n}</b><span>${t} — <em>${e}</em></span></li>`).join('');
+}
+
+// ── Câblage ─────────────────────────────────────────────────────────────────
+const UNIT = { price: '', segments: '', integ: ' %', das: '', related: '', central: '', shared: '' };
+function sync() {
+  for (const id of CTL) {
+    const out = $(id + 'Out');
+    if (out) out.textContent = $(id).value + (UNIT[id] ?? '');
+  }
+  $('strategyHint').textContent = HINT[$('strategy').value];
+  render();
+}
+for (const id of CTL) $(id).addEventListener('input', sync);
+$('strategy').addEventListener('change', sync);
+for (const [id, key] of [['ownSupplier', 'supplier'], ['ownDistrib', 'distrib']]) {
+  $(id).addEventListener('click', () => {
+    own[key] = !own[key];
+    $(id).setAttribute('aria-pressed', String(own[key]));
+    sync();
+  });
+}
+sync();
+base = compute();
+render();
+</script>

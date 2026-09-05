@@ -20,27 +20,32 @@ export function formatMad(value: number | null | undefined): string {
 }
 
 /**
- * Montants d'entreprise : « 12,4 M DH », « 1,9 Md DH ».
+ * Montants d'entreprise : « 12,44 M DH », « 1,92 Md DH », « 578,4 k DH ».
  * Au-delà du million, les chiffres exacts empêchent de comparer d'un coup d'œil.
+ * Plafond 2 chiffres après la virgule pour toute la plateforme.
  */
-export function formatMadCompact(value: number | null | undefined): string {
+export function formatMadCompact(value: number | null | undefined, decimals = 2): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
   const abs = Math.abs(value);
   const sign = value < 0 ? '−' : '';
 
-  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(1).replace('.', ',')}${NBSP}Md${NBSP}DH`;
-  if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(1).replace('.', ',')}${NBSP}M${NBSP}DH`;
+  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(decimals).replace('.', ',')}${NBSP}Md${NBSP}DH`;
+  if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(decimals).replace('.', ',')}${NBSP}M${NBSP}DH`;
+  if (abs >= 1e3) return `${sign}${(abs / 1e3).toFixed(decimals).replace('.', ',')}${NBSP}k${NBSP}DH`;
   return formatMad(value);
 }
 
+// Clamp décimaux à 2 max pour la plateforme entière
+const clampDecimals = (d: number | undefined): number => Math.min(d ?? 1, 2);
+
 export function formatPct(value: number | null | undefined, decimals = 1): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-  return `${(value * 100).toFixed(decimals).replace('.', ',')}${NBSP}%`;
+  return `${(value * 100).toFixed(clampDecimals(decimals)).replace('.', ',')}${NBSP}%`;
 }
 
 export function formatScore(value: number | null | undefined, decimals = 0): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-  return value.toFixed(decimals).replace('.', ',');
+  return value.toFixed(clampDecimals(decimals)).replace('.', ',');
 }
 
 export function formatUnits(value: number | null | undefined): string {

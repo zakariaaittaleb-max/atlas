@@ -3,11 +3,31 @@
 /**
  * ATLAS — lecture de gestion, par DAS et pour le Groupe.
  *
- * ── LE PARTI PRIS ──────────────────────────────────────────────────────────
- * Le public n'est pas financier. Aucun sigle n'apparaît ici : ni EBITDA, ni
- * BFR, ni OPEX. Chaque chiffre est accompagné de la PHRASE qui dit ce qu'il
- * signifie, et ces phrases viennent du moteur (`indicators.ts`) et non de la
- * vue — pour qu'un export Excel dise exactement la même chose.
+ * ── LE PARTI PRIS, ET SON REVIREMENT ───────────────────────────────────────
+ * Le public n'est pas financier. On en avait tiré la conclusion inverse de la
+ * bonne : remplacer chaque terme par une paraphrase — « ce que tout cela a
+ * coûté » pour les charges d'exploitation, « ce que votre outil rapporte »
+ * pour la rentabilité économique.
+ *
+ * L'intention était juste, le résultat contraire à l'objectif :
+ *
+ *   • une paraphrase NE S'APPREND PAS. Une équipe ayant joué six tours sur
+ *     « ce qui reste une fois tout payé » ne sait toujours pas lire un compte
+ *     de résultat — et c'est pourtant l'objet du jeu ;
+ *   • elle NE SE CHERCHE PAS : introuvable dans un manuel, indicible en
+ *     soutenance, incomparable à ce qu'un enseignant écrit au tableau ;
+ *   • elle est AMBIGUË. « Ce que votre argent coûte » désigne aussi bien le
+ *     coût de la dette que le coût moyen pondéré du capital — deux notions
+ *     distinctes, dont l'une est au programme.
+ *
+ * L'écran affiche donc le TERME EXACT, et l'explication vient au survol : une
+ * définition en une phrase, puis un exemple chiffré. On apprend le vocabulaire
+ * en le lisant, sans jamais rester bloqué devant. Le glossaire vit dans
+ * `lib/glossary.ts`, hors de cette vue, pour être testable et réutilisable.
+ *
+ * Les phrases d'interprétation — celles qui commentent un ratio plutôt que de
+ * le nommer — viennent toujours du moteur (`indicators.ts`) et non de la vue,
+ * pour qu'un export Excel dise exactement la même chose.
  *
  * ── L'HONNÊTETÉ DU LIBELLÉ ─────────────────────────────────────────────────
  * La marge affichée PAR DAS est une marge d'exploitation : elle ignore les
@@ -16,6 +36,7 @@
  * niveau d'un DAS, 6 % au niveau du groupe, et conclurait à un bug.
  */
 
+import { Term } from '@/components/term';
 import { formatMadCompact } from '@/lib/format';
 import type { ResultsContext } from '@/lib/results-types';
 
@@ -38,8 +59,9 @@ export function ResultsSection({ results }: { results: ResultsContext }) {
     <section className="mt-8 rounded-xl border border-(--border) bg-(--surface) p-6">
       <h2 className="text-xl font-medium">Vos résultats — exercice {results.roundNumber}</h2>
       <p className="mt-1 mb-5 max-w-3xl text-sm text-(--foreground-muted)">
-        Les mêmes chiffres que votre comptable, dits autrement. Chaque nombre est suivi de ce
-        qu’il veut dire.
+        Les termes sont ceux de la discipline — ceux que vous emploierez en soutenance et que
+        vous retrouverez dans un manuel. <strong>Survolez-en un</strong> pour sa définition et un
+        exemple chiffré.
       </p>
 
       {/* ── Groupe ─────────────────────────────────────────────────────── */}
@@ -49,21 +71,21 @@ export function ResultsSection({ results }: { results: ResultsContext }) {
 
       <dl className="tabular mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Figure
-          term="Ce que nous avons vendu"
+          term="Chiffre d'affaires"
           value={formatMadCompact(g.revenueMad)}
         />
         <Figure
-          term="Ce que tout cela a coûté"
+          term="Charges d'exploitation"
           value={formatMadCompact(g.totalCostsMad)}
           note={`${g.profitMarginPct >= 0 ? '' : '−'}${Math.abs(100 - g.profitMarginPct).toFixed(0)} DH de coûts pour 100 DH vendus`}
         />
         <Figure
-          term="Ce qui reste, une fois tout payé"
+          term="Résultat net"
           value={formatMadCompact(g.netIncomeMad)}
           tone={g.netIncomeMad >= 0 ? 'positive' : 'negative'}
         />
         <Figure
-          term="Ce qui est réellement entré en caisse"
+          term="Flux de trésorerie d'exploitation"
           value={formatMadCompact(g.cashGeneratedMad)}
           tone={g.cashGeneratedMad >= 0 ? 'positive' : 'negative'}
           note="Le résultat, moins ce que vous avez réinvesti."
@@ -80,18 +102,18 @@ export function ResultsSection({ results }: { results: ResultsContext }) {
       </h3>
 
       <dl className="tabular mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Figure term="Ce que vous devez" value={formatMadCompact(g.debtOutstandingMad)} />
+        <Figure term="Dette financière" value={formatMadCompact(g.debtOutstandingMad)} />
         <Figure
-          term="Poids de la dette"
+          term="Ratio d'endettement"
           value={`${g.debtRatioPct.toFixed(0)} %`}
           note="Dette rapportée à l’argent de vos actionnaires."
         />
         <Figure
-          term="Ce que votre argent coûte"
+          term="Coût de la dette"
           value={`${g.costOfDebtPct.toFixed(1)} %`}
         />
         <Figure
-          term="Ce que votre outil rapporte"
+          term="Rentabilité économique"
           value={`${g.returnOnAssetsPct.toFixed(1)} %`}
           tone={g.leverageFavourable ? 'positive' : 'negative'}
         />
@@ -123,11 +145,11 @@ export function ResultsSection({ results }: { results: ResultsContext }) {
               <thead>
                 <tr className="border-b border-(--border) text-left">
                   <th className="py-2 pr-4 font-medium">Domaine</th>
-                  <th className="py-2 pr-4 font-medium">Vendu</th>
-                  <th className="py-2 pr-4 font-medium">Coûts</th>
-                  <th className="py-2 pr-4 font-medium">Reste sur 100 DH</th>
-                  <th className="py-2 pr-4 font-medium">Rendement</th>
-                  <th className="py-2 pr-4 font-medium">Caisse</th>
+                  <th className="py-2 pr-4 font-medium"><Term>Chiffre d’affaires</Term></th>
+                  <th className="py-2 pr-4 font-medium"><Term>Charges d’exploitation</Term></th>
+                  <th className="py-2 pr-4 font-medium"><Term>Marge d’exploitation</Term></th>
+                  <th className="py-2 pr-4 font-medium"><Term>Rentabilité économique</Term></th>
+                  <th className="py-2 pr-4 font-medium"><Term>Flux de trésorerie d’exploitation</Term></th>
                   <th className="py-2 font-medium">Seuil de rentabilité</th>
                 </tr>
               </thead>
@@ -141,7 +163,7 @@ export function ResultsSection({ results }: { results: ResultsContext }) {
                       className="py-2.5 pr-4"
                       style={{ color: d.profitMarginPct < 0 ? 'var(--negative)' : undefined }}
                     >
-                      {d.profitMarginPct.toFixed(1)} DH
+                      {d.profitMarginPct.toFixed(1)} %
                     </td>
                     <td className="py-2.5 pr-4">{d.roiPct.toFixed(1)} %</td>
                     <td
@@ -187,7 +209,7 @@ function Figure({
 }) {
   return (
     <div>
-      <dt className="text-sm text-(--foreground-muted)">{term}</dt>
+      <dt className="text-sm text-(--foreground-muted)"><Term>{term}</Term></dt>
       <dd
         className="mt-0.5 text-lg font-semibold"
         style={{
