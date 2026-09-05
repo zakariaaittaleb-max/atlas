@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 import { createClient } from '@supabase/supabase-js';
 
-const adminUrl = 'https://mzqleykmqbotbmwbgfpb.supabase.co';
-const anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16cWxleWttcWJvdGJtd2JnZnBiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxOTg5MjksImV4cCI6MjEwMzc3NDkyOX0.nGS5c3K30rT3_jPTXFuF67CvuICEOph4AL9uAJfiTcM';
-const serviceKey = 'process.env.SUPABASE_SERVICE_ROLE_KEY';
+const adminUrl = process.env.SUPABASE_URL || 'https://mzqleykmqbotbmwbgfpb.supabase.co';
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!serviceKey) {
+  console.error('❌ SUPABASE_SERVICE_ROLE_KEY env var required');
+  process.exit(1);
+}
 
 // Créer un client admin avec la clé service role
 const admin = createClient(adminUrl, serviceKey, {
