@@ -393,10 +393,10 @@ function Section({
   return (
     <div className="space-y-4">
       <div className={`${color} -mx-6 px-6 py-3 rounded-lg`}>
-        <p className="text-xs font-bold uppercase tracking-widest text-(--foreground-muted)">
+        <p className="text-xs font-bold uppercase tracking-widest text-slate-700 dark:text-slate-600">
           Phase {phase}
         </p>
-        <h3 className="text-lg font-semibold mt-1">{title}</h3>
+        <h3 className="text-lg font-semibold mt-1 text-slate-900 dark:text-slate-800">{title}</h3>
       </div>
       <div className="space-y-6 pl-2">{children}</div>
     </div>
