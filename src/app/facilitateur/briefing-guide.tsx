@@ -34,7 +34,7 @@ export function BriefingGuide() {
           <Section
             phase={1}
             title="Préparation avant l&apos;atelier (J-1)"
-            color="bg-(--surface-muted) text-(--foreground)"
+            color="bg-stone-50 text-(--foreground)"
           >
             <Step number={1} title="Créez votre session">
               <p>
