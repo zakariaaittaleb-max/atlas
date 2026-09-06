@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { KpiCard } from '@/components/kpi-card';
 import { getRoundState, requireTeam } from '@/lib/dal';
 import {
@@ -62,11 +64,19 @@ export default async function CockpitPage() {
           </p>
         </div>
 
-        {state?.treasury_status && state.treasury_status !== 'sain' ? (
-          <p className="rounded-lg border border-(--warning) px-4 py-2 text-sm font-medium text-(--warning)">
-            Trésorerie {treasuryLabel(state.treasury_status as string).toLowerCase()}
-          </p>
-        ) : null}
+        <div className="flex items-center gap-3">
+          {state?.treasury_status && state.treasury_status !== 'sain' ? (
+            <p className="rounded-lg border border-(--warning) px-4 py-2 text-sm font-medium text-(--warning)">
+              Trésorerie {treasuryLabel(state.treasury_status as string).toLowerCase()}
+            </p>
+          ) : null}
+          <Link
+            href="/sus"
+            className="rounded-lg border border-(--border) px-4 py-2 text-sm font-medium text-(--foreground-muted) hover:bg-(--surface-muted)"
+          >
+            Donner mon avis sur Atlas
+          </Link>
+        </div>
       </header>
 
       {!hasResults ? (

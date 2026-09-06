@@ -86,6 +86,12 @@ export default async function FacilitatorIndexPage() {
                 >
                   Projecteur
                 </Link>
+                <Link
+                  href={`/facilitateur/${String(s.id)}/protocole`}
+                  className="rounded-lg border border-(--border) px-4 py-2 text-sm font-medium"
+                >
+                  Test utilisateur
+                </Link>
               </div>
             </li>
           ))}
