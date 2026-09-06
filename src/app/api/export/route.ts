@@ -18,13 +18,14 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getTeamContext, getUser } from '@/lib/dal';
+import { loadSusAggregate } from '@/lib/server/sus';
 import { buildWorkbook, safeFileName, type SheetSpec } from '@/lib/server/xlsx';
 import { createAdminClient } from '@/lib/supabase/server';
 
 export const maxDuration = 60;
 
 const Query = z.object({
-  type: z.enum(['dossier_initial', 'resultats_tour', 'session_complete']),
+  type: z.enum(['dossier_initial', 'resultats_tour', 'session_complete', 'ux_protocol']),
   sessionId: z.string().uuid().optional(),
 });
 
@@ -46,6 +47,7 @@ export async function GET(request: Request) {
 
   if (parsed.data.type === 'dossier_initial') return openingDossierExport(admin);
   if (parsed.data.type === 'resultats_tour') return teamRoundExport(admin);
+  if (parsed.data.type === 'ux_protocol') return uxProtocolExport(admin, parsed.data.sessionId);
   return sessionExport(admin, parsed.data.sessionId);
 }
 
@@ -646,6 +648,103 @@ async function openingDossierExport(admin: ReturnType<typeof createAdminClient>)
   });
 
   return xlsxResponse(buffer, safeFileName('atlas', 'dossier_initial', team.teamName));
+}
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Cahier du protocole de test d'utilisabilité — préparation, observations de
+ * terrain et questionnaire SUS du panel, en un classeur remis au facilitateur
+ * pour son débriefing. Contrôle d'accès identique à `session_complete` :
+ * ce document contient les notes qualitatives de la session, jamais montrées
+ * aux participants.
+ */
+async function uxProtocolExport(
+  admin: ReturnType<typeof createAdminClient>,
+  sessionId: string | undefined,
+) {
+  const user = await getUser();
+  if (!user) return NextResponse.json({ error: 'Non authentifié.' }, { status: 401 });
+  if (!sessionId) {
+    return NextResponse.json({ error: 'Session non précisée.' }, { status: 400 });
+  }
+
+  const { data: session } = await admin
+    .from('game_sessions').select('id, name, facilitator_id').eq('id', sessionId).maybeSingle();
+
+  if (!session || session.facilitator_id !== user.id) {
+    return NextResponse.json({ error: 'Accès refusé.' }, { status: 403 });
+  }
+
+  const [{ data: notes }, sus] = await Promise.all([
+    admin.from('ux_protocol_notes').select('data').eq('session_id', sessionId).maybeSingle(),
+    loadSusAggregate(sessionId),
+  ]);
+
+  const d = (notes?.data ?? {}) as Record<string, unknown>;
+  const debrief = (d.debrief ?? {}) as Record<string, unknown>;
+  const tasks = Array.isArray(d.tasks) ? (d.tasks as unknown[]).map((t) => str(t)) : [];
+
+  const sheets: SheetSpec[] = [
+    {
+      name: 'Cahier de session',
+      preamble: [
+        `${session.name} — protocole de test d'utilisabilité`,
+        `Généré le ${new Date().toLocaleDateString('fr-FR')}`,
+      ],
+      columns: [
+        { header: 'Rubrique', key: 'label', width: 30 },
+        { header: 'Contenu', key: 'value', width: 90 },
+      ],
+      rows: [
+        { label: 'Facilitateur', value: str(d.facilitator, '—') },
+        { label: 'Email', value: str(d.email, '—') },
+        { label: 'Date de la session', value: str(d.date, '—') },
+        { label: 'Lieu', value: str(d.location, '—') },
+        { label: 'Profil des participants', value: str(d.profile, '—') },
+        ...tasks.map((t, i) => ({ label: `Tâche ${i + 1}`, value: t })),
+        { label: 'Durée observée', value: str(d.duration, '—') },
+        { label: 'Observations en direct', value: str(d.observations, '—') },
+        { label: 'Points de friction', value: str(d.friction, '—') },
+        { label: 'Moments de succès', value: str(d.success, '—') },
+        { label: '— Débriefing qualitatif —', value: '' },
+        { label: '1. Impression générale', value: str(debrief.q1, '—') },
+        { label: '2. Points de confusion', value: str(debrief.q2, '—') },
+        { label: '3. Points positifs', value: str(debrief.q3, '—') },
+        { label: '4. Changement principal', value: str(debrief.q4, '—') },
+      ],
+    },
+    {
+      name: 'Questionnaire SUS',
+      preamble: [
+        `${session.name} — System Usability Scale (Brooke, 1996)`,
+        'Le score individuel n’a pas de valeur isolée : seule la moyenne du panel s’interprète.',
+        sus.average !== null
+          ? `Moyenne du panel : ${sus.average} / 100, sur ${sus.count} réponse(s).`
+          : 'Aucune réponse reçue.',
+      ],
+      columns: [
+        { header: 'Participant', key: 'label', width: 22 },
+        { header: 'Score SUS', key: 'score', format: 'score', width: 14 },
+        { header: 'Commentaire', key: 'comment', width: 80 },
+        { header: 'Répondu le', key: 'date', width: 20 },
+      ],
+      rows: sus.responses.map((r) => ({
+        label: r.label,
+        score: r.score,
+        comment: r.comment || '—',
+        date: new Date(r.createdAt).toLocaleString('fr-FR'),
+      })),
+    },
+  ];
+
+  const buffer = await buildWorkbook(`Atlas — protocole UX ${session.name}`, sheets);
+
+  await admin.from('exports_log').insert({
+    session_id: sessionId, export_type: 'ux_protocol', requested_by: user.id,
+  });
+
+  return xlsxResponse(buffer, safeFileName('atlas', 'protocole_ux', session.name));
 }
 
 // ---------------------------------------------------------------------------
