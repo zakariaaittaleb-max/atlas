@@ -1,14 +1,7 @@
 import 'server-only';
 
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
-
-import { getUser } from '@/lib/dal';
-import {
-  isSuperAdminEmail,
-  readSecurityConfig,
-  SECURITY_MEASURES,
-} from '@/lib/security-config';
+import { buildUserEmailMap } from '@/lib/admin-users';
+import { readSecurityConfig, SECURITY_MEASURES } from '@/lib/security-config';
 import { createAdminClient } from '@/lib/supabase/server';
 
 import { updateSecurityConfigAction } from './actions';
@@ -26,32 +19,17 @@ interface LogRow {
 }
 
 export default async function SecurityAdminPage() {
-  // 404 plutôt que redirection : un visiteur qui devine l'URL sans être
-  // super-admin ne doit même pas apprendre que la page existe.
-  const user = await getUser();
-  if (!user || !isSuperAdminEmail(user.email)) notFound();
-
   const admin = createAdminClient();
 
-  const [config, { data: log }] = await Promise.all([
+  const [config, { data: log }, emailById] = await Promise.all([
     readSecurityConfig(),
     admin
       .from('security_config_log')
       .select('id, measure_name, enabled, changed_by, changed_at')
       .order('changed_at', { ascending: false })
       .limit(50),
+    buildUserEmailMap(),
   ]);
-
-  const emailById = new Map<string, string>();
-  try {
-    const { data } = await admin.auth.admin.listUsers({ perPage: 200 });
-    for (const u of data?.users ?? []) {
-      if (u.email) emailById.set(u.id, u.email);
-    }
-  } catch {
-    // L'API Admin Auth n'est qu'un enrichissement d'affichage : son absence
-    // ne doit pas empêcher la page de rendre le journal (avec des id bruts).
-  }
 
   const entries = ((log as LogRow[] | null) ?? []).map((row) => ({
     ...row,
@@ -60,22 +38,6 @@ export default async function SecurityAdminPage() {
 
   return (
     <main className="mx-auto w-full min-w-0 max-w-3xl px-6 py-10">
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <Link
-          href="/facilitateur"
-          className="flex items-center gap-2 text-sm font-medium text-(--foreground-muted) hover:text-(--foreground)"
-        >
-          <span aria-hidden>←</span> Retour aux sessions
-        </Link>
-        {/* En POST : une déconnexion en GET pourrait être déclenchée par un
-            lien préchargé ou une image. */}
-        <form action="/api/auth/logout" method="post">
-          <button type="submit" className="text-sm hover:underline">
-            Se déconnecter
-          </button>
-        </form>
-      </div>
-
       <header className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">Sécurité</h1>
         <p className="mt-2 text-(--foreground-muted)">

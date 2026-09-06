@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
+import { endImpersonationAction } from "@/app/actions/end-impersonation";
 import { DasScopeProvider } from "@/components/das-scope";
+import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { TeamNav } from "@/components/team-nav";
+import { IMPERSONATION_LABEL_COOKIE } from "@/lib/impersonation";
 import { loadDasScope } from "@/lib/server/das-scope";
 import { readSecurityConfig } from "@/lib/security-config";
 
@@ -29,6 +33,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   // l'onglet actif et le contenu ne peuvent pas diverger.
   const scope = await loadDasScope();
   const securityConfig = await readSecurityConfig();
+  const impersonationLabel = (await cookies()).get(IMPERSONATION_LABEL_COOKIE)?.value ?? null;
 
   return (
     <html
@@ -39,6 +44,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         className="min-h-full flex flex-col"
         data-anti-select={securityConfig.css_anti_selection ? "on" : "off"}
       >
+        {impersonationLabel ? (
+          <ImpersonationBanner
+            adminEmail={impersonationLabel}
+            endImpersonationAction={endImpersonationAction}
+          />
+        ) : null}
         <DasScopeProvider scope={scope}>
           {/* Rend `null` tant que l'utilisateur n'est rattaché à aucune équipe :
               l'écran de connexion reste nu. */}

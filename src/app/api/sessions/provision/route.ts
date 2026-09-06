@@ -5,8 +5,10 @@
  * et les équipes dotées à l'identique. Rend les codes d'accès à distribuer en
  * salle.
  *
- * L'appelant devient le facilitateur de la session qu'il crée : il n'y a pas de
- * rôle « administrateur » global dans Atlas, chaque session a le sien.
+ * L'appelant devient le facilitateur de la session qu'il crée. Le super-admin
+ * (`/admin`) peut réattribuer une session après coup, mais la création reste
+ * toujours au nom de qui l'exécute — y compris quand c'est le super-admin
+ * lui-même, connecté « en tant que » un facilitateur.
  */
 
 import { NextResponse } from 'next/server';
