@@ -37,6 +37,7 @@ import {
   BudgetGauge, DasChecklist, DecisionBar, MoneyField as Money, SectionActions,
   type MissingDecision,
 } from '@/components/decision-shell';
+import { GlossaryButton } from '@/components/glossary-modal';
 import { formatMadCompact, formatScore, strategyLabel } from '@/lib/format';
 import {
   dasDecisionDefaults,
@@ -424,7 +425,7 @@ export function StrategieDasView({
             </fieldset>
 
             <fieldset disabled={locked} className="mt-6">
-              <legend className="mb-3 text-sm font-medium">Investissements du tour</legend>
+              <legend className="mb-3 text-sm font-medium">Investissements du tour (millions DH)</legend>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <Money label="Investir dans l’outil de production" value={d.capexCapacityMad}
                   hint="Disponible au tour SUIVANT : il faut anticiper la demande."
