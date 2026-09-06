@@ -66,3 +66,25 @@ body {
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/* Mesure « anti-sélection CSS », activée depuis /admin/security. L'attribut
+   est posé par layout.tsx à partir de la config lue en base — jamais de CSS
+   codé en dur, sinon la bascule n'aurait plus rien à basculer. Les champs de
+   saisie restent sélectionnables : une équipe doit toujours pouvoir copier ce
+   qu'elle a elle-même tapé. */
+body[data-anti-select="on"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body[data-anti-select="on"] input,
+body[data-anti-select="on"] textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+body[data-anti-select="on"] img,
+body[data-anti-select="on"] svg {
+  -webkit-user-drag: none;
+  user-drag: none;
+}

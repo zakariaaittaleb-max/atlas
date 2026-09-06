@@ -5,6 +5,7 @@ import "./globals.css";
 import { DasScopeProvider } from "@/components/das-scope";
 import { TeamNav } from "@/components/team-nav";
 import { loadDasScope } from "@/lib/server/das-scope";
+import { readSecurityConfig } from "@/lib/security-config";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,13 +28,17 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   // navigation comme pour la page : les deux lisent le même contexte, donc
   // l'onglet actif et le contenu ne peuvent pas diverger.
   const scope = await loadDasScope();
+  const securityConfig = await readSecurityConfig();
 
   return (
     <html
       lang="fr"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body
+        className="min-h-full flex flex-col"
+        data-anti-select={securityConfig.css_anti_selection ? "on" : "off"}
+      >
         <DasScopeProvider scope={scope}>
           {/* Rend `null` tant que l'utilisateur n'est rattaché à aucune équipe :
               l'écran de connexion reste nu. */}
