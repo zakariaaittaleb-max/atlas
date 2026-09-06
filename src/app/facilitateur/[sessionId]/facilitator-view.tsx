@@ -119,6 +119,16 @@ export function FacilitatorView({
 
   return (
     <main className="mx-auto w-full min-w-0 max-w-6xl px-6 py-10">
+      <div className="mb-6 flex items-center gap-3">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center justify-center h-9 w-9 rounded-lg border border-(--border) hover:bg-(--surface-muted) transition"
+          title="Retour"
+        >
+          <span className="text-lg">←</span>
+        </button>
+        <p className="text-sm font-medium text-(--foreground-muted)">Retour aux sessions</p>
+      </div>
       <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
