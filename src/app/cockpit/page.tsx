@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { KpiCard } from '@/components/kpi-card';
 import { getRoundState, requireTeam } from '@/lib/dal';
 import {
@@ -62,11 +64,19 @@ export default async function CockpitPage() {
           </p>
         </div>
 
-        {state?.treasury_status && state.treasury_status !== 'sain' ? (
-          <p className="rounded-lg border border-(--warning) px-4 py-2 text-sm font-medium text-(--warning)">
-            Trésorerie {treasuryLabel(state.treasury_status as string).toLowerCase()}
-          </p>
-        ) : null}
+        <div className="flex items-center gap-3">
+          {state?.treasury_status && state.treasury_status !== 'sain' ? (
+            <p className="rounded-lg border border-(--warning) px-4 py-2 text-sm font-medium text-(--warning)">
+              Trésorerie {treasuryLabel(state.treasury_status as string).toLowerCase()}
+            </p>
+          ) : null}
+          <Link
+            href="/sus"
+            className="rounded-lg border border-(--border) px-4 py-2 text-sm font-medium text-(--foreground-muted) hover:bg-(--surface-muted)"
+          >
+            Donner mon avis sur Atlas
+          </Link>
+        </div>
       </header>
 
       {!hasResults ? (
@@ -80,64 +90,77 @@ export default async function CockpitPage() {
         </section>
       ) : (
         <>
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <KpiCard
-              label="Trésorerie"
-              value={formatMadCompact(pnl?.treasury_end_mad as number)}
-              delta={delta(
-                pnl?.treasury_end_mad as number,
-                previousPnl?.treasury_end_mad as number,
-                (v) => formatMadCompact(v),
-              )}
-              hint={
-                state?.treasury_status && state.treasury_status !== 'sain'
-                  ? treasuryLabel(state.treasury_status as string)
-                  : undefined
-              }
-            />
-            <KpiCard
-              label="Chiffre d’affaires"
-              value={formatMadCompact(pnl?.revenue_mad as number)}
-              delta={delta(
-                pnl?.revenue_mad as number,
-                previousPnl?.revenue_mad as number,
-                (v) => formatMadCompact(v),
-              )}
-            />
-            <KpiCard
-              label="Résultat net"
-              value={formatMadCompact(pnl?.net_income_mad as number)}
-              delta={delta(
-                pnl?.net_income_mad as number,
-                previousPnl?.net_income_mad as number,
-                (v) => formatMadCompact(v),
-              )}
-            />
-            <KpiCard
-              label="Indice d’alignement"
-              value={formatScore(alignment?.ia_final as number)}
-              delta={delta(
-                alignment?.ia_final as number,
-                previousAlignment?.ia_final as number,
-              )}
-              hint={
-                alignment?.stuck_in_the_middle
-                  ? 'Diagnostic : milieu de gué'
-                  : alignment?.strategic_drift
-                    ? 'Diagnostic : dérive stratégique'
+          <section className="mb-8">
+            <h2 className="mb-3 text-sm font-semibold tracking-wide text-(--foreground-muted) uppercase">
+              Indicateurs clés
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <KpiCard
+                label="Trésorerie"
+                value={formatMadCompact(pnl?.treasury_end_mad as number)}
+                delta={delta(
+                  pnl?.treasury_end_mad as number,
+                  previousPnl?.treasury_end_mad as number,
+                  (v) => formatMadCompact(v),
+                )}
+                hint={
+                  state?.treasury_status && state.treasury_status !== 'sain'
+                    ? treasuryLabel(state.treasury_status as string)
                     : undefined
-              }
-            />
-            <KpiCard
-              label="Climat social"
-              value={formatScore(state?.climat_social as number)}
-              delta={delta(state?.climat_social as number, previousState?.climat_social as number)}
-            />
-            <KpiCard
-              label="Prime de marge liée à l’alignement"
-              value={formatPct((state?.margin_premium_pct as number) ?? 0, 1)}
-              hint="Une entreprise cohérente exécute mieux : la prime joue sur la marge, pas sur les parts."
-            />
+                }
+              />
+              <KpiCard
+                label="Chiffre d’affaires"
+                value={formatMadCompact(pnl?.revenue_mad as number)}
+                delta={delta(
+                  pnl?.revenue_mad as number,
+                  previousPnl?.revenue_mad as number,
+                  (v) => formatMadCompact(v),
+                )}
+              />
+              <KpiCard
+                label="Résultat net"
+                value={formatMadCompact(pnl?.net_income_mad as number)}
+                delta={delta(
+                  pnl?.net_income_mad as number,
+                  previousPnl?.net_income_mad as number,
+                  (v) => formatMadCompact(v),
+                )}
+              />
+            </div>
+          </section>
+
+          <section className="mb-8">
+            <h2 className="mb-3 text-sm font-semibold tracking-wide text-(--foreground-muted) uppercase">
+              Dimensions complémentaires
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <KpiCard
+                label="Indice d’alignement"
+                value={formatScore(alignment?.ia_final as number)}
+                delta={delta(
+                  alignment?.ia_final as number,
+                  previousAlignment?.ia_final as number,
+                )}
+                hint={
+                  alignment?.stuck_in_the_middle
+                    ? 'Diagnostic : milieu de gué'
+                    : alignment?.strategic_drift
+                      ? 'Diagnostic : dérive stratégique'
+                      : undefined
+                }
+              />
+              <KpiCard
+                label="Climat social"
+                value={formatScore(state?.climat_social as number)}
+                delta={delta(state?.climat_social as number, previousState?.climat_social as number)}
+              />
+              <KpiCard
+                label="Prime de marge liée à l’alignement"
+                value={formatPct((state?.margin_premium_pct as number) ?? 0, 1)}
+                hint="Une entreprise cohérente exécute mieux : la prime joue sur la marge, pas sur les parts."
+              />
+            </div>
           </section>
 
           {alignment?.stuck_in_the_middle || alignment?.strategic_drift ? (

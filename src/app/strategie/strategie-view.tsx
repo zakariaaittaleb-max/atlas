@@ -37,6 +37,7 @@ import {
   BudgetGauge, DasChecklist, DecisionBar, MoneyField as Money, SectionActions,
   type MissingDecision,
 } from '@/components/decision-shell';
+import { GlossaryButton } from '@/components/glossary-modal';
 import { formatMadCompact, formatScore, strategyLabel } from '@/lib/format';
 import {
   dasDecisionDefaults,
@@ -329,12 +330,17 @@ export function StrategieDasView({
     <>
       <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-10">
         <header className="mb-8">
-          <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
-            Tour {context.roundNumber} · niveau domaine
-          </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-            {das ? `Stratégie de ${das.name}` : 'Stratégie du domaine'}
-          </h1>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
+                Tour {context.roundNumber} · niveau domaine
+              </p>
+              <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+                {das ? `Stratégie de ${das.name}` : 'Stratégie du domaine'}
+              </h1>
+            </div>
+            <GlossaryButton />
+          </div>
           <p className="mt-3 max-w-3xl text-(--foreground-muted)">
             Ces choix ne concernent que le domaine piloté. Changez de domaine dans la barre du
             haut pour renseigner les autres. Ce qui vaut pour l’entreprise entière se règle
@@ -424,7 +430,7 @@ export function StrategieDasView({
             </fieldset>
 
             <fieldset disabled={locked} className="mt-6">
-              <legend className="mb-3 text-sm font-medium">Investissements du tour</legend>
+              <legend className="mb-3 text-sm font-medium">Investissements du tour (millions DH)</legend>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <Money label="Investir dans l’outil de production" value={d.capexCapacityMad}
                   hint="Disponible au tour SUIVANT : il faut anticiper la demande."
