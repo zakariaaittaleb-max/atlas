@@ -1,5 +1,6 @@
 import 'server-only';
 
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { getUser } from '@/lib/dal';
@@ -59,6 +60,22 @@ export default async function SecurityAdminPage() {
 
   return (
     <main className="mx-auto w-full min-w-0 max-w-3xl px-6 py-10">
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <Link
+          href="/facilitateur"
+          className="flex items-center gap-2 text-sm font-medium text-(--foreground-muted) hover:text-(--foreground)"
+        >
+          <span aria-hidden>←</span> Retour aux sessions
+        </Link>
+        {/* En POST : une déconnexion en GET pourrait être déclenchée par un
+            lien préchargé ou une image. */}
+        <form action="/api/auth/logout" method="post">
+          <button type="submit" className="text-sm hover:underline">
+            Se déconnecter
+          </button>
+        </form>
+      </div>
+
       <header className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">Sécurité</h1>
         <p className="mt-2 text-(--foreground-muted)">

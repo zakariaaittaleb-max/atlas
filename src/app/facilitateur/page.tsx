@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 
 import { getUser } from '@/lib/dal';
 import { sessionStatusLabel } from '@/lib/format';
+import { isSuperAdminEmail } from '@/lib/security-config';
 import { DAS_CATALOG } from '@/lib/server/das-catalog';
 import { createAdminClient } from '@/lib/supabase/server';
 
@@ -27,6 +28,21 @@ export default async function FacilitatorIndexPage() {
 
   return (
     <main className="mx-auto w-full min-w-0 max-w-4xl px-6 py-10">
+      <div className="mb-6 flex items-center justify-end gap-4 text-sm">
+        {isSuperAdminEmail(user.email) ? (
+          <Link href="/admin/security" className="hover:underline">
+            Sécurité (super-admin)
+          </Link>
+        ) : null}
+        {/* En POST : une déconnexion en GET pourrait être déclenchée par un
+            lien préchargé ou une image. */}
+        <form action="/api/auth/logout" method="post">
+          <button type="submit" className="hover:underline">
+            Se déconnecter
+          </button>
+        </form>
+      </div>
+
       <header className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">Mes sessions</h1>
         <p className="mt-2 text-(--foreground-muted)">
