@@ -34,7 +34,7 @@ export function BriefingGuide() {
           <Section
             phase={1}
             title="Préparation avant l&apos;atelier (J-1)"
-            color="bg-blue-100 text-(--foreground)"
+            color="bg-(--surface-muted) text-(--foreground)"
           >
             <Step number={1} title="Créez votre session">
               <p>
@@ -56,7 +56,7 @@ export function BriefingGuide() {
                   📊 <strong>Nombre de tours</strong> : 3-6 tours (durée : ~1h par 2 tours)
                 </li>
               </ul>
-              <div className="mt-4 rounded-lg bg-(--ground) p-4 border border-(--border)">
+              <div className="mt-4 rounded-lg bg-(--surface) p-4 border border-(--border)">
                 <p className="text-xs font-medium text-(--foreground-muted) uppercase">
                   Résultat
                 </p>
@@ -114,7 +114,7 @@ export function BriefingGuide() {
                 </li>
                 <li>⏳ Si une équipe affiche &quot;2/3&quot;, elle n&apos;a pas fini → allez la voir</li>
               </ul>
-              <div className="mt-4 rounded-lg bg-(--ground) p-4 border border-(--border)">
+              <div className="mt-4 rounded-lg bg-(--surface) p-4 border border-(--border)">
                 <p className="text-xs font-medium text-(--foreground-muted) uppercase">Conseil</p>
                 <p className="mt-2 text-sm">
                   Laissez 15 minutes de buffer. Les équipes oublient toujours une décision.
@@ -270,7 +270,7 @@ export function BriefingGuide() {
                 <li>🔓 Vous déverrouillez les décisions du tour (bouton en haut)</li>
                 <li>♻️ L&apos;équipe remet la décision corrigée, puis vous relancez la résolution</li>
               </ul>
-              <div className="mt-4 rounded-lg bg-(--ground) p-4 border border-(--border)">
+              <div className="mt-4 rounded-lg bg-(--surface) p-4 border border-(--border)">
                 <p className="text-xs font-medium text-(--foreground-muted) uppercase">Important</p>
                 <p className="mt-2 text-sm">
                   Aucun résultat n&apos;est écrit si la résolution échoue. Le tour n&apos;avance pas.
@@ -336,7 +336,7 @@ export function BriefingGuide() {
                 <li>⚖️ Le poids exact de chaque axe sur l&apos;alignement</li>
                 <li>🔁 La chaîne causale : décision → pénalité → score → compétitivité → volume</li>
               </ul>
-              <div className="mt-4 rounded-lg bg-(--ground) p-4 border border-(--border)">
+              <div className="mt-4 rounded-lg bg-(--surface) p-4 border border-(--border)">
                 <p className="text-xs font-medium text-(--foreground-muted) uppercase">Conseil</p>
                 <p className="mt-2 text-sm">
                   Excellent pour rebondir après qu&apos;une équipe conteste un résultat. Montrez-lui
@@ -431,7 +431,7 @@ function Step({
 
 function CheckItem({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-2 rounded-lg bg-(--ground) p-3 border border-(--border)">
+    <div className="flex items-start gap-2 rounded-lg bg-(--surface) p-3 border border-(--border)">
       <span className="flex-shrink-0 font-semibold text-green-600">{children}</span>
     </div>
   );
