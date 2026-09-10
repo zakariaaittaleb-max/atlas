@@ -12,6 +12,7 @@ import {
   loadFacilitatorCeiling,
   loadSavedPresets,
 } from '@/lib/server/modules';
+import { loadVariationScales } from '@/lib/server/variation-scales';
 import { createAdminClient } from '@/lib/supabase/server';
 import { assignTeamColors } from '@/lib/team-colors';
 
@@ -22,6 +23,11 @@ import {
   setSessionModulesAction,
 } from './modules-actions';
 import { ModulesSection } from './modules-section';
+import {
+  resetVariationScalesAction,
+  setVariationScalesAction,
+} from './scales-actions';
+import { ScalesSection } from './scales-section';
 
 export const metadata = { title: 'Atlas — Pilotage de session' };
 export const dynamic = 'force-dynamic';
@@ -90,10 +96,11 @@ export default async function FacilitatorPage({
 
   // Modules : l'état résolu (ce que les équipes voient), le plafond posé par le
   // super-admin (ce que le facilitateur a le droit d'ouvrir), et ses préréglages.
-  const [modules, ceiling, presets] = await Promise.all([
+  const [modules, ceiling, presets, scales] = await Promise.all([
     loadEnabledModules(sessionId),
     loadFacilitatorCeiling(context.userId),
     loadSavedPresets(context.userId),
+    loadVariationScales(sessionId),
   ]);
   const ceilingState: Record<string, boolean> = {};
   for (const field of ALL_MODULE_FIELDS) {
@@ -159,6 +166,14 @@ export default async function FacilitatorPage({
           setModulesAction={setSessionModulesAction}
           savePresetAction={saveModulePresetAction}
           deletePresetAction={deleteModulePresetAction}
+        />
+      }
+      scalesSection={
+        <ScalesSection
+          sessionId={sessionId}
+          scales={scales}
+          setScalesAction={setVariationScalesAction}
+          resetScalesAction={resetVariationScalesAction}
         />
       }
       das={(das ?? []).map((d) => {

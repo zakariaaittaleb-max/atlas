@@ -32,6 +32,8 @@ import type { DasOrganisation, OrgContext, PositionDraft } from '@/lib/org-types
 import { useAutosave } from '@/lib/use-autosave';
 
 import { anyOn, isOn, type EnabledModules } from '@/lib/modules-state';
+import type { VariationBasis } from '@/lib/variation-references';
+import type { VariationScale } from '@/lib/variation-scale';
 
 import { HrSection } from './hr-section';
 
@@ -86,9 +88,11 @@ const LEVELS = [
 export function OrganisationView({
   context,
   modules,
+  scales,
 }: {
   context: OrgContext;
   modules: EnabledModules;
+  scales: Readonly<Record<string, VariationScale>>;
 }) {
   const router = useRouter();
   const autosave = useAutosave();
@@ -356,6 +360,9 @@ export function OrganisationView({
             state={das.hrState}
             locked={locked}
             modules={modules}
+            previous={das.hrPrevious}
+            scales={scales}
+            basis={basisFor(das, context)}
             onChange={(hr) => {
               update({ hr });
               push('hr', { ...hr });
@@ -578,6 +585,30 @@ export function OrganisationView({
     </>
   );
 }
+
+/**
+ * Les grandeurs de dotation d'un domaine.
+ *
+ * L'effectif et la masse salariale viennent du dernier exercice clos : c'est le
+ * seul état RH connu au moment de décider. Avant la première résolution, on
+ * retombe sur l'effectif du groupe, faute de mieux.
+ */
+function basisFor(das: OrgContext['das'][number], context: OrgContext): VariationBasis {
+  return {
+    treasuryMad: context.operatingBudgetMad,
+    payrollMad: das.hrState?.payrollMad ?? 0,
+    headcount: das.hrState?.headcount ?? context.headcount,
+    smigMad: SMIG_MAD,
+    operatingBudgetMad: context.operatingBudgetMad,
+    directionCount: context.directions.length,
+  };
+}
+
+/**
+ * Salaire minimum légal mensuel, secteur industriel. Sert de plancher à la
+ * dotation salariale quand aucun exercice n'est encore clos.
+ */
+const SMIG_MAD = 3111;
 
 function Section({
   title, hint, children,

@@ -26,6 +26,7 @@ import {
   requireOpen,
 } from '@/lib/server/module-enforcement';
 import { loadEnabledModules } from '@/lib/server/modules';
+import { loadVariationScales } from '@/lib/server/variation-scales';
 import { createAdminClient } from '@/lib/supabase/server';
 
 const Payload = z.discriminatedUnion('block', [
@@ -167,7 +168,32 @@ export async function POST(request: Request) {
       requireOpen(modules, 'org.shared_resources', 'Ressources mutualisées');
     }
     if (body.block === 'hr') {
-      body = await enforceHr(admin, team.teamId, body.dasId, roundNumber, body, modules);
+      // Les fourchettes du facilitateur bornent aussi les écritures directes :
+      // les curseurs les respectent déjà, un POST les ignorerait.
+      const [scales, { data: state }] = await Promise.all([
+        loadVariationScales(team.sessionId),
+        admin
+          .from('das_hr_state')
+          .select('headcount, payroll_mad')
+          .eq('team_id', team.teamId)
+          .eq('das_id', body.dasId)
+          .eq('round_number', roundNumber - 1)
+          .maybeSingle(),
+      ]);
+
+      body = await enforceHr(admin, team.teamId, body.dasId, roundNumber, body, modules, {
+        scales,
+        basis: {
+          treasuryMad: 0,
+          payrollMad: Number(state?.payroll_mad ?? 0),
+          headcount: Number(state?.headcount ?? 0),
+          // Salaire minimum légal mensuel : plancher de la dotation salariale
+          // quand aucun exercice n'est encore clos.
+          smigMad: 3111,
+          operatingBudgetMad: 0,
+          directionCount: 0,
+        },
+      });
     }
     if (body.block === 'directives') {
       body = await enforceDirectives(admin, team.teamId, body.dasId, roundNumber, body, modules);

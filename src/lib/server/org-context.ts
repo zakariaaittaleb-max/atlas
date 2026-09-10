@@ -33,7 +33,8 @@ export async function loadOrgContext(): Promise<OrgContext> {
     { data: budgets }, { data: kpis }, { data: positions }, { data: pnl },
     { data: state }, { data: strategy }, { data: directiveRows },
     { data: sharedRows }, { data: platformRows }, { data: dasSectors },
-    { data: proximityRows }, { data: hrRows }, { data: hrStateRows },
+    { data: proximityRows }, { data: hrRows }, { data: hrPreviousRows },
+    { data: hrStateRows },
   ] = await Promise.all([
     supabase.from('direction_catalog').select('*').order('display_order'),
     supabase.from('kpi_catalog').select('key, direction_key, name, description, unit, higher_is_better'),
@@ -66,6 +67,10 @@ export async function loadOrgContext(): Promise<OrgContext> {
       .eq('session_id', team.sessionId),
     supabase.from('das_hr_decisions').select('*')
       .eq('team_id', team.teamId).eq('round_number', roundNumber),
+    // Le tour précédent sert de RÉFÉRENCE aux curseurs de variation : sans lui,
+    // « +30 % de formation » ne se rapporterait à rien.
+    supabase.from('das_hr_decisions').select('*')
+      .eq('team_id', team.teamId).eq('round_number', roundNumber - 1),
     // L'état du dernier exercice CLOS : on décide en regardant d'où l'on part.
     //
     // `lte` et non `lt` : une ligne n'existe pour le tour courant qu'APRÈS sa
@@ -166,6 +171,19 @@ export async function loadOrgContext(): Promise<OrgContext> {
           orderSkillsAudit: bool(h?.order_skills_audit),
           restructuring: str(h?.restructuring, 'aucune') as
             DasOrganisation['hr']['restructuring'],
+        };
+      })(),
+      hrPrevious: (() => {
+        const h = ((hrPreviousRows ?? []) as Row[]).find((r) => str(r.das_id) === dasId);
+        return {
+          hireOperateurs: num(h?.hire_operateurs),
+          hireTechniciens: num(h?.hire_techniciens),
+          hireExperts: num(h?.hire_experts),
+          hireCadres: num(h?.hire_cadres),
+          layoffs: num(h?.layoffs),
+          internalTransfersIn: num(h?.internal_transfers_in),
+          avgSalaryBrutMad: num(h?.avg_salary_brut_mad),
+          trainingBudgetMad: num(h?.training_budget_mad),
         };
       })(),
       hrState: (() => {

@@ -121,6 +121,21 @@ export interface DasOrganisation {
   /** Ressources ouvertes par le groupe à ce DAS. Vide si le groupe n'a rien ouvert. */
   sharedOffers: SharedResourceOffer[];
   hr: DasHr;
+  /**
+   * Les grandeurs RH du tour PRÉCÉDENT : la référence des curseurs de
+   * variation. Zéro quand il n'y a pas de tour précédent — c'est alors la
+   * dotation qui sert de repère (voir `variation-references.ts`).
+   */
+  hrPrevious: {
+    hireOperateurs: number;
+    hireTechniciens: number;
+    hireExperts: number;
+    hireCadres: number;
+    layoffs: number;
+    internalTransfersIn: number;
+    avgSalaryBrutMad: number;
+    trainingBudgetMad: number;
+  };
   /** État RH du dernier exercice clos. `null` avant la première résolution. */
   hrState: DasHrState | null;
 }

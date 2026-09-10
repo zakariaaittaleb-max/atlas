@@ -28,6 +28,8 @@ import {
   requireOpen,
 } from '@/lib/server/module-enforcement';
 import { loadEnabledModules } from '@/lib/server/modules';
+import { loadVariationScales } from '@/lib/server/variation-scales';
+import type { VariationBasis } from '@/lib/variation-references';
 import { createAdminClient } from '@/lib/supabase/server';
 
 const VALUES = [
@@ -180,10 +182,17 @@ export async function POST(request: Request) {
   // Un bloc masqué dans l'interface n'est pas protégé pour autant : cette
   // route est joignable par POST direct. Les champs fermés sont ramenés à leur
   // valeur du tour précédent AVANT toute écriture.
-  const modules = await loadEnabledModules(team.sessionId);
+  const [modules, scales] = await Promise.all([
+    loadEnabledModules(team.sessionId),
+    loadVariationScales(team.sessionId),
+  ]);
+  const basis = await loadBasis(admin, team.teamId, roundNumber);
   let body: Body;
   try {
-    body = await enforce(admin, team.teamId, roundNumber, parsed.data, modules);
+    body = await enforce(admin, team.teamId, roundNumber, parsed.data, modules, {
+      scales,
+      basis,
+    });
   } catch (error) {
     if (error instanceof ModuleClosedError) {
       return NextResponse.json({ error: error.message }, { status: 403 });
@@ -214,22 +223,53 @@ export async function POST(request: Request) {
 type Admin = ReturnType<typeof createAdminClient>;
 type Body = z.infer<typeof Payload>;
 
-/** Neutralise les champs fermés, refuse les blocs entièrement fermés. */
+/**
+ * Les grandeurs de dotation, pour les champs sans tour précédent exploitable.
+ *
+ * Une seule ligne lue : la trésorerie de clôture du dernier exercice, qui est
+ * l'assiette de tout engagement. Les autres grandeurs ne servent qu'aux écrans
+ * d'organisation, dont les écritures passent par une autre route.
+ */
+async function loadBasis(
+  admin: Admin,
+  teamId: string,
+  round: number,
+): Promise<VariationBasis> {
+  const { data } = await admin
+    .from('pnl_statements')
+    .select('treasury_end_mad')
+    .eq('team_id', teamId)
+    .eq('round_number', round - 1)
+    .maybeSingle();
+
+  const treasuryMad = Number(data?.treasury_end_mad ?? 0);
+  return {
+    treasuryMad,
+    payrollMad: 0,
+    headcount: 0,
+    smigMad: 0,
+    operatingBudgetMad: 0,
+    directionCount: 0,
+  };
+}
+
+/** Neutralise les champs fermés, refuse les blocs fermés, borne les montants. */
 async function enforce(
   admin: Admin,
   teamId: string,
   round: number,
   body: Body,
   modules: EnabledModules,
+  limits: { scales: Awaited<ReturnType<typeof loadVariationScales>>; basis: VariationBasis },
 ): Promise<Body> {
   if (body.plan === 'corporate') {
     return enforceCorporate(admin, teamId, round, body, modules);
   }
   if (body.plan === 'das') {
-    return enforceDas(admin, teamId, body.dasId, round, body, modules);
+    return enforceDas(admin, teamId, body.dasId, round, body, modules, limits);
   }
   if (body.plan === 'finance') {
-    return enforceFinance(admin, teamId, round, body, modules);
+    return enforceFinance(admin, teamId, round, body, modules, limits);
   }
   if (body.plan === 'procurement') {
     requireOpen(modules, 'marches.procurement', 'Contrats fournisseurs');

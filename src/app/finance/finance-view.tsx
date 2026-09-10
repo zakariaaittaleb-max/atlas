@@ -29,7 +29,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 
 import {
-  BudgetGauge, DecisionBar, MoneyField, SectionActions, type MissingDecision,
+  BudgetGauge, DecisionBar, SectionActions, type MissingDecision,
 } from '@/components/decision-shell';
 import { Term } from '@/components/term';
 import { formatMadCompact } from '@/lib/format';
@@ -38,7 +38,23 @@ import { deepEqual } from '@/lib/deep-equal';
 import type { MoneyBar, ResultsContext } from '@/lib/results-types';
 import { ResultsSection } from './results-section';
 import { isOn, screenIsOpen, type EnabledModules } from '@/lib/modules-state';
+import { VariationField } from '@/components/variation-field';
+import { endowmentReference } from '@/lib/variation-references';
+import { referenceOr, type VariationScale } from '@/lib/variation-scale';
 import { useAutosave } from '@/lib/use-autosave';
+
+/**
+ * Les trois postes financiers du groupe : clé de module, champ, famille
+ * d'échelle, libellé, et ce qu'il faut savoir avant de décider.
+ */
+const FINANCE_FIELDS = [
+  ['finance.opex', 'opexMad', 'siege', 'Frais de fonctionnement du siège',
+    'Loyers, systèmes, direction générale. Mutualiser des métiers proches les allège.'],
+  ['finance.debt_drawn', 'debtDrawnMad', 'credit', 'Crédit que vous prenez',
+    'Plus vous devez, plus la banque exige : le taux monte avec ce que vous avez déjà emprunté.'],
+  ['finance.debt_repaid', 'debtRepaidMad', 'credit', 'Crédit que vous remboursez',
+    'Allège les intérêts que vous paierez les années suivantes.'],
+] as const satisfies readonly (readonly [string, 'opexMad' | 'debtDrawnMad' | 'debtRepaidMad', string, string, string])[];
 
 const REGIMES = [
   ['droit_commun', 'Droit commun', 'IS 20 % jusqu’à 100 M DH de bénéfice, 35 % au-delà.'],
@@ -47,11 +63,12 @@ const REGIMES = [
 ] as const;
 
 export function FinanceView({
-  context, missing, modules, results, money,
+  context, missing, modules, scales, results, money,
 }: {
   context: DecisionContext;
   missing: MissingDecision[];
   modules: EnabledModules;
+  scales: Readonly<Record<string, VariationScale>>;
   results: ResultsContext;
   /** La MÊME définition que la barre du haut : un seul « engagé ce tour ». */
   money: MoneyBar | null;
@@ -68,6 +85,15 @@ export function FinanceView({
   }, [autosave]);
 
   const hr = context.hr;
+
+  const basis = {
+    treasuryMad: context.treasuryMad,
+    payrollMad: hr.payrollMad,
+    headcount: context.headcount,
+    smigMad: context.smigMad,
+    operatingBudgetMad: 0,
+    directionCount: 0,
+  };
 
   // Une seule définition de « engagé ce tour », partagée avec la barre du haut.
   // La part des DAS et la masse salariale viennent du serveur — elles se
@@ -177,31 +203,24 @@ export function FinanceView({
         <section className="mt-8 rounded-xl border border-(--border) bg-(--surface) p-6">
           <h2 className="text-xl font-medium">Vos décisions financières</h2>
 
-          <fieldset disabled={locked} className="mt-5 grid gap-4 sm:grid-cols-3">
-            {isOn(modules, 'finance.opex') ? (
-              <MoneyField
-                label="Frais de fonctionnement du siège"
-                value={finance.opexMad}
-                onChange={(v) => pushFinance({ ...finance, opexMad: v })}
-                hint="Loyers, systèmes, direction générale. Mutualiser des métiers proches les allège."
-              />
-            ) : null}
-            {isOn(modules, 'finance.debt_drawn') ? (
-              <MoneyField
-                label="Crédit que vous prenez"
-                value={finance.debtDrawnMad}
-                onChange={(v) => pushFinance({ ...finance, debtDrawnMad: v })}
-                hint="Plus vous devez, plus la banque exige : le taux monte avec ce que vous avez déjà emprunté."
-              />
-            ) : null}
-            {isOn(modules, 'finance.debt_repaid') ? (
-              <MoneyField
-                label="Crédit que vous remboursez"
-                value={finance.debtRepaidMad}
-                onChange={(v) => pushFinance({ ...finance, debtRepaidMad: v })}
-                hint="Allège les intérêts que vous paierez les années suivantes."
-              />
-            ) : null}
+          <fieldset disabled={locked} className="mt-5 grid gap-6 sm:grid-cols-3">
+            {FINANCE_FIELDS.filter(([key]) => isOn(modules, key)).map(
+              ([key, field, family, label, hint]) => (
+                <VariationField
+                  key={key}
+                  label={label}
+                  hint={hint}
+                  value={finance[field]}
+                  reference={referenceOr(
+                    context.financeBaseline[field],
+                    endowmentReference(key, basis),
+                  )}
+                  scale={scales[family]}
+                  unset={!context.financeRecorded}
+                  onChange={(v) => pushFinance({ ...finance, [field]: v })}
+                />
+              ),
+            )}
           </fieldset>
 
           {isOn(modules, 'finance.tax_regime') ? (

@@ -25,6 +25,14 @@ import {
   type FinanceValues,
 } from '../decision-types';
 import { isOn, type EnabledModules } from '../modules-state';
+import { endowmentReference, variationFamilyOf, type VariationBasis } from '../variation-references';
+import {
+  clampVariation,
+  referenceOr,
+  valueFromVariation,
+  variationFromValue,
+  type VariationScale,
+} from '../variation-scale';
 import { createAdminClient } from '../supabase/server';
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -126,6 +134,8 @@ export async function enforceDas<T extends object>(
   roundNumber: number,
   incoming: T,
   modules: EnabledModules,
+  /** Fourni sur les chemins d'écriture : borne aussi les montants. */
+  limits?: { scales: Readonly<Record<string, VariationScale>>; basis: VariationBasis },
 ): Promise<T> {
   const { data } = await admin
     .from('das_decisions')
@@ -148,7 +158,10 @@ export async function enforceDas<T extends object>(
     declareBlueOcean: Boolean(data?.declare_blue_ocean ?? false),
   };
 
-  return keepClosed(incoming, reference, modules, DAS_FIELDS);
+  const kept = keepClosed(incoming, reference, modules, DAS_FIELDS);
+  return limits
+    ? clampToScales(kept, reference, limits.scales, DAS_FIELDS, limits.basis)
+    : kept;
 }
 
 export const FINANCE_FIELDS: Readonly<Record<string, string>> = {
@@ -164,6 +177,7 @@ export async function enforceFinance<T extends object>(
   roundNumber: number,
   incoming: T,
   modules: EnabledModules,
+  limits?: { scales: Readonly<Record<string, VariationScale>>; basis: VariationBasis },
 ): Promise<T> {
   const { data } = await admin
     .from('financial_budgets')
@@ -186,7 +200,10 @@ export async function enforceFinance<T extends object>(
       }
     : FINANCE_DEFAULTS;
 
-  return keepClosed(incoming, reference, modules, FINANCE_FIELDS);
+  const kept = keepClosed(incoming, reference, modules, FINANCE_FIELDS);
+  return limits
+    ? clampToScales(kept, reference, limits.scales, FINANCE_FIELDS, limits.basis)
+    : kept;
 }
 
 export const HR_FIELDS: Readonly<Record<string, string>> = {
@@ -212,6 +229,8 @@ export async function enforceHr<T extends object>(
   roundNumber: number,
   incoming: T,
   modules: EnabledModules,
+  /** Fourni sur les chemins d'écriture : borne aussi les montants. */
+  limits?: { scales: Readonly<Record<string, VariationScale>>; basis: VariationBasis },
 ): Promise<T> {
   const { data } = await admin
     .from('das_hr_decisions')
@@ -244,7 +263,10 @@ export async function enforceHr<T extends object>(
     restructuring: String(data?.restructuring ?? 'aucune'),
   };
 
-  return keepClosed(incoming, reference, modules, HR_FIELDS);
+  const kept = keepClosed(incoming, reference, modules, HR_FIELDS);
+  return limits
+    ? clampToScales(kept, reference, limits.scales, HR_FIELDS, limits.basis)
+    : kept;
 }
 
 export const DIRECTIVES_FIELDS: Readonly<Record<string, string>> = {
@@ -286,6 +308,48 @@ export async function enforceDirectives<T extends object>(
   };
 
   return keepClosed(incoming, reference, modules, DIRECTIVES_FIELDS);
+}
+
+/**
+ * Ramène les montants dans les fourchettes du facilitateur.
+ *
+ * Les curseurs bornent déjà la saisie, mais un POST direct les contourne. Sans
+ * ce clamp, une équipe pourrait engager dix fois ce que la fourchette autorise
+ * et le calibrage de l'atelier ne vaudrait plus rien.
+ *
+ * `mapping` est celui déjà utilisé pour la neutralisation : un seul endroit
+ * décrit la correspondance clé de module → nom de champ.
+ */
+export function clampToScales<T extends object>(
+  incoming: T,
+  reference: object,
+  scales: Readonly<Record<string, VariationScale>>,
+  mapping: Readonly<Record<string, string>>,
+  basis: VariationBasis,
+): T {
+  const result = { ...incoming } as Record<string, unknown>;
+  const previous = reference as Record<string, unknown>;
+
+  for (const [moduleKey, field] of Object.entries(mapping)) {
+    const family = variationFamilyOf(moduleKey);
+    const scale = family ? scales[family] : undefined;
+    if (!scale) continue;
+
+    const asked = result[field];
+    if (typeof asked !== 'number' || !Number.isFinite(asked)) continue;
+
+    const before = previous[field];
+    const base = referenceOr(
+      typeof before === 'number' ? before : 0,
+      endowmentReference(moduleKey, basis),
+    );
+    if (base <= 0) continue;
+
+    const bounded = clampVariation(variationFromValue(base, asked), scale.bounds);
+    result[field] = valueFromVariation(base, bounded);
+  }
+
+  return result as T;
 }
 
 /** Blocs qui n'existent qu'en entier : fermés, l'envoi est refusé. */

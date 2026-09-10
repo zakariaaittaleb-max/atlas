@@ -34,7 +34,7 @@ import { useCallback, useMemo, useState } from 'react';
 
 import { useDasScope } from '@/components/das-scope';
 import {
-  BudgetGauge, DasChecklist, DecisionBar, MoneyField as Money, SectionActions,
+  BudgetGauge, DasChecklist, DecisionBar, SectionActions,
   type MissingDecision,
 } from '@/components/decision-shell';
 import { GlossaryButton } from '@/components/glossary-modal';
@@ -45,6 +45,9 @@ import {
 } from '@/lib/decision-types';
 import { deepEqual } from '@/lib/deep-equal';
 import { anyOn, isOn, type EnabledModules } from '@/lib/modules-state';
+import { VariationField } from '@/components/variation-field';
+import { endowmentReference } from '@/lib/variation-references';
+import { referenceOr, type VariationScale } from '@/lib/variation-scale';
 import { useAutosave } from '@/lib/use-autosave';
 
 const CORPORATE = [
@@ -95,14 +98,32 @@ const FUNCTIONS = [
 
 const CENTRALISATION_KEYS = FUNCTIONS.map(([, , moduleKey]) => moduleKey);
 
-/** Les cinq postes d'engagement du domaine, réunis dans un même bloc. */
-const INVESTMENT_KEYS = [
-  'das.capex_capacity',
-  'das.capex_automation',
-  'das.capex_own_network',
-  'das.rd_budget',
-  'das.marketing_budget',
-];
+/**
+ * Les cinq postes d'engagement du domaine : clé de module, champ de décision,
+ * libellé, et ce que l'équipe doit savoir avant d'arbitrer.
+ */
+const INVESTMENTS = [
+  ['das.capex_capacity', 'capexCapacityMad', 'Outil de production',
+    'Disponible au tour SUIVANT : il faut anticiper la demande.'],
+  ['das.capex_automation', 'capexAutomationMad', 'Automatisation',
+    'Baisse le coût variable, augmente les coûts fixes.'],
+  ['das.capex_own_network', 'capexOwnNetworkMad', 'Réseau de vente propre',
+    'Supprime la marge distributeur. Lent à construire.'],
+  ['das.rd_budget', 'rdBudgetMad', 'Recherche & développement',
+    'Effet DIFFÉRÉ d’un tour sur la qualité.'],
+  ['das.marketing_budget', 'marketingBudgetMad', 'Marketing',
+    'Effet immédiat sur la notoriété, à rendement décroissant.'],
+] as const satisfies readonly (readonly [string, keyof DasDecisionValues, string, string])[];
+
+const INVESTMENT_KEYS = INVESTMENTS.map(([key]) => key);
+
+const FAMILY_OF: Record<string, string> = {
+  'das.capex_capacity': 'investissement',
+  'das.capex_automation': 'investissement',
+  'das.capex_own_network': 'investissement',
+  'das.rd_budget': 'innovation',
+  'das.marketing_budget': 'marketing',
+};
 
 /* ══════════════════════════════════════════════════════════════════════════
    NIVEAU 1 — LE GROUPE                                          `/strategie`
@@ -339,11 +360,12 @@ export function StrategieGroupeView({
  * retenu ici doit être encore celui des achats et de l'organisation.
  */
 export function StrategieDasView({
-  context, missing, modules,
+  context, missing, modules, scales,
 }: {
   context: DecisionContext;
   missing: MissingDecision[];
   modules: EnabledModules;
+  scales: Readonly<Record<string, VariationScale>>;
 }) {
   const router = useRouter();
   const autosave = useAutosave();
@@ -374,6 +396,17 @@ export function StrategieDasView({
   );
 
   const changed = das && d ? !deepEqual(d, das.baseline.decision) : false;
+
+  // Les dotations de repli se calculent sur la trésorerie du groupe : c'est
+  // l'assiette de tout engagement, et la seule grandeur commune aux domaines.
+  const basis = {
+    treasuryMad: context.treasuryMad,
+    payrollMad: context.hr.payrollMad,
+    headcount: context.headcount,
+    smigMad: context.smigMad,
+    operatingBudgetMad: 0,
+    directionCount: 0,
+  };
   // L'état d'ouverture du tour — c'est-à-dire ce que l'équipe a décidé à
   // l'exercice précédent, puisque les décisions se reconduisent. Il sert de
   // repère sous chaque champ, et non seulement de cible au bouton de remise à
@@ -482,41 +515,20 @@ export function StrategieDasView({
             <fieldset disabled={locked} className="mt-6">
               <legend className="mb-3 text-sm font-medium">Investissements du tour (millions DH)</legend>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {isOn(modules, 'das.capex_capacity') ? (
-                  <Money label="Investir dans l’outil de production" value={d.capexCapacityMad}
-                    hint="Disponible au tour SUIVANT : il faut anticiper la demande."
-                    previous={b.capexCapacityMad}
-                    shareOf={context.treasuryMad} shareLabel="de la trésorerie"
-                    onChange={(v) => pushDas(das.dasId, { ...d, capexCapacityMad: v })} />
-                ) : null}
-                {isOn(modules, 'das.capex_automation') ? (
-                  <Money label="Investir dans l’automatisation" value={d.capexAutomationMad}
-                    hint="Baisse le coût variable, augmente les coûts fixes."
-                    previous={b.capexAutomationMad}
-                    shareOf={context.treasuryMad} shareLabel="de la trésorerie"
-                    onChange={(v) => pushDas(das.dasId, { ...d, capexAutomationMad: v })} />
-                ) : null}
-                {isOn(modules, 'das.capex_own_network') ? (
-                  <Money label="Investir dans votre réseau de vente" value={d.capexOwnNetworkMad}
-                    hint="Supprime la marge distributeur. Lent à construire."
-                    previous={b.capexOwnNetworkMad}
-                    shareOf={context.treasuryMad} shareLabel="de la trésorerie"
-                    onChange={(v) => pushDas(das.dasId, { ...d, capexOwnNetworkMad: v })} />
-                ) : null}
-                {isOn(modules, 'das.rd_budget') ? (
-                  <Money label="Recherche & développement" value={d.rdBudgetMad}
-                    hint="Effet DIFFÉRÉ d’un tour sur la qualité."
-                    previous={b.rdBudgetMad}
-                    shareOf={context.treasuryMad} shareLabel="de la trésorerie"
-                    onChange={(v) => pushDas(das.dasId, { ...d, rdBudgetMad: v })} />
-                ) : null}
-                {isOn(modules, 'das.marketing_budget') ? (
-                  <Money label="Marketing" value={d.marketingBudgetMad}
-                    hint="Effet immédiat sur la notoriété, à rendement décroissant."
-                    previous={b.marketingBudgetMad}
-                    shareOf={context.treasuryMad} shareLabel="de la trésorerie"
-                    onChange={(v) => pushDas(das.dasId, { ...d, marketingBudgetMad: v })} />
-                ) : null}
+                {INVESTMENTS.filter(([key]) => isOn(modules, key)).map(
+                  ([key, field, label, hint]) => (
+                    <VariationField
+                      key={key}
+                      label={label}
+                      hint={hint}
+                      value={d[field]}
+                      reference={referenceOr(b[field], endowmentReference(key, basis))}
+                      scale={scales[FAMILY_OF[key]]}
+                      unset={!das.decisionRecorded}
+                      onChange={(v) => pushDas(das.dasId, { ...d, [field]: v })}
+                    />
+                  ),
+                )}
               </div>
               <p className="tabular mt-3 text-sm text-(--foreground-muted)">
                 Total engagé sur ce domaine : <strong>{formatMadCompact(engagedOn(d))}</strong>

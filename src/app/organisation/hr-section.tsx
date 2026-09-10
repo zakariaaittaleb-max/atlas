@@ -17,9 +17,12 @@
  *     de compétences, il n'y a rien à rembourser.
  */
 
-import { HeadcountStepper, NumberInput } from '@/components/decision-shell';
+import { HeadcountStepper } from '@/components/decision-shell';
 import { Term } from '@/components/term';
 import { anyOn, isOn, type EnabledModules } from '@/lib/modules-state';
+import { VariationField } from '@/components/variation-field';
+import { endowmentReference, type VariationBasis } from '@/lib/variation-references';
+import { referenceOr, type VariationScale } from '@/lib/variation-scale';
 import { formatMadCompact } from '@/lib/format';
 import type { DasHr, DasHrState } from '@/lib/org-types';
 
@@ -37,16 +40,32 @@ const RESTRUCTURING = [
   ['fermeture_site', 'Fermeture de site', 'Le geste le plus brutal. Le climat s’en souvient longtemps.'],
 ] as const;
 
+/** Les quatre catégories de recrutement : clé de module, champ, libellé. */
+const HIRE_FIELDS = [
+  ['org.hire_operateurs', 'hireOperateurs', 'Opérateurs'],
+  ['org.hire_techniciens', 'hireTechniciens', 'Techniciens'],
+  ['org.hire_experts', 'hireExperts', 'Experts'],
+  ['org.hire_cadres', 'hireCadres', 'Cadres'],
+] as const satisfies readonly (readonly [string, keyof DasHr, string])[];
+
 export function HrSection({
-  hr, state, locked, onChange, modules,
+  hr, state, locked, onChange, modules, previous, scales, basis,
 }: {
   hr: DasHr;
   state: DasHrState | null;
   locked: boolean;
   onChange: (hr: DasHr) => void;
   modules: EnabledModules;
+  /** Les grandeurs RH du tour précédent : référence des curseurs. */
+  previous: Record<string, number>;
+  scales: Readonly<Record<string, VariationScale>>;
+  basis: VariationBasis;
 }) {
   const patch = (values: Partial<DasHr>) => onChange({ ...hr, ...values });
+
+  /** Référence d'un champ : le tour précédent, la dotation à défaut. */
+  const ref = (key: string, field: string) =>
+    referenceOr(previous[field] ?? 0, endowmentReference(key, basis));
 
   const hires =
     hr.hireOperateurs + hr.hireTechniciens + hr.hireExperts + hr.hireCadres +
@@ -189,21 +208,27 @@ export function HrSection({
             construit pas avec des opérateurs seuls.
           </p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Count label="Opérateurs" value={hr.hireOperateurs}
-              onChange={(v) => patch({ hireOperateurs: v })} />
-            <Count label="Techniciens" value={hr.hireTechniciens}
-              onChange={(v) => patch({ hireTechniciens: v })} />
-            <Count label="Experts" value={hr.hireExperts}
-              onChange={(v) => patch({ hireExperts: v })} />
-            <Count label="Cadres" value={hr.hireCadres}
-              onChange={(v) => patch({ hireCadres: v })} />
+            {HIRE_FIELDS.map(([key, field, label]) => (
+              <VariationField
+                key={field}
+                label={label}
+                unit="count"
+                value={hr[field]}
+                reference={ref(key, field)}
+                scale={scales.recrutement}
+                onChange={(v) => patch({ [field]: v })}
+              />
+            ))}
           </div>
 
           {isOn(modules, 'org.internal_transfers') ? (
-            <div className="mt-3">
-              <Count
+            <div className="mt-4">
+              <VariationField
                 label="Venus d’un autre domaine du groupe"
+                unit="count"
                 value={hr.internalTransfersIn}
+                reference={ref('org.internal_transfers', 'internalTransfersIn')}
+                scale={scales.recrutement}
                 onChange={(v) => patch({ internalTransfersIn: v })}
                 hint="Ils connaissent déjà la maison : contrairement à un recrutement externe, ils ne diluent pas le niveau moyen."
               />
@@ -275,30 +300,26 @@ export function HrSection({
 
       {/* ── Rémunération et formation ──────────────────────────────────── */}
       <fieldset disabled={locked} className="grid gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className="text-sm font-medium">Salaire brut mensuel moyen</span>
-          <NumberInput
-            value={hr.avgSalaryBrutMad} disabled={locked}
-            onChange={(v) => patch({ avgSalaryBrutMad: v })}
-            className="mt-1.5 w-full"
-          />
-          <span className="mt-1 block text-xs text-(--foreground-muted)">
-            Payer mieux améliore le climat, avec des rendements décroissants.
-          </span>
-        </label>
+        <VariationField
+          label="Salaire brut mensuel moyen"
+          value={hr.avgSalaryBrutMad}
+          reference={ref('org.avg_salary', 'avgSalaryBrutMad')}
+          scale={scales.salaire}
+          disabled={locked}
+          onChange={(v) => patch({ avgSalaryBrutMad: v })}
+          hint="Payer mieux améliore le climat, avec des rendements décroissants. La fourchette est étroite : un salaire ne se renégocie pas de moitié d’un exercice à l’autre."
+        />
 
         {isOn(modules, 'org.training_budget') ? (
-          <label className="block">
-            <span className="text-sm font-medium">Budget de formation</span>
-            <NumberInput
-              value={hr.trainingBudgetMad} disabled={locked}
-              onChange={(v) => patch({ trainingBudgetMad: v })}
-              className="mt-1.5 w-full"
-            />
-            <span className="mt-1 block text-xs text-(--foreground-muted)">
-              Améliore la compétence et le climat, et amortit le choc d’une automatisation.
-            </span>
-          </label>
+          <VariationField
+            label="Budget de formation"
+            value={hr.trainingBudgetMad}
+            reference={ref('org.training_budget', 'trainingBudgetMad')}
+            scale={scales.formation}
+            disabled={locked}
+            onChange={(v) => patch({ trainingBudgetMad: v })}
+            hint="Améliore la compétence et le climat, et amortit le choc d’une automatisation. La dotation de repli est le droit de tirage OFPPT : 1,6 % de la masse salariale."
+          />
         ) : null}
       </fieldset>
 
@@ -385,18 +406,6 @@ function Kpi({
       </dd>
       {note ? <p className="mt-0.5 text-xs text-(--foreground-muted)">{note}</p> : null}
     </div>
-  );
-}
-
-function Count({
-  label, value, onChange, hint,
-}: { label: string; value: number; onChange: (v: number) => void; hint?: string }) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium">{label}</span>
-      <NumberInput value={value} onChange={onChange} className="mt-1.5 w-full" />
-      {hint ? <span className="mt-1 block text-xs text-(--foreground-muted)">{hint}</span> : null}
-    </label>
   );
 }
 
