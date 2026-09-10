@@ -112,6 +112,30 @@ export async function loadOrgContext(): Promise<OrgContext> {
         (r) => str(r.das_id) === dasId && num(r.round_number) === effectiveRound,
       );
 
+    /**
+     * Le tour dont l'organigramme est HÉRITÉ, référence des écarts d'effectif.
+     *
+     * Deux cas, et les confondre afficherait un écart nul en permanence : si
+     * l'équipe n'a rien conçu ce tour-ci, ce qu'elle voit EST l'héritage ; si
+     * elle a déjà touché à l'organigramme, l'héritage est la conception d'avant.
+     */
+    const inheritedRound =
+      effectiveRound !== null && effectiveRound < roundNumber
+        ? effectiveRound
+        : (() => {
+            const prior = ((designs ?? []) as Row[])
+              .filter(
+                (d) =>
+                  str(d.das_id) === dasId && num(d.round_number) < (effectiveRound ?? 0),
+              )
+              .sort((a, b) => num(b.round_number) - num(a.round_number))[0];
+            return prior ? num(prior.round_number) : null;
+          })();
+
+    const inheritedPositions = ((positions ?? []) as Row[]).filter(
+      (r) => str(r.das_id) === dasId && num(r.round_number) === inheritedRound,
+    );
+
     return {
       dasId,
       dasName: unit?.name ?? 'DAS',
@@ -137,6 +161,12 @@ export async function loadOrgContext(): Promise<OrgContext> {
         budgetMad: num(p.budget_mad),
         isKeyPosition: bool(p.is_key_position),
       })),
+      // L'effectif hérité, poste par poste. Rapproché par intitulé : c'est ce
+      // qu'un lecteur fait de toute façon, et l'identifiant de ligne change
+      // dès qu'on réordonne l'organigramme.
+      inheritedHeadcount: Object.fromEntries(
+        inheritedPositions.map((p) => [str(p.title), num(p.headcount)]),
+      ),
       directives: (() => {
         const d = ((directiveRows ?? []) as Row[])
           .filter((r) => str(r.das_id) === dasId)

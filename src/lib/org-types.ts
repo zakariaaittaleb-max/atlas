@@ -116,6 +116,11 @@ export interface DasOrganisation {
   budgets: { directionKey: string; budgetMad: number }[];
   kpis: { directionKey: string; kpiKey: string }[];
   positions: PositionDraft[];
+  /**
+   * Effectif hérité du tour précédent, par intitulé de poste. Sert de référence
+   * aux écarts affichés dans l'organigramme.
+   */
+  inheritedHeadcount: Record<string, number>;
   /** Déclinaison des directives du groupe. Jamais `null` : un défaut neutre. */
   directives: DasDirectives;
   /** Ressources ouvertes par le groupe à ce DAS. Vide si le groupe n'a rien ouvert. */

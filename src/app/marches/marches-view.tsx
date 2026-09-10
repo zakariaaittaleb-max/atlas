@@ -27,7 +27,7 @@ import { useDasScope } from '@/components/das-scope';
 import {
   DasChecklist, DecisionBar, NumberInput, SectionActions, type MissingDecision,
 } from '@/components/decision-shell';
-import { formatPct, formatScore, formatUnits } from '@/lib/format';
+import { formatMadCompact, formatPct, formatScore, formatUnits } from '@/lib/format';
 import type {
   DecisionContext, DistributionLine, ProcurementLine,
 } from '@/lib/decision-types';
@@ -137,8 +137,20 @@ export function MarchesView({
             <legend className="mb-1 text-sm font-medium">Fournisseurs</legend>
             <p className="mb-3 text-xs text-(--foreground-muted)">
               Le volume engagé détermine votre poids dans leur carnet, donc la remise
-              obtenue — jusqu’à −18 % sur le prix d’achat.
+              obtenue — jusqu’à −18 % sur le prix d’achat. Il détermine aussi la
+              <strong> matière disponible</strong> : en engager moins que vous ne vendez
+              bride l’atelier.
             </p>
+
+            {/* ── Ce qu'il faut savoir avant d'engager un volume ─────────────
+                Un volume ne se juge pas dans le vide. En engager trop immobilise
+                de la trésorerie en magasin ; trop peu fait perdre des ventes. Ces
+                six chiffres sont les seuls qui permettent l'arbitrage. */}
+            <SupplyPanel
+              supply={das.supply}
+              engaged={proc.reduce((acc, l) => acc + l.committedVolume, 0)}
+              treasuryMad={context.treasuryMad}
+            />
 
             <ul className="space-y-2">
               {das.suppliers.map((supplier) => {
@@ -422,5 +434,93 @@ function DistributorReference({
         ? ' · inchangé'
         : ` · ${points > 0 ? '↑ +' : '↓ −'}${formatScore(Math.abs(points), 0)} points`}
     </span>
+  );
+}
+
+/**
+ * L'état d'approvisionnement du domaine.
+ *
+ * Le stock est un magasin, pas une statistique : ce qui reste à la clôture d'un
+ * tour borne la production du suivant. L'écran doit donc montrer les deux
+ * étages — matière et produits finis — et surtout la demande NON SERVIE, qui
+ * est le seul chiffre disant qu'on a sous-approvisionné.
+ */
+function SupplyPanel({
+  supply,
+  engaged,
+  treasuryMad,
+}: {
+  supply: DecisionContext['das'][number]['supply'];
+  engaged: number;
+  treasuryMad: number;
+}) {
+  const available = supply.inputStockUnits + engaged;
+  const short = supply.soldLastRound > 0 && available < supply.soldLastRound;
+
+  return (
+    <div className="mb-4 rounded-lg border border-(--border) bg-(--surface-muted) p-4">
+      <dl className="tabular grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
+        <Stat label="Trésorerie disponible" value={formatMadCompact(treasuryMad)} />
+        <Stat label="Acheté l’an dernier" value={formatUnits(supply.purchasedLastRound)} />
+        <Stat label="Vendu l’an dernier" value={formatUnits(supply.soldLastRound)} />
+        <Stat
+          label="Matière en magasin"
+          value={formatUnits(supply.inputStockUnits)}
+          hint="Reportée de l’exercice clos"
+        />
+        <Stat
+          label="Produits finis en stock"
+          value={formatUnits(supply.finishedStockUnits)}
+          hint="Vendables sans rien produire"
+        />
+        <Stat
+          label="Demande non servie"
+          value={formatUnits(supply.lostLastRound)}
+          hint={supply.lostLastRound > 0 ? 'Ventes perdues' : undefined}
+          negative={supply.lostLastRound > 0}
+        />
+      </dl>
+
+      <p className="tabular mt-3 border-t border-(--border) pt-3 text-sm">
+        <span className="text-(--foreground-muted)">Disponible ce tour : </span>
+        <strong>{formatUnits(available)}</strong>
+        <span className="text-(--foreground-muted)">
+          {' '}({formatUnits(supply.inputStockUnits)} en magasin
+          {' + '}{formatUnits(engaged)} engagés)
+        </span>
+      </p>
+
+      {short ? (
+        <p className="mt-2 text-sm" style={{ color: 'var(--warning)' }}>
+          Vous engagez moins de matière que vous n’avez vendu l’an dernier. À demande
+          égale, l’atelier s’arrêtera avant d’avoir servi le marché.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  hint,
+  negative,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  negative?: boolean;
+}) {
+  return (
+    <div>
+      <dt className="text-xs text-(--foreground-muted)">{label}</dt>
+      <dd
+        className="font-semibold"
+        style={{ color: negative ? 'var(--negative)' : undefined }}
+      >
+        {value}
+      </dd>
+      {hint ? <dd className="text-xs text-(--foreground-muted)">{hint}</dd> : null}
+    </div>
   );
 }

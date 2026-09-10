@@ -18,6 +18,8 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { NumberInput } from '@/components/decision-shell';
+import { DisclosureList } from '@/components/disclosure-list';
+import type { FieldDisclosure } from '@/lib/consulting-types';
 import { isOn, type EnabledModules } from '@/lib/modules-state';
 import { formatMadCompact, formatPct, formatUnits } from '@/lib/format';
 
@@ -93,10 +95,11 @@ interface MyBid {
 
 export function CessionView({
   roundNumber, decisionsOpen, sellable, ownListings, market, myBids, targets, myOffers,
-  integrationTargets, modules,
+  integrationTargets, modules, dueDiligences,
 }: {
   roundNumber: number;
   modules: EnabledModules;
+  dueDiligences: DueDiligence[];
   decisionsOpen: boolean;
   sellable: SellableDas[];
   ownListings: OwnListing[];
@@ -228,6 +231,7 @@ export function CessionView({
               <AcquisitionCard
                 key={target.targetActorId}
                 target={target}
+                dueDiligences={dueDiligences}
                 existingOffer={myOffers.find((o) => o.targetActorId === target.targetActorId)}
                 disabled={disabled}
                 onSend={(body) => send(body, '/api/acquisitions')}
@@ -272,6 +276,7 @@ export function CessionView({
                   dasName: link.dasName,
                   regionKey: link.regionKey,
                 }}
+                dueDiligences={dueDiligences}
                 badge={link.actorType === 'fournisseur' ? 'Amont' : 'Aval'}
                 owned={link.ownedByMe ? 'moi' : link.alreadyOwned ? 'autre' : null}
                 existingOffer={myOffers.find((o) => o.targetActorId === link.targetActorId)}
@@ -484,9 +489,10 @@ function MarketCard({
 
 /** Fiche d'une cible acquérable, et formulaire d'offre scellée. */
 function AcquisitionCard({
-  target, existingOffer, disabled, onSend, badge, owned,
+  target, existingOffer, disabled, onSend, badge, owned, dueDiligences,
 }: {
   target: AcquisitionTarget;
+  dueDiligences: DueDiligence[];
   existingOffer: MyOffer | undefined;
   disabled: boolean;
   onSend: (body: Record<string, unknown>) => void;
@@ -532,6 +538,9 @@ function AcquisitionCard({
             : 'Racheté par une autre équipe. Il n’est plus indépendant — et son nouveau propriétaire décide de ce qu’il vous vend.'}
         </p>
       ) : null}
+
+      {/* Les chiffres avant le formulaire : on lit, puis on chiffre. */}
+      <TargetStats targetActorId={target.targetActorId} dueDiligences={dueDiligences} />
 
       {owned ? null : (
       <form
@@ -607,5 +616,73 @@ function Fact({ label, value }: { label: string; value: string }) {
       <dt className="text-(--foreground-muted)">{label}</dt>
       <dd className="mt-0.5 font-medium">{value}</dd>
     </div>
+  );
+}
+
+export type DueDiligenceFields = FieldDisclosure[];
+
+export interface DueDiligence {
+  targetActorId: string;
+  tier: string;
+  errorMargin: number;
+  roundNumber: number;
+  fields: DueDiligenceFields;
+}
+
+const TIER_LABELS: Record<string, string> = {
+  express: 'note express',
+  standard: 'étude standard',
+  approfondie: 'étude approfondie',
+};
+
+/**
+ * Les chiffres d'une cible, dépliables — et payants.
+ *
+ * Décider d'un montant d'enchère sans connaître le chiffre d'affaires ni la
+ * marge de ce qu'on achète est un pari, pas une décision. Mais ces chiffres
+ * sont précisément ce que le cabinet vend : les offrir viderait la due
+ * diligence de son objet. Le panneau existe donc toujours ; son contenu
+ * dépend de ce que l'équipe a payé, et il annonce sa propre marge d'erreur.
+ */
+function TargetStats({
+  targetActorId,
+  dueDiligences,
+}: {
+  targetActorId: string;
+  dueDiligences: DueDiligence[];
+}) {
+  // La plus récente : une équipe peut avoir racheté l'étude à un palier
+  // supérieur, et c'est alors celle-là qui vaut.
+  const study = dueDiligences.find((d) => d.targetActorId === targetActorId);
+
+  return (
+    <details className="mt-3 rounded-lg border border-(--border) bg-(--surface-muted)">
+      <summary className="cursor-pointer list-none px-4 py-2.5 text-sm font-medium">
+        Chiffres de la cible
+        <span className="ml-2 font-normal text-(--foreground-muted)">
+          {study
+            ? `${TIER_LABELS[study.tier] ?? study.tier} · tour ${study.roundNumber}`
+            : 'due diligence non commandée'}
+        </span>
+      </summary>
+
+      <div className="border-t border-(--border) px-4 py-3">
+        {study ? (
+          <>
+            <DisclosureList fields={study.fields} />
+            <p className="mt-3 border-t border-(--border) pt-2 text-xs text-(--foreground-muted)">
+              Ces chiffres sont ceux figés à la commande, marge d’erreur comprise. Un
+              palier supérieur les resserre et couvre les passifs non déclarés.
+            </p>
+          </>
+        ) : (
+          <p className="text-sm text-(--foreground-muted)">
+            Chiffre d’affaires, part de marché, marge et passifs de cette cible
+            s’achètent au <a href="/cabinet" className="underline">cabinet</a>, en due
+            diligence. Sans elle, vous enchérissez sur un nom.
+          </p>
+        )}
+      </div>
+    </details>
   );
 }

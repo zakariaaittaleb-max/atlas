@@ -85,12 +85,29 @@ export function resolveProcurement(
   alternativesCount: number,
   rng: () => number,
   params: EngineParams,
-): { results: ProcurementResult[]; priceIndex: number; inputQuality: number; disruption: number } {
+): {
+  results: ProcurementResult[];
+  priceIndex: number;
+  inputQuality: number;
+  disruption: number;
+  /**
+   * Intrants effectivement livrés ce tour, ruptures déduites.
+   *
+   * `null` signifie « pas de contrainte d'approvisionnement » : sans contrat,
+   * on achète au comptant ce dont on a besoin. C'est aussi ce qui se passe
+   * quand le facilitateur a fermé le module des achats — fermer un module ne
+   * doit pas affamer les usines.
+   */
+  deliveredVolume: number | null;
+} {
   if (lines.length === 0) {
     // Aucun fournisseur sélectionné : approvisionnement au prix spot, sans
     // remise, avec une qualité d'intrants médiocre. Ne rien décider est aussi
     // une décision, et elle a un coût.
-    return { results: [], priceIndex: 1.1, inputQuality: 45, disruption: 0.1 };
+    return {
+      results: [], priceIndex: 1.1, inputQuality: 45, disruption: 0.1,
+      deliveredVolume: null,
+    };
   }
 
   const maxDiscount = param(params, 'procurement.max_discount');
@@ -149,7 +166,12 @@ export function resolveProcurement(
   });
 
   if (totalVolume <= 0) {
-    return { results, priceIndex: 1.1, inputQuality: 45, disruption: 0.1 };
+    // Des fournisseurs retenus mais aucun volume engagé : l'équipe a contracté
+    // sans commander. Elle n'est pas approvisionnée pour autant.
+    return {
+      results, priceIndex: 1.1, inputQuality: 45, disruption: 0.1,
+      deliveredVolume: 0,
+    };
   }
 
   const weight = (i: number) => lines[i].committedVolume / totalVolume;
@@ -161,7 +183,17 @@ export function resolveProcurement(
   );
   const disruption = results.reduce((acc, r, i) => acc + weight(i) * r.supplyDisruption, 0);
 
-  return { results, priceIndex, inputQuality, disruption: clamp01(disruption) };
+  // Livré fournisseur par fournisseur : une rupture chez l'un n'emporte pas
+  // les livraisons des autres. C'est le rendement de la diversification, et il
+  // se perdrait si l'on appliquait la rupture moyenne au volume total.
+  const deliveredVolume = lines.reduce(
+    (acc, line, i) => acc + line.committedVolume * (1 - clamp01(results[i].supplyDisruption)),
+    0,
+  );
+
+  return {
+    results, priceIndex, inputQuality, disruption: clamp01(disruption), deliveredVolume,
+  };
 }
 
 // ===========================================================================

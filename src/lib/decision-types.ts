@@ -108,6 +108,22 @@ export interface DasEntry {
   /** Le tour a-t-il déjà reçu une décision écrite pour ce domaine ? */
   decisionRecorded: boolean;
   procurement: ProcurementLine[];
+  /**
+   * Ce qu'il faut savoir avant d'engager un volume d'achat.
+   *
+   * Un volume engagé ne se juge pas dans le vide : il se compare à ce qu'on a
+   * écoulé, à ce qu'on n'a pas pu servir, et à ce qui dort déjà en magasin.
+   * Tout vient du dernier exercice clos — zéro avant la première résolution.
+   */
+  supply: {
+    purchasedLastRound: number;
+    soldLastRound: number;
+    /** Demande non servie : le vrai signal d'un sous-approvisionnement. */
+    lostLastRound: number;
+    inputStockUnits: number;
+    finishedStockUnits: number;
+    effectiveCapacityUnits: number;
+  };
   distribution: DistributionLine[];
   /** L'état à l'ouverture du tour — cible du bouton « Réinitialiser ». */
   baseline: {

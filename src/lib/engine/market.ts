@@ -266,6 +266,24 @@ export interface VolumeResult {
   volumeLost: number;
   stockoutRate: number;
   revenueMad: number;
+  /** Sorti de l'atelier ce tour. */
+  productionUnits: number;
+  /** Intrants restés en magasin à la clôture, reportés au tour suivant. */
+  inputStockEndUnits: number;
+  /** Produits finis invendus, reportés au tour suivant. */
+  finishedStockEndUnits: number;
+  /** Vrai quand ce sont les intrants, et non la capacité, qui ont bridé. */
+  limitedByInputs: boolean;
+}
+
+export interface SupplyState {
+  /**
+   * Intrants disponibles : stock d'ouverture plus livraisons du tour.
+   * `null` = aucune contrainte d'approvisionnement (achat au comptant).
+   */
+  inputsAvailable: number | null;
+  /** Produits finis en stock à l'ouverture, vendables sans rien produire. */
+  finishedStockStart: number;
 }
 
 /**
@@ -275,15 +293,45 @@ export interface VolumeResult {
  * C'est l'arbitrage central du jeu : attaquer en prix sans capacité, c'est
  * acheter des parts de marché qu'on ne peut pas servir, et abîmer sa marque
  * en le faisant.
+ *
+ * ── LES DEUX ÉTAGES DE STOCK ───────────────────────────────────────────────
+ * L'approvisionnement n'était qu'un levier de négociation : le volume engagé
+ * jouait sur la remise et le risque de rupture, jamais sur la QUANTITÉ
+ * disponible. Une équipe pouvait donc vendre sans avoir rien acheté.
+ *
+ * Désormais deux magasins se remplissent et se vident :
+ *
+ *   1. les INTRANTS, qui limitent ce que l'atelier peut produire. En acheter
+ *      trop peu fait perdre des ventes ; trop, immobilise de la trésorerie ;
+ *   2. les PRODUITS FINIS, qui se reportent d'un tour à l'autre. Ils
+ *      s'accumulent quand la demande recule, et servent alors d'amortisseur au
+ *      tour suivant.
+ *
+ * La production suit la DEMANDE, pas la capacité : un atelier ne tourne pas à
+ * plein pour remplir un entrepôt. Produire à pleine capacité punirait
+ * mécaniquement toute équipe ayant investi dans son outil, ce qui est
+ * l'inverse de ce que le jeu enseigne.
  */
 export function resolveVolume(
   marketVolume: number,
   marketShare: number,
   effectiveCapacity: number,
   unitPriceMad: number,
+  supply: SupplyState = { inputsAvailable: null, finishedStockStart: 0 },
 ): VolumeResult {
   const volumeDemanded = Math.max(marketVolume * clamp01(marketShare), 0);
-  const volumeSold = Math.min(volumeDemanded, Math.max(effectiveCapacity, 0));
+  const capacity = Math.max(effectiveCapacity, 0);
+  const finishedStockStart = Math.max(supply.finishedStockStart, 0);
+
+  // Ce qu'il reste à produire une fois l'entrepôt écoulé.
+  const toProduce = Math.max(volumeDemanded - finishedStockStart, 0);
+
+  const inputCeiling =
+    supply.inputsAvailable === null ? Infinity : Math.max(supply.inputsAvailable, 0);
+  const productionUnits = Math.min(toProduce, capacity, inputCeiling);
+
+  const offer = finishedStockStart + productionUnits;
+  const volumeSold = Math.min(volumeDemanded, offer);
   const volumeLost = volumeDemanded - volumeSold;
 
   return {
@@ -292,6 +340,15 @@ export function resolveVolume(
     volumeLost,
     stockoutRate: volumeDemanded > 0 ? volumeLost / volumeDemanded : 0,
     revenueMad: volumeSold * unitPriceMad,
+    productionUnits,
+    inputStockEndUnits:
+      supply.inputsAvailable === null
+        ? 0
+        : Math.max(supply.inputsAvailable - productionUnits, 0),
+    finishedStockEndUnits: Math.max(offer - volumeSold, 0),
+    // La distinction compte pour le débriefing : manquer de capacité et
+    // manquer de matière se corrigent par des décisions opposées.
+    limitedByInputs: inputCeiling < Math.min(toProduce, capacity),
   };
 }
 

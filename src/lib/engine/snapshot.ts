@@ -94,6 +94,15 @@ export interface PreviousDasState {
    * ce qu'ils ont vécu, pas sur une pénurie qu'ils n'ont pas encore subie.
    */
   stockoutRate: number;
+  /**
+   * Les deux magasins à l'ouverture du tour.
+   *
+   * Les intrants bornent ce que l'atelier peut produire ; les produits finis
+   * se vendent sans rien produire. Zéro tant qu'aucun tour n'a été résolu —
+   * une équipe démarre les entrepôts vides.
+   */
+  inputStockUnits: number;
+  finishedStockUnits: number;
   revenueMad: number;
   cumulativeAutomationCapexMad: number;
   cumulativeNetworkCapexMad: number;

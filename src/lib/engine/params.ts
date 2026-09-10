@@ -122,6 +122,13 @@ export const DEFAULT_PARAMS = {
   'procurement.power_alternatives_pivot': 5,
   'procurement.power_switching_weight': 25,
   'procurement.max_discount': 0.18,
+  // ── Coût de possession des stocks ────────────────────────────────────────
+  // Ce que coûte, par tour, de laisser dormir de la matière ou des produits
+  // finis : immobilisation de trésorerie, entreposage, obsolescence. Assis sur
+  // le coût variable unitaire, l'ordre de grandeur retenu en industrie pour un
+  // exercice. Sans lui, sur-acheter serait gratuit et le stock n'aurait aucun
+  // coût d'opportunité — l'inverse exact de ce que l'écran enseigne.
+  'inventory.holding_rate': 0.08,
   // ── Intégration verticale par rachat de maillon ──────────────────────────
   // Ce qu'on capte en rachetant son fournisseur : sa MARGE, qui cesse de
   // sortir de la maison. C'est structurellement plus qu'une remise de volume

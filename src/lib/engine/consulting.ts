@@ -121,29 +121,12 @@ export interface NumericFieldSpec {
   unit?: string;
 }
 
-export type FieldDisclosure =
-  | { mode: 'exact'; key: string; label: string; value: number; unit?: string }
-  | {
-      mode: 'estimate';
-      key: string;
-      label: string;
-      value: number;
-      errorMargin: number;
-      lower: number;
-      upper: number;
-      unit?: string;
-    }
-  | {
-      mode: 'band';
-      key: string;
-      label: string;
-      band: string;
-      bandIndex: number;
-      lower: number;
-      upper: number;
-      unit?: string;
-    }
-  | { mode: 'withheld'; key: string; label: string; reason: string };
+// La forme des livrables vit dans `consulting-types.ts`, client-safe : les
+// écrans qui affichent une étude ne doivent pas faire entrer le moteur dans
+// leur graphe. On la réexporte pour ne rien casser côté serveur.
+import type { FieldDisclosure } from '../consulting-types';
+
+export type { FieldDisclosure } from '../consulting-types';
 
 // ===========================================================================
 // Bruit
@@ -386,8 +369,13 @@ export const STUDY_FIELDS: Record<string, NumericFieldSpec[]> = {
   ],
 
   due_diligence: [
-    { key: 'ebitda_mad', label: 'EBITDA', errorMode: 'relative', unit: 'DH' },
     { key: 'revenue_mad', label: "Chiffre d'affaires", errorMode: 'relative', unit: 'DH' },
+    // La part de marché situe la cible dans son marché, ce que le chiffre
+    // d'affaires seul ne fait pas : 400 M DH est une position dominante sur un
+    // marché de niche et une part résiduelle sur un marché de masse.
+    { key: 'market_share_pct', label: 'Part de marché', errorMode: 'relative', unit: '%' },
+    { key: 'ebitda_mad', label: 'EBITDA', errorMode: 'relative', unit: 'DH' },
+    { key: 'margin_pct', label: "Marge d'exploitation", errorMode: 'absolute', range: 30, unit: '%' },
     { key: 'capacity_units', label: 'Capacité installée', errorMode: 'relative' },
     { key: 'headcount', label: 'Effectif', errorMode: 'relative' },
     { key: 'divest_appetite', label: 'Appétence à la cession', errorMode: 'absolute', range: 100, bandable: true },

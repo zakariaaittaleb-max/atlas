@@ -659,6 +659,8 @@ export async function loadResolutionSnapshot(
           notoriety: num(previousMetric?.notoriety, num(params['endowment.notoriety'], 50)),
           capacityUnits: num(previousMetric?.capacity_units),
           cumulativeVolume: num(previousMetric?.cumulative_volume),
+          inputStockUnits: num(previousMetric?.input_stock_units),
+          finishedStockUnits: num(previousMetric?.finished_stock_units),
           volumeSold: num(previousMetric?.volume_sold),
           stockoutRate: num(previousMetric?.stockout_rate),
           revenueMad: num(previousMetric?.revenue_mad),

@@ -59,6 +59,7 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
     { data: previousBudget }, { data: pnl }, { data: state },
     { data: procurement }, { data: distribution }, { data: actors },
     { data: orgDesigns }, { data: dasHrDecisions }, { data: dasHrStates },
+    { data: supplyMetrics },
   ] = await Promise.all([
     // `listed_for_sale` est inclus : un DAS mis en vente doit continuer à être
     // piloté jusqu'à la résolution. La cession ne se dénoue qu'à ce moment-là,
@@ -97,6 +98,13 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
       .eq('team_id', team.teamId).eq('round_number', roundNumber),
     supabase.from('das_hr_state').select('das_id, round_number, headcount, payroll_mad')
       .eq('team_id', team.teamId).lte('round_number', roundNumber),
+    // L'état d'approvisionnement du dernier exercice clos : ce qu'on a vendu,
+    // et ce qui dort en magasin. Sans ces chiffres, engager un volume d'achat
+    // se fait à l'aveugle — on ne sait ni ce qu'on écoule, ni ce qu'on a déjà.
+    supabase
+      .from('team_das_round_metrics')
+      .select('das_id, volume_sold, volume_lost, input_stock_units, finished_stock_units, effective_capacity_units')
+      .eq('team_id', team.teamId).eq('round_number', previous),
   ]);
 
   const strategyRow = latestAtMost(strategies as Row[] | null, roundNumber);
@@ -131,6 +139,20 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
         : baselineDecision,
       decisionRecorded: Boolean(currentRow),
       procurement: linesOf(procurement as Row[] | null, dasId, roundNumber, toProcurement),
+      supply: (() => {
+        const m = ((supplyMetrics ?? []) as Row[]).find((r) => str(r.das_id) === dasId);
+        const previousLines = linesOf(
+          procurement as Row[] | null, dasId, previous, toProcurement,
+        );
+        return {
+          purchasedLastRound: previousLines.reduce((acc, l) => acc + l.committedVolume, 0),
+          soldLastRound: num(m?.volume_sold),
+          lostLastRound: num(m?.volume_lost),
+          inputStockUnits: num(m?.input_stock_units),
+          finishedStockUnits: num(m?.finished_stock_units),
+          effectiveCapacityUnits: num(m?.effective_capacity_units),
+        };
+      })(),
       distribution: linesOf(distribution as Row[] | null, dasId, roundNumber, toDistribution),
       baseline: {
         decision: baselineDecision,

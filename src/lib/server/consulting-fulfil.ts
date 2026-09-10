@@ -349,7 +349,7 @@ async function dueDiligence(
 ) {
   const { data: actor } = await input.admin
     .from('ecosystem_actors')
-    .select('id, name, ecosystem_actor_rounds(*)')
+    .select('id, name, das_id, ecosystem_actor_rounds(*)')
     .eq('id', input.targetActorId!).maybeSingle();
 
   const rounds = ((actor?.ecosystem_actor_rounds ?? []) as Row[])
@@ -365,13 +365,37 @@ async function dueDiligence(
   const rng = makeRng(seedFrom(input.sessionId, String(input.targetActorId), 'liabilities'));
   const hiddenLiabilities = revenue * (0.05 + 0.25 * (1 - health / 100)) * (0.6 + rng() * 0.8);
 
+  /**
+   * La marge d'exploitation de la cible, dérivée de sa SANTÉ FINANCIÈRE.
+   *
+   * Elle valait 14 % pour toute cible, quelle qu'elle soit. C'était une
+   * constante déguisée en information : deux cibles se comparaient sur leur
+   * taille et jamais sur leur rentabilité, alors que c'est précisément ce qu'on
+   * achète dans une acquisition. L'amplitude — de 4 % pour une entreprise au
+   * bord du dépôt de bilan à 22 % pour une affaire saine — reste dans ce qu'on
+   * observe en industrie.
+   */
+  const marginPct = 0.04 + 0.18 * (health / 100);
+
+  // La part de marché de la cible sur son domaine. Le chiffre d'affaires seul
+  // ne dit pas si c'est une position dominante ou résiduelle.
+  const { data: summary } = await input.admin
+    .from('pool_round_summary')
+    .select('market_size_mad')
+    .eq('das_id', String(actor?.das_id ?? ''))
+    .eq('round_number', round)
+    .maybeSingle();
+  const marketSize = num(summary?.market_size_mad);
+
   return {
     subjects: [{
       subjectId: String(input.targetActorId),
       subjectName: str(actor?.name, 'Cible'),
       fields: buildStudyDeliverable('due_diligence', input.tier, {
-        ebitda_mad: revenue * 0.14,
         revenue_mad: revenue,
+        ...(marketSize > 0 ? { market_share_pct: (revenue / marketSize) * 100 } : {}),
+        ebitda_mad: revenue * marginPct,
+        margin_pct: marginPct * 100,
         capacity_units: num(state.capacity_units),
         headcount: Math.round(num(state.capacity_units) / 14_000),
         divest_appetite: num(state.divest_appetite, 30),

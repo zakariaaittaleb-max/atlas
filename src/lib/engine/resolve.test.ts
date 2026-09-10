@@ -87,6 +87,10 @@ function unitDefaults() {
       cumulativeVolume: FAIR_SHARE_UNITS,
       volumeSold: FAIR_SHARE_UNITS,
       stockoutRate: 0,
+      // Entrepôts vides : c'est l'état d'une équipe qui démarre, et le seul
+      // qui n'introduise pas d'amortisseur invisible dans les cas de test.
+      inputStockUnits: 0,
+      finishedStockUnits: 0,
       revenueMad: 340_000_000,
       cumulativeAutomationCapexMad: 300_000_000,
       cumulativeNetworkCapexMad: 0,
@@ -1275,5 +1279,72 @@ describe('score temporel', () => {
     );
 
     expect(vire.sat).toBeLessThan(stable.sat);
+  });
+});
+
+describe('stocks dans la résolution complète', () => {
+  /**
+   * Ces cas prouvent le BRANCHEMENT, pas la formule — `inventory.test.ts`
+   * couvre déjà les deux étages isolément. Ce qui se vérifie ici est qu'une
+   * décision d'achat traverse bien toute la résolution jusqu'au volume vendu,
+   * ce qu'un test de la seule fonction de volume ne dirait pas.
+   */
+  function withCommitted(volume: number) {
+    return unit({
+      procurement: [
+        {
+          supplier: {
+            actorId: 'f1',
+            priceIndex: 1.0,
+            reliability: 85,
+            qualityContribution: 70,
+            capacityUnits: 5_000_000,
+            switchingCost: 30,
+            minimumVolume: 0,
+          },
+          committedVolume: volume,
+        },
+      ],
+    });
+  }
+
+  it('acheter moins fait vendre moins', () => {
+    const input = baseInput({
+      teams: [
+        team('genereuse', { units: [withCommitted(3_000_000)] }),
+        team('radine', { units: [withCommitted(500_000)] }),
+      ],
+    });
+    const result = resolveRound(input, params);
+
+    const genereuse = result.dasMetrics.find((m) => m.teamId === 'genereuse')!;
+    const radine = result.dasMetrics.find((m) => m.teamId === 'radine')!;
+
+    expect(radine.volumeSold).toBeLessThan(genereuse.volumeSold);
+    // Et l'équipe qui n'a pas acheté assez le paie en ventes perdues.
+    expect(radine.volumeLost).toBeGreaterThan(0);
+  });
+
+  it('sur-acheter laisse du stock et coûte sa possession', () => {
+    const input = baseInput({
+      teams: [team('prevoyante', { units: [withCommitted(9_000_000)] })],
+    });
+    const result = resolveRound(input, params);
+    const metric = result.dasMetrics[0];
+
+    expect(metric.inputStockUnits).toBeGreaterThan(0);
+    expect(metric.inventoryHoldingCostMad).toBeGreaterThan(0);
+  });
+
+  it('sans contrat, aucune contrainte d’approvisionnement', () => {
+    const input = baseInput({
+      teams: [team('comptant', { units: [unit({ procurement: [] })] })],
+    });
+    const result = resolveRound(input, params);
+    const metric = result.dasMetrics[0];
+
+    // Rien en magasin, et la capacité redevient la seule limite.
+    expect(metric.inputStockUnits).toBe(0);
+    expect(metric.volumeSold).toBeGreaterThan(0);
   });
 });

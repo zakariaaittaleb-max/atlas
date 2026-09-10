@@ -132,6 +132,10 @@ export interface DasMetricsOutput {
   volumeSold: number;
   volumeLost: number;
   stockoutRate: number;
+  productionUnits: number;
+  inputStockUnits: number;
+  finishedStockUnits: number;
+  inventoryHoldingCostMad: number;
   utilisationRate: number;
   cumulativeVolume: number;
   unitVariableCostMad: number;
@@ -354,6 +358,11 @@ interface UnitWorkspace {
   volumeSold: number;
   volumeLost: number;
   stockoutRate: number;
+  productionUnits: number;
+  inputStockUnits: number;
+  finishedStockUnits: number;
+  inventoryHoldingCostMad: number;
+  deliveredVolume: number | null;
   utilisationRate: number;
   underabsorptionMad: number;
   subcontractingCostMad: number;
@@ -660,6 +669,11 @@ export function resolveRound(
         volumeSold: 0,
         volumeLost: 0,
         stockoutRate: 0,
+        productionUnits: 0,
+        inputStockUnits: 0,
+        finishedStockUnits: 0,
+        inventoryHoldingCostMad: 0,
+        deliveredVolume: procurement.deliveredVolume,
         utilisationRate: 0,
         underabsorptionMad: 0,
         subcontractingCostMad: 0,
@@ -1104,11 +1118,24 @@ export function resolveRound(
     );
     const segmentFactor = addressableShare(w.perceived, servedSegments, params);
 
+    // Les intrants disponibles : ce qui dormait en magasin plus ce qui a été
+    // livré. `null` quand l'équipe n'a aucun contrat — elle achète alors au
+    // comptant et rien ne bride, ce qui est aussi le cas quand le facilitateur
+    // a fermé le module des achats.
+    const inputsAvailable =
+      w.deliveredVolume === null
+        ? null
+        : w.unit.previous.inputStockUnits + w.deliveredVolume;
+
     const volume = resolveVolume(
       volumeOfMarket,
       w.marketShare * segmentFactor,
       w.effectiveCapacity,
       w.unitPriceMad,
+      {
+        inputsAvailable,
+        finishedStockStart: w.unit.previous.finishedStockUnits,
+      },
     );
 
     w.volumeDemanded = volume.volumeDemanded;
@@ -1116,9 +1143,23 @@ export function resolveRound(
     w.volumeLost = volume.volumeLost;
     w.stockoutRate = volume.stockoutRate;
     w.revenueMad = volume.revenueMad;
+    w.productionUnits = volume.productionUnits;
+    w.inputStockUnits = volume.inputStockEndUnits;
+    w.finishedStockUnits = volume.finishedStockEndUnits;
 
+    // Le coût de possession : ce que coûte de laisser dormir de la matière et
+    // des produits finis. Sans lui, sur-acheter serait gratuit et le stock
+    // n'aurait aucun coût d'opportunité — l'inverse de ce qu'on veut enseigner.
+    w.inventoryHoldingCostMad =
+      (w.inputStockUnits + w.finishedStockUnits) *
+      w.unitVariableCostMad *
+      param(params, 'inventory.holding_rate');
+
+    // L'atelier s'use sur ce qu'il PRODUIT, pas sur ce qui sort de l'entrepôt :
+    // un tour servi depuis le stock laisse les machines à l'arrêt, et c'est
+    // bien une sous-absorption des charges fixes.
     const utilisation = utilisationEffects(
-      w.volumeSold,
+      w.productionUnits,
       w.capacityUnits,
       w.fixedProductionCostMad,
       w.unitVariableCostMad,
@@ -1127,7 +1168,12 @@ export function resolveRound(
     w.utilisationRate = utilisation.utilisationRate;
     w.underabsorptionMad = utilisation.underabsorptionMad;
     w.subcontractingCostMad = utilisation.subcontractingCostMad;
-    w.cogsMad = w.volumeSold * w.unitVariableCostMad + utilisation.subcontractingCostMad;
+    // Le coût des ventes reste assis sur le VENDU — c'est la marge de ce tour.
+    // Le coût de possession s'y ajoute : il est encouru, vendu ou pas.
+    w.cogsMad =
+      w.volumeSold * w.unitVariableCostMad
+      + utilisation.subcontractingCostMad
+      + w.inventoryHoldingCostMad;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1762,6 +1808,10 @@ export function resolveRound(
       volumeSold: w.volumeSold,
       volumeLost: w.volumeLost,
       stockoutRate: w.stockoutRate,
+      productionUnits: w.productionUnits,
+      inputStockUnits: w.inputStockUnits,
+      finishedStockUnits: w.finishedStockUnits,
+      inventoryHoldingCostMad: w.inventoryHoldingCostMad,
       utilisationRate: w.utilisationRate,
       cumulativeVolume: w.unit.previous.cumulativeVolume + w.volumeSold,
       unitVariableCostMad: w.unitVariableCostMad,

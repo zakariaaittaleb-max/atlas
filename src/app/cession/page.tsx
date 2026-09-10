@@ -3,7 +3,8 @@ import { loadEnabledModules } from '@/lib/server/modules';
 import { createServerClient } from '@/lib/supabase/server';
 
 import {
-  CessionView, type IntegrationTarget, type OwnListing, type PublicListing, type SellableDas,
+  CessionView, type DueDiligenceFields, type IntegrationTarget, type OwnListing,
+  type PublicListing, type SellableDas,
 } from './cession-view';
 
 export const metadata = { title: 'Atlas — Marché de cession' };
@@ -17,6 +18,17 @@ export default async function CessionPage() {
   const modules = await loadEnabledModules(team.sessionId);
 
   const supabase = await createServerClient();
+
+  // Les due diligences déjà payées. Le chiffre d'affaires et la marge d'une
+  // cible ne s'affichent QUE si l'équipe les a achetés : c'est exactement ce
+  // que le cabinet vend, et l'offrir gratuitement viderait la due diligence de
+  // son objet. Le livrable est celui figé à la commande, bruit compris.
+  const { data: dueDiligences } = await supabase
+    .from('consulting_orders')
+    .select('target_actor_id, tier, error_margin, round_number, payload')
+    .eq('team_id', team.teamId)
+    .eq('study_key', 'due_diligence')
+    .order('round_number', { ascending: false });
 
   const [
     { data: units }, { data: ownListings }, { data: interest },
@@ -112,6 +124,20 @@ export default async function CessionPage() {
           integrationBudgetMad: Number(o.integration_budget_mad),
         }))}
       modules={modules}
+      dueDiligences={(dueDiligences ?? [])
+        .filter((o) => o.target_actor_id)
+        .map((o) => {
+          const payload = o.payload as {
+            subjects?: { fields?: unknown[] }[];
+          } | null;
+          return {
+            targetActorId: String(o.target_actor_id),
+            tier: String(o.tier),
+            errorMargin: Number(o.error_margin),
+            roundNumber: Number(o.round_number),
+            fields: (payload?.subjects?.[0]?.fields ?? []) as DueDiligenceFields,
+          };
+        })}
       integrationTargets={(links ?? []).map((l): IntegrationTarget => ({
         targetActorId: String(l.target_actor_id),
         targetName: String(l.target_name),

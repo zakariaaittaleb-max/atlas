@@ -143,6 +143,10 @@ export function OrganisationView({
   }
 
   const budgetTotal = das.budgets.reduce((acc, b) => acc + b.budgetMad, 0);
+  const budgetShare = context.operatingBudgetMad > 0
+    ? budgetTotal / context.operatingBudgetMad
+    : 0;
+  const overBudget = budgetTotal > context.operatingBudgetMad;
   const keyCount = das.positions.filter((p) => p.isKeyPosition).length;
 
   return (
@@ -467,6 +471,7 @@ export function OrganisationView({
         >
           <PositionEditor
             positions={das.positions}
+            inheritedHeadcount={das.inheritedHeadcount}
             directions={context.directions}
             locked={locked}
             onChange={(positions) => {
@@ -530,33 +535,91 @@ export function OrganisationView({
           title="Répartition des moyens"
           hint="Là où va l'argent dit ce que vous faites vraiment. Déclarer une différenciation en finançant la production comme une usine low-cost est l'incohérence que le moteur relève le plus sûrement."
         >
-          <p className="tabular mb-4 text-sm text-(--foreground-muted)">
-            Assiette répartissable : <strong>{formatMadCompact(context.operatingBudgetMad)}</strong>
-            {' · '}réparti : <strong>{formatMadCompact(budgetTotal)}</strong>
-            {budgetTotal > 0 ? ` (${formatPct(budgetTotal / Math.max(context.operatingBudgetMad, 1), 0)})` : ''}
-          </p>
+          {/* ── L'assiette, en permanence sous les yeux ──────────────────
+              On répartit un pourcentage d'un total : sans ce total affiché,
+              « 12 % à la production » ne dit pas si c'est 200 M ou 2 Md, et la
+              répartition se fait à l'aveugle. */}
+          <dl className="tabular mb-4 flex flex-wrap gap-x-8 gap-y-2 rounded-lg border border-(--border) bg-(--surface-muted) px-4 py-3 text-sm">
+            <div>
+              <dt className="text-xs text-(--foreground-muted)">Budget total à répartir</dt>
+              <dd className="font-semibold">{formatMadCompact(context.operatingBudgetMad)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-(--foreground-muted)">Réparti</dt>
+              <dd
+                className="font-semibold"
+                style={{ color: overBudget ? 'var(--negative)' : undefined }}
+              >
+                {formatMadCompact(budgetTotal)}
+                {' · '}
+                {formatPct(budgetShare, 0)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-(--foreground-muted)">
+                {overBudget ? 'Dépassement' : 'Non affecté'}
+              </dt>
+              <dd
+                className="font-semibold"
+                style={{ color: overBudget ? 'var(--negative)' : undefined }}
+              >
+                {formatMadCompact(Math.abs(context.operatingBudgetMad - budgetTotal))}
+              </dd>
+            </div>
+          </dl>
+
+          {overBudget ? (
+            <p role="alert" className="mb-4 text-sm text-(--negative)">
+              Vous répartissez plus que votre marge brute attendue. Le moteur ne créera pas
+              l’argent manquant : l’écart se paiera en trésorerie.
+            </p>
+          ) : null}
 
           <div className="space-y-2">
             {context.directions.map((direction) => {
               const budget = das.budgets.find((b) => b.directionKey === direction.key)?.budgetMad ?? 0;
-              const share = budgetTotal > 0 ? budget / budgetTotal : 0;
+              // Le pourcentage porte sur l'ASSIETTE, pas sur ce qui est déjà
+              // réparti : sinon déplacer un curseur changerait le libellé de
+              // tous les autres sans que personne y ait touché.
+              const pct = context.operatingBudgetMad > 0
+                ? (budget / context.operatingBudgetMad) * 100
+                : 0;
+
+              const setPct = (next: number) => {
+                const budgets = das.budgets.filter((b) => b.directionKey !== direction.key);
+                budgets.push({
+                  directionKey: direction.key,
+                  budgetMad: Math.round((next / 100) * context.operatingBudgetMad),
+                });
+                update({ budgets });
+                push('budgets', { budgets });
+              };
 
               return (
-                <div key={direction.key} className="flex flex-wrap items-center gap-3 rounded-lg border border-(--border) p-3">
-                  <span className="min-w-0 flex-1 text-sm font-medium">{direction.name}</span>
-                  <NumberInput
-                    disabled={locked} value={Math.round(budget)}
-                    onChange={(value) => {
-                      const budgets = das.budgets.filter((b) => b.directionKey !== direction.key);
-                      budgets.push({ directionKey: direction.key, budgetMad: value });
-                      update({ budgets });
-                      push('budgets', { budgets });
-                    }}
-                    className="w-44 text-sm"
+                <div
+                  key={direction.key}
+                  className="rounded-lg border border-(--border) p-3"
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <span className="text-sm font-medium">{direction.name}</span>
+                    <span className="tabular text-sm">
+                      {formatPct(pct / 100, 1)}
+                      <span className="ml-2 text-(--foreground-muted)">
+                        {formatMadCompact(budget)}
+                      </span>
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    disabled={locked}
+                    value={Math.round(pct)}
+                    aria-label={`Part du budget allouée à ${direction.name}`}
+                    onChange={(event) => setPct(Number(event.target.value))}
+                    className="mt-2 w-full"
                   />
-                  <span className="tabular w-14 text-right text-sm text-(--foreground-muted)">
-                    {formatPct(share, 0)}
-                  </span>
                 </div>
               );
             })}
@@ -622,14 +685,57 @@ function Section({
   );
 }
 
+/**
+ * L'écart d'effectif d'un poste par rapport à l'organigramme hérité.
+ *
+ * Un poste absent de l'héritage est un poste CRÉÉ ce tour-ci : le dire
+ * explicitement évite qu'un « +12 » laisse croire à un renfort alors que
+ * l'équipe vient d'ouvrir une direction entière.
+ */
+function HeadcountDelta({
+  current,
+  inherited,
+}: {
+  current: number;
+  inherited: number | undefined;
+}) {
+  if (inherited === undefined) {
+    return (
+      <span className="text-xs text-(--foreground-muted)">nouveau poste</span>
+    );
+  }
+
+  const delta = current - inherited;
+  if (delta === 0) {
+    return (
+      <span className="tabular text-xs text-(--foreground-muted)">
+        = hérité ({inherited})
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="tabular text-xs"
+      style={{ color: delta > 0 ? 'var(--positive)' : 'var(--negative)' }}
+    >
+      {delta > 0 ? '↑ +' : '↓ −'}
+      {Math.abs(delta)}
+      <span className="ml-1 text-(--foreground-muted)">vs {inherited} hérité</span>
+    </span>
+  );
+}
+
 /** Éditeur d'organigramme : ajouter, retirer, hiérarchiser, prioriser. */
 function PositionEditor({
-  positions, directions, locked, onChange,
+  positions, directions, locked, onChange, inheritedHeadcount,
 }: {
   positions: PositionDraft[];
   directions: { key: string; name: string }[];
   locked: boolean;
   onChange: (positions: PositionDraft[]) => void;
+  /** Effectif hérité par intitulé de poste : la référence des écarts. */
+  inheritedHeadcount: Record<string, number>;
 }) {
   const patch = (index: number, values: Partial<PositionDraft>) =>
     onChange(positions.map((p, i) => (i === index ? { ...p, ...values } : p)));
@@ -678,6 +784,13 @@ function PositionEditor({
                     disabled={locked} value={position.headcount}
                     onChange={(v) => patch(index, { headcount: v })}
                     className="w-24 text-sm"
+                  />
+                  {/* L'organigramme se reprend d'un tour à l'autre : ce qui
+                      compte n'est pas « 40 personnes » mais « quatre de plus
+                      qu'à l'ouverture ». */}
+                  <HeadcountDelta
+                    current={position.headcount}
+                    inherited={inheritedHeadcount[position.title]}
                   />
                 </label>
                 <button
