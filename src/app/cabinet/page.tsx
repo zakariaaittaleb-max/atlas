@@ -23,7 +23,7 @@ export default async function CabinetPage() {
     supabase.from('strategic_units').select('id, name').order('name'),
     supabase
       .from('consulting_orders')
-      .select('id, study_key, tier, das_id, round_number, price_paid_mad, error_margin')
+      .select('id, study_key, tier, das_id, round_number, price_paid_mad, error_margin, payload')
       .eq('team_id', team.teamId)
       .order('created_at', { ascending: false }),
     supabase
@@ -81,6 +81,12 @@ export default async function CabinetPage() {
         roundNumber: Number(o.round_number),
         priceMad: Number(o.price_paid_mad),
         errorMargin: Number(o.error_margin),
+        // Le livrable FIGÉ à la commande : une équipe doit relire au tour 5 ce
+        // qu'elle a acheté au tour 2, avec les mêmes chiffres — y compris s'ils
+        // étaient faux. C'est la matière du débriefing.
+        subjects: ((o.payload as { subjects?: unknown[] } | null)?.subjects ?? []) as
+          OrderedStudy['subjects'],
+        notes: ((o.payload as { notes?: string[] } | null)?.notes ?? []),
       })) as OrderedStudy[]}
     />
   );

@@ -16,6 +16,9 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
+import { DisclosureList } from '@/components/disclosure-list';
+import { StudyCharts, SupplierRanks, type ChartSubject } from '@/components/study-charts';
+import type { FieldDisclosure } from '@/lib/consulting-types';
 import { formatMadCompact, formatPct } from '@/lib/format';
 
 export interface StudyOffer {
@@ -42,6 +45,13 @@ export interface OrderedStudy {
   roundNumber: number;
   priceMad: number;
   errorMargin: number;
+  /** Le livrable figé à la commande, tel qu'il se lit dans l'écran. */
+  subjects: DeliverableView[];
+  notes: string[];
+}
+
+export interface DeliverableView extends ChartSubject {
+  fields: FieldDisclosure[];
 }
 
 /** Ce que chaque étude réserve à son palier approfondi, et pourquoi ça compte. */
@@ -237,6 +247,51 @@ export function CabinetView({
                 >
                   Télécharger le classeur
                 </a>
+
+                {/* ── Le livrable, lisible sur place ──────────────────────
+                    Il ne se consultait qu'en téléchargeant un classeur : on
+                    sortait du jeu pour le lire, puis on revenait décider de
+                    mémoire. */}
+                {o.subjects.length > 0 ? (
+                  <details className="w-full border-t border-(--border) pt-4">
+                    <summary className="cursor-pointer list-none text-sm font-medium">
+                      Lire l’étude
+                      <span className="ml-2 font-normal text-(--foreground-muted)">
+                        {o.subjects.length} sujet{o.subjects.length > 1 ? 's' : ''} analysé
+                        {o.subjects.length > 1 ? 's' : ''}
+                      </span>
+                    </summary>
+
+                    <div className="mt-4 space-y-6">
+                      {o.subjects.some((s) => (s.history ?? []).length > 0) ? (
+                        <StudyCharts subjects={o.subjects} errorMargin={o.errorMargin} />
+                      ) : null}
+
+                      {o.subjects.map((subject) => (
+                        <div
+                          key={subject.subjectId}
+                          className="rounded-lg border p-4"
+                          style={{
+                            borderColor: subject.isSelf ? 'var(--accent)' : 'var(--border)',
+                          }}
+                        >
+                          <p className="mb-3 font-medium">{subject.subjectName}</p>
+                          <DisclosureList fields={subject.fields} />
+                        </div>
+                      ))}
+
+                      <SupplierRanks subjects={o.subjects} />
+
+                      {o.notes.length > 0 ? (
+                        <ul className="space-y-1 border-t border-(--border) pt-3 text-xs text-(--foreground-muted)">
+                          {o.notes.map((note) => (
+                            <li key={note}>— {note}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  </details>
+                ) : null}
               </li>
             ))}
           </ul>

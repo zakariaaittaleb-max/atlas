@@ -15,13 +15,15 @@ import 'server-only';
 
 import {
   AUDIT_DEPTH,
+  STUDY_FIELDS,
   TIER_PROFILES,
   buildStudyDeliverable,
   type DisclosureContext,
   type FieldDisclosure,
   type StudyTier,
 } from '@/lib/engine/consulting';
-import { makeRng, seedFrom } from '@/lib/engine/math';
+import type { SubjectHistoryPoint, SupplierRank } from '@/lib/consulting-types';
+import { makeRng, median, seedFrom } from '@/lib/engine/math';
 import type { EngineParams } from '@/lib/engine/params';
 
 import type { createAdminClient } from '@/lib/supabase/server';
@@ -37,6 +39,15 @@ export interface DeliverableSubject {
   subjectId: string;
   subjectName: string;
   fields: FieldDisclosure[];
+  /**
+   * L'équipe qui a commandé l'étude. Ses chiffres sont les siens : le cabinet
+   * ne les estime pas, il les met en regard — sans bruit et sans marge.
+   */
+  isSelf?: boolean;
+  /** Le même jeu d'indicateurs, sur tous les tours joués. */
+  history?: SubjectHistoryPoint[];
+  /** Ses fournisseurs par rang de dépendance, sans les volumes. */
+  suppliers?: SupplierRank[];
 }
 
 export interface Deliverable {
@@ -197,72 +208,205 @@ async function pestel(
   };
 }
 
+/**
+ * L'étude concurrentielle — celle qui sert les décisions.
+ *
+ * Trois partis pris, tous dictés par ce qu'un comité de direction fait
+ * réellement d'une étude :
+ *
+ *   • **L'équipe figure dans son propre tableau, en premier.** Comparer sa
+ *     part de marché à celle d'un rival obligeait à ouvrir un autre écran et à
+ *     retenir des nombres de tête. Ses chiffres à elle ne sont pas estimés :
+ *     ce sont les siens, livrés sans bruit ni marge.
+ *
+ *   • **Tout indicateur vient avec son HISTORIQUE.** Savoir qu'un concurrent
+ *     détient 22 % du marché ne dit pas s'il vient d'en gagner huit ou d'en
+ *     perdre douze. La photo ne décide rien, la trajectoire si.
+ *
+ *   • **Des résultats, jamais des décisions.** On observe ce qu'un concurrent
+ *     produit sur le marché — sa part, son prix, son volume, sa couverture.
+ *     Ses arbitrages internes restent à deviner, et c'est là tout le jeu. Ses
+ *     fournisseurs font exception, mais par RANG seulement : qui le livre
+ *     s'observe, combien il lui achète relève du contrat.
+ */
 async function competitive(
   input: FulfilInput, round: number, context: (id: string) => DisclosureContext,
 ) {
   const { data: team } = await input.admin
-    .from('teams').select('pool_id').eq('id', input.teamId).maybeSingle();
+    .from('teams').select('pool_id, name').eq('id', input.teamId).maybeSingle();
   const { data: rivals } = await input.admin
     .from('teams').select('id, name').eq('pool_id', str(team?.pool_id)).neq('id', input.teamId);
 
-  const ids = (rivals ?? []).map((r) => String(r.id));
-  const { data: metrics } = await input.admin
-    .from('team_das_round_metrics').select('*')
-    .in('team_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
-    .eq('das_id', input.dasId!).eq('round_number', round);
+  // L'équipe d'abord : c'est la ligne de référence de tout le tableau.
+  const players = [
+    { id: input.teamId, name: str(team?.name, 'Vous'), isSelf: true },
+    ...(rivals ?? []).map((r) => ({ id: String(r.id), name: String(r.name), isSelf: false })),
+  ];
+  const ids = players.map((p) => p.id);
 
-  const concentration = herfindahl((metrics ?? []).map((m) => num(m.market_share_pct)));
+  // Tous les tours joués, pas seulement le dernier.
+  const { data: allMetrics } = await input.admin
+    .from('team_das_round_metrics').select('*')
+    .in('team_id', ids)
+    .eq('das_id', input.dasId!).lte('round_number', round);
+
+  const rows = (allMetrics ?? []) as Row[];
+  const roundsPlayed = [...new Set(rows.map((r) => num(r.round_number)))].sort((a, b) => a - b);
+  const at = (teamId: string, r: number) =>
+    rows.find((x) => str(x.team_id) === teamId && num(x.round_number) === r);
+
+  const current = rows.filter((r) => num(r.round_number) === round);
+  const concentration = herfindahl(current.map((m) => num(m.market_share_pct)));
+  const leader = Math.max(...current.map((m) => num(m.market_share_pct)), 0);
 
   // Barrière à l'entrée et menace des substituts sont des propriétés de
   // FILIÈRE : elles valent pour tous les concurrents, et c'est bien ce qui en
   // fait des forces au sens de Porter plutôt que des traits d'entreprise.
   const { data: unit } = await input.admin
-    .from('strategic_units').select('vrio_entry_barrier, substitution_pressure')
+    .from('strategic_units')
+    .select('vrio_entry_barrier, substitution_pressure, growth_rate_min, growth_rate_max')
     .eq('id', input.dasId!).maybeSingle();
   const entryBarrier = num(unit?.vrio_entry_barrier) * 100;
   const substitution = num(unit?.substitution_pressure, 40);
+  // Projection à stratégie inchangée : le marché croît, les positions tiennent.
+  const growth = (num(unit?.growth_rate_min) + num(unit?.growth_rate_max)) / 2;
 
-  // Abscisse de la matrice BCG : la part du concurrent RAPPORTÉE au leader du
-  // pool. Une part absolue ne dit rien — 20 % fait un poids mort face à un
-  // leader à 60 %, et une vache à lait face à un second à 8 %.
-  const { data: mine } = await input.admin
-    .from('team_das_round_metrics').select('market_share_pct')
-    .eq('team_id', input.teamId).eq('das_id', input.dasId!)
-    .eq('round_number', round).maybeSingle();
-  const allShares = [...(metrics ?? []).map((m) => num(m.market_share_pct)),
-                     num(mine?.market_share_pct)];
-  const leader = Math.max(...allShares, 0);
+  // ── Les fournisseurs, par rang ────────────────────────────────────────────
+  const { data: contracts } = await input.admin
+    .from('procurement_contracts')
+    .select('team_id, supplier_id, committed_volume')
+    .in('team_id', ids).eq('das_id', input.dasId!).eq('round_number', round);
 
-  const subjects: DeliverableSubject[] = (rivals ?? []).map((rival) => {
-    const m = (metrics ?? []).find((x) => String(x.team_id) === String(rival.id)) as Row | undefined;
+  const { data: suppliers } = await input.admin
+    .from('ecosystem_actors').select('id, name').eq('das_id', input.dasId!);
+  const supplierName = new Map((suppliers ?? []).map((a) => [String(a.id), String(a.name)]));
+
+  const mySupplierIds = new Set(
+    ((contracts ?? []) as Row[])
+      .filter((c) => str(c.team_id) === input.teamId)
+      .map((c) => str(c.supplier_id)),
+  );
+
+  const ranksFor = (teamId: string): SupplierRank[] =>
+    ((contracts ?? []) as Row[])
+      .filter((c) => str(c.team_id) === teamId && num(c.committed_volume) > 0)
+      .sort((a, b) => num(b.committed_volume) - num(a.committed_volume))
+      .map((c, i) => ({
+        rank: i + 1,
+        name: supplierName.get(str(c.supplier_id)) ?? 'Fournisseur',
+        sharedWithYou: teamId !== input.teamId && mySupplierIds.has(str(c.supplier_id)),
+      }));
+
+  // ── Le taux de marge médian du pool ──────────────────────────────────────
+  const marginOf = (m: Row | undefined) => {
+    const revenue = num(m?.revenue_mad);
+    return revenue > 0 ? (num(m?.gross_margin_mad) / revenue) * 100 : 0;
+  };
+  const medianMargin = median(current.map((m) => marginOf(m)));
+
+  /**
+   * Les valeurs vraies d'un joueur à un tour donné.
+   *
+   * Les propriétés de FILIÈRE — concentration du pool, barrière à l'entrée,
+   * menace des substituts — ne sont jointes qu'à la ligne de l'équipe. Elles
+   * valent pour tout le monde par définition ; les répéter sur chaque
+   * concurrent les faisait bruiter séparément, si bien que la même barrière à
+   * l'entrée s'affichait à 22 % sur un rival et 30 % sur un autre. Une note
+   * affirmait pourtant qu'elles étaient identiques.
+   */
+  const valuesAt = (teamId: string, r: number, isSelf: boolean): Record<string, number> => {
+    const m = at(teamId, r);
+    const revenue = num(m?.revenue_mad);
     return {
-      subjectId: String(rival.id),
-      subjectName: String(rival.name),
-      fields: buildStudyDeliverable('concurrentielle', input.tier, {
-        competitor_quality: num(m?.perceived_quality, 50),
-        competitor_notoriety: num(m?.notoriety, 50),
-        competitor_price_position: num(m?.price_position, 50),
-        competitor_market_share: num(m?.market_share_pct),
-        pool_concentration: concentration,
-        competitor_capacity: num(m?.capacity_units),
-        entry_barrier: entryBarrier,
-        substitution_pressure: substitution,
-        // Rapportée au leader, l'équipe incluse : c'est le leader du marché
-        // qui fait la référence, pas le plus fort des autres.
-        relative_market_share: leader > 0 ? num(m?.market_share_pct) / leader : 0,
-      }, context(String(rival.id)), input.params),
+      ...(isSelf
+        ? {
+            pool_concentration: concentration,
+            entry_barrier: entryBarrier,
+            substitution_pressure: substitution,
+          }
+        : {}),
+      competitor_quality: num(m?.perceived_quality, 50),
+      competitor_notoriety: num(m?.notoriety, 50),
+      competitor_price_position: num(m?.price_position, 50),
+      // Stockée en FRACTION (contrainte `between 0 and 1`) : sans ce facteur,
+      // une équipe à la moitié du marché s'affichait « 0,5 % ».
+      competitor_market_share: num(m?.market_share_pct) * 100,
+      competitor_capacity: num(m?.capacity_units),
+      volume_sold: num(m?.volume_sold),
+      volume_lost: num(m?.volume_lost),
+      // Ce qui est sorti de l'atelier. Persisté depuis les stocks ; à défaut,
+      // le vendu en tient lieu — on ne peut pas vendre ce qu'on n'a pas fait.
+      production_estimate: num(m?.production_units, num(m?.volume_sold)),
+      revenue_mad: revenue,
+      revenue_forecast_mad: revenue * (1 + growth),
+      gross_margin_mad: num(m?.gross_margin_mad),
+      margin_pct: marginOf(m),
+      pool_median_margin_pct: medianMargin,
+      distribution_coverage: num(m?.distribution_coverage) * 100,
+      // Rapportée au leader, l'équipe incluse : c'est le leader du marché
+      // qui fait la référence, pas le plus fort des autres.
+      relative_market_share: leader > 0 ? num(m?.market_share_pct) / leader : 0,
+    };
+  };
+
+  const subjects: DeliverableSubject[] = players.map((player) => {
+    // Ses propres chiffres ne s'estiment pas : le palier ne s'applique qu'aux
+    // autres. Un cabinet ne vend pas à une équipe une approximation de ce
+    // qu'elle sait déjà.
+    const disclose = (r: number) =>
+      player.isSelf
+        ? exactFields('concurrentielle', valuesAt(player.id, r, true))
+        : buildStudyDeliverable(
+            'concurrentielle', input.tier, valuesAt(player.id, r, false),
+            { ...context(player.id), roundNumber: r }, input.params,
+          );
+
+    return {
+      subjectId: player.id,
+      subjectName: player.isSelf ? `${player.name} (vous)` : player.name,
+      isSelf: player.isSelf,
+      fields: disclose(round),
+      history: roundsPlayed.map((r): SubjectHistoryPoint => ({
+        roundNumber: r,
+        values: Object.fromEntries(
+          disclose(r).map((f) => [f.key, f.mode === 'withheld' ? null : valueOf(f)]),
+        ),
+      })),
+      suppliers: ranksFor(player.id),
     };
   });
 
   return {
     subjects,
     notes: [
-      'Indicateurs reconstitués par le cabinet à partir d’observations de marché.',
-      'La capacité installée des concurrents n’est couverte qu’en étude approfondie.',
-      'Barrière à l’entrée et menace des substituts valent pour la filière entière : elles sont identiques pour chaque concurrent listé.',
+      'Vos propres chiffres sont exacts : le cabinet les met en regard, il ne les estime pas.',
+      'Indicateurs des concurrents reconstitués par le cabinet à partir d’observations de marché.',
+      'Le chiffre d’affaires prévisionnel projette le tour suivant à stratégie inchangée : il dit qui décroche si personne ne bouge, pas ce qui va arriver.',
+      'Les fournisseurs d’un concurrent sont donnés par rang de dépendance. Les volumes qu’il leur achète relèvent du contrat et ne s’observent pas.',
+      'Concentration du pool, barrière à l’entrée et menace des substituts caractérisent la filière entière : elles ne sont données qu’une fois, sur votre ligne.',
       'La part relative se lit contre le leader du pool. Croisée avec la croissance du marché — étude PESTEL — elle place le domaine sur la matrice BCG.',
     ],
   };
+}
+
+/** La valeur numérique d'un champ divulgué, quel que soit son régime. */
+function valueOf(field: FieldDisclosure): number | null {
+  if (field.mode === 'exact' || field.mode === 'estimate') return field.value;
+  if (field.mode === 'band') return (field.lower + field.upper) / 2;
+  return null;
+}
+
+/** Les champs d'une étude livrés sans bruit — le cas de sa propre équipe. */
+function exactFields(studyKey: string, values: Record<string, number>): FieldDisclosure[] {
+  return (STUDY_FIELDS[studyKey] ?? [])
+    .filter((spec) => values[spec.key] !== undefined)
+    .map((spec): FieldDisclosure => ({
+      mode: 'exact',
+      key: spec.key,
+      label: spec.label,
+      value: values[spec.key],
+      unit: spec.unit,
+    }));
 }
 
 async function panel(

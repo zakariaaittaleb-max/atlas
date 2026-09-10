@@ -18,7 +18,7 @@ import {
   STUDY_BASE_PRICES,
   STUDY_TIERS,
   studyPrice,
-  TIER_PROFILES,
+  tierProfile,
   type StudyTier,
 } from '@/lib/engine/consulting';
 import { decisionsAreOpen, getRoundState, getTeamContext } from '@/lib/dal';
@@ -100,7 +100,11 @@ export async function POST(request: Request) {
   const params = engineParamsFrom(paramRows as { key: string; value: number }[] | null);
 
   const price = studyPrice(STUDY_BASE_PRICES[studyKey], tier as StudyTier, params);
-  const errorMargin = TIER_PROFILES[tier as StudyTier].errorMargin;
+  // La marge inscrite sur la commande doit être celle que le moteur applique.
+  // Elle était lue sur la constante alors que la divulgation lit le PARAMÈTRE
+  // de session : une étude payée au palier standard s'archivait à ±5 % et
+  // livrait des chiffres à ±10 %. Le cabinet mentait sur sa propre précision.
+  const errorMargin = tierProfile(tier as StudyTier, params).errorMargin;
 
   // Racheter la même étude au même palier est SANS EFFET et sans surcoût : le
   // bruit étant déterministe, les chiffres seraient identiques. La contrainte

@@ -55,31 +55,52 @@ export interface TierProfile {
   label: string;
 }
 
+/**
+ * Les trois paliers de mission.
+ *
+ * ── POURQUOI CES MARGES-LÀ ─────────────────────────────────────────────────
+ * Elles valaient ±25 %, ±10 % et ±3 %. Le palier bon marché n'informait plus :
+ * une part de marché annoncée à 25 % pouvait valoir 20 ou 30, ce qui ne
+ * départage aucune décision. Une étude qu'on ne peut pas utiliser ne se vend
+ * pas, et les trois paliers s'effondraient en un seul.
+ *
+ * ±10 / ±5 / ±2 correspond à ce qu'annonce une étude de marché réelle : une
+ * note de cadrage donne l'ordre de grandeur, une étude commanditée resserre,
+ * une mission approfondie avec accès aux données confine à la certitude. Le
+ * rapport entre paliers reste assez large pour que monter en gamme se
+ * justifie — surtout à 2,2 fois le prix.
+ */
 export const TIER_PROFILES: Record<StudyTier, TierProfile> = {
   express: {
     priceMultiplier: 0.35,
-    errorMargin: 0.25,
+    errorMargin: 0.1,
     bandCount: 3,
     includesWeakSignals: false,
     label: 'Note express',
   },
   standard: {
     priceMultiplier: 1.0,
-    errorMargin: 0.1,
+    errorMargin: 0.05,
     bandCount: 5,
     includesWeakSignals: false,
     label: 'Étude standard',
   },
   approfondie: {
     priceMultiplier: 2.2,
-    errorMargin: 0.03,
+    errorMargin: 0.02,
     bandCount: null,
     includesWeakSignals: true,
     label: 'Étude approfondie',
   },
 };
 
-function tierProfile(tier: StudyTier, params: EngineParams): TierProfile {
+/**
+ * Le palier tel qu'il s'applique VRAIMENT : la valeur de session gagne sur la
+ * constante. Exporté parce que la marge inscrite sur une commande doit être
+ * celle que le moteur applique — les lire à deux endroits différents faisait
+ * archiver « ±5 % » sur une étude livrée à ±10 %.
+ */
+export function tierProfile(tier: StudyTier, params: EngineParams): TierProfile {
   const base = TIER_PROFILES[tier];
   return {
     ...base,
@@ -108,6 +129,16 @@ export interface NumericFieldSpec {
   errorMode: 'relative' | 'absolute';
   /** Amplitude de référence, requise en mode `absolute`. */
   range?: number;
+  /**
+   * Domaine du champ, quand il en a un.
+   *
+   * Le bruit en mode absolu déplace la valeur de quelques points, sans savoir
+   * ce qu'elle représente : une couverture de distribution nulle ressortait à
+   * −1,3 %, un indice de qualité pouvait dépasser 100. Le cabinet se trompe,
+   * il ne délire pas — une estimation reste dans le domaine du possible.
+   */
+  min?: number;
+  max?: number;
   /** Champ qualitatif : livré en bandes aux paliers bon marché. */
   bandable?: boolean;
   bandMin?: number;
@@ -184,6 +215,12 @@ export function perturb(
   return trueValue * (1 + normalized * errorMargin);
 }
 
+/** Ramène une estimation dans le domaine du champ, quand il en a un. */
+export function clampToDomain(value: number, spec: NumericFieldSpec): number {
+  const floored = spec.min === undefined ? value : Math.max(value, spec.min);
+  return spec.max === undefined ? floored : Math.min(floored, spec.max);
+}
+
 /** Range une valeur dans l'une des bandes du palier. */
 export function quantize(
   trueValue: number,
@@ -249,7 +286,10 @@ export function discloseField(
   }
 
   const normalized = normalizedError({ ...context, fieldKey: spec.key });
-  const value = perturb(trueValue, spec, profile.errorMargin, normalized);
+  const value = clampToDomain(
+    perturb(trueValue, spec, profile.errorMargin, normalized),
+    spec,
+  );
 
   // Intervalle annoncé, centré sur l'estimation. Par construction du tirage,
   // il contient toujours la valeur vraie.
@@ -303,13 +343,23 @@ export const STUDY_FIELDS: Record<string, NumericFieldSpec[]> = {
     { key: 'exposure_legal', label: 'Exposition légale et réglementaire', errorMode: 'absolute', range: 100 },
   ],
 
+  /**
+   * L'étude qui sert vraiment les décisions.
+   *
+   * Elle ne livrait que des traits de positionnement — qualité, notoriété,
+   * prix — sans jamais dire ce que le concurrent en TIRAIT. Une équipe voyait
+   * qu'un rival se positionnait haut de gamme sans savoir s'il y gagnait de
+   * l'argent, ni combien il produisait, ni s'il vendait tout ce qu'on lui
+   * demandait. Les indicateurs ajoutés ici sont ceux sur lesquels un comité de
+   * direction tranche : part, volume, chiffre d'affaires, marge, couverture.
+   */
   concurrentielle: [
-    { key: 'competitor_quality', label: 'Qualité perçue du concurrent', errorMode: 'absolute', range: 100, bandable: true },
-    { key: 'competitor_notoriety', label: 'Notoriété du concurrent', errorMode: 'absolute', range: 100, bandable: true },
-    { key: 'competitor_price_position', label: 'Positionnement prix', errorMode: 'absolute', range: 100, bandable: true },
-    { key: 'competitor_market_share', label: 'Part de marché', errorMode: 'relative', unit: '%' },
-    { key: 'pool_concentration', label: 'Concentration du pool', errorMode: 'absolute', range: 100 },
-    { key: 'competitor_capacity', label: 'Capacité installée du concurrent', errorMode: 'relative', weakSignal: true },
+    { min: 0, max: 100, key: 'competitor_quality', label: 'Qualité perçue', errorMode: 'absolute', range: 100, bandable: true },
+    { min: 0, max: 100, key: 'competitor_notoriety', label: 'Notoriété', errorMode: 'absolute', range: 100, bandable: true },
+    { min: 0, max: 100, key: 'competitor_price_position', label: 'Positionnement prix', errorMode: 'absolute', range: 100, bandable: true },
+    { min: 0, key: 'competitor_market_share', label: 'Part de marché', errorMode: 'relative', unit: '%' },
+    { min: 0, max: 100, key: 'pool_concentration', label: 'Concentration du pool', errorMode: 'absolute', range: 100 },
+    { min: 0, key: 'competitor_capacity', label: 'Capacité installée', errorMode: 'relative', weakSignal: true },
 
     // ── Les deux forces de Porter qui manquaient ───────────────────────────
     //
@@ -322,12 +372,25 @@ export const STUDY_FIELDS: Record<string, NumericFieldSpec[]> = {
     //   • la menace des SUBSTITUTS n'avait aucune donnée du tout.
     //
     // Avec ces deux-là, la grille des cinq forces devient constructible.
-    { key: 'entry_barrier', label: 'Barrière à l’entrée du métier', errorMode: 'absolute', range: 100 },
-    { key: 'substitution_pressure', label: 'Menace des substituts', errorMode: 'absolute', range: 100 },
+    { min: 0, max: 100, key: 'entry_barrier', label: 'Barrière à l’entrée du métier', errorMode: 'absolute', range: 100 },
+    { min: 0, max: 100, key: 'substitution_pressure', label: 'Menace des substituts', errorMode: 'absolute', range: 100 },
 
     // Abscisse de la matrice BCG. L'ordonnée — la croissance du marché —
     // s'achète avec l'étude PESTEL : construire un BCG demande deux missions,
     // et c'est une leçon de coût de l'information, pas une lacune.
+    { min: 0, key: 'volume_sold', label: 'Volume vendu', errorMode: 'relative' },
+    { min: 0, key: 'production_estimate', label: 'Production estimée', errorMode: 'relative' },
+    { min: 0, key: 'revenue_mad', label: "Chiffre d'affaires", errorMode: 'relative', unit: 'DH' },
+    // Projection à stratégie inchangée : où chacun atterrit si personne ne
+    // bouge. C'est le chiffre qui dit qui décroche sans rien faire.
+    { min: 0, key: 'revenue_forecast_mad', label: "Chiffre d'affaires prévisionnel", errorMode: 'relative', unit: 'DH' },
+    { key: 'gross_margin_mad', label: 'Marge brute', errorMode: 'relative', unit: 'DH' },
+    // Le taux se compare entre entreprises de tailles différentes ; la médiane
+    // du pool dit enfin à quel point cette marge est bonne.
+    { key: 'margin_pct', label: 'Taux de marge', errorMode: 'absolute', range: 30, unit: '%' },
+    { key: 'pool_median_margin_pct', label: 'Taux de marge médian du pool', errorMode: 'absolute', range: 30, unit: '%' },
+    { min: 0, max: 100, key: 'distribution_coverage', label: 'Couverture de distribution', errorMode: 'absolute', range: 100 },
+    { min: 0, key: 'volume_lost', label: 'Demande non servie', errorMode: 'relative' },
     { key: 'relative_market_share', label: 'Part de marché relative au leader', errorMode: 'relative' },
   ],
 
@@ -341,7 +404,7 @@ export const STUDY_FIELDS: Record<string, NumericFieldSpec[]> = {
 
   benchmark_fourn: [
     { key: 'price_index', label: 'Indice prix', errorMode: 'relative' },
-    { key: 'capacity_units', label: 'Capacité', errorMode: 'relative' },
+    { min: 0, key: 'capacity_units', label: 'Capacité', errorMode: 'relative' },
     { key: 'reliability', label: 'Fiabilité', errorMode: 'absolute', range: 100, bandable: true },
     { key: 'quality_contribution', label: 'Contribution qualité', errorMode: 'absolute', range: 100, bandable: true },
     { key: 'switching_cost', label: 'Coût de changement', errorMode: 'absolute', range: 100 },
@@ -369,15 +432,15 @@ export const STUDY_FIELDS: Record<string, NumericFieldSpec[]> = {
   ],
 
   due_diligence: [
-    { key: 'revenue_mad', label: "Chiffre d'affaires", errorMode: 'relative', unit: 'DH' },
+    { min: 0, key: 'revenue_mad', label: "Chiffre d'affaires", errorMode: 'relative', unit: 'DH' },
     // La part de marché situe la cible dans son marché, ce que le chiffre
     // d'affaires seul ne fait pas : 400 M DH est une position dominante sur un
     // marché de niche et une part résiduelle sur un marché de masse.
-    { key: 'market_share_pct', label: 'Part de marché', errorMode: 'relative', unit: '%' },
+    { min: 0, key: 'market_share_pct', label: 'Part de marché', errorMode: 'relative', unit: '%' },
     { key: 'ebitda_mad', label: 'EBITDA', errorMode: 'relative', unit: 'DH' },
     { key: 'margin_pct', label: "Marge d'exploitation", errorMode: 'absolute', range: 30, unit: '%' },
-    { key: 'capacity_units', label: 'Capacité installée', errorMode: 'relative' },
-    { key: 'headcount', label: 'Effectif', errorMode: 'relative' },
+    { min: 0, key: 'capacity_units', label: 'Capacité installée', errorMode: 'relative' },
+    { min: 0, key: 'headcount', label: 'Effectif', errorMode: 'relative' },
     { key: 'divest_appetite', label: 'Appétence à la cession', errorMode: 'absolute', range: 100, bandable: true },
     { key: 'hidden_liabilities_mad', label: 'Passifs non déclarés', errorMode: 'relative', unit: 'DH', weakSignal: true },
   ],

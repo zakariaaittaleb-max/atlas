@@ -247,12 +247,16 @@ export const DEFAULT_PARAMS = {
   // Le curseur pédagogique le plus sensible du jeu. Trop bon marché, les
   // équipes achètent tout et l'information cesse d'être un arbitrage ; trop
   // cher, elles jouent à l'aveugle et le débriefing n'a rien à raconter.
+  // Ces marges DOIVENT rester alignées sur `TIER_PROFILES` : c'est la valeur
+  // du paramètre qui gagne, la constante ne servant que de repli. Les
+  // désaccorder ferait annoncer une précision au facilitateur et en appliquer
+  // une autre aux équipes.
   'consulting.tier.express.price_multiplier': 0.35,
-  'consulting.tier.express.error_margin': 0.25,
+  'consulting.tier.express.error_margin': 0.1,
   'consulting.tier.standard.price_multiplier': 1.0,
-  'consulting.tier.standard.error_margin': 0.1,
+  'consulting.tier.standard.error_margin': 0.05,
   'consulting.tier.approfondie.price_multiplier': 2.2,
-  'consulting.tier.approfondie.error_margin': 0.03,
+  'consulting.tier.approfondie.error_margin': 0.02,
 
   // --- Dotation initiale (doc 03 §7) ---------------------------------------
   //

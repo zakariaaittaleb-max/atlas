@@ -43,3 +43,34 @@ export type FieldDisclosure =
       unit?: string;
     }
   | { mode: 'withheld'; key: string; label: string; reason: string };
+
+/**
+ * Un point d'une série d'évolution.
+ *
+ * Une étude ne vaut pas grand-chose en photo : savoir qu'un concurrent détient
+ * 22 % du marché ne dit pas s'il vient d'en gagner huit ou d'en perdre douze.
+ * Chaque indicateur est donc livré sur TOUS les tours joués.
+ *
+ * Les valeurs sont déjà bruitées, tour par tour, avec la même graine
+ * déterministe que la photo : relire l'étude au tour 5 doit redonner
+ * exactement les chiffres du tour 2.
+ */
+export interface SubjectHistoryPoint {
+  roundNumber: number;
+  /** Indicateur → valeur divulguée. `null` quand le tour n'a rien produit. */
+  values: Record<string, number | null>;
+}
+
+/**
+ * Un fournisseur d'un concurrent, par rang de dépendance.
+ *
+ * Les QUANTITÉS restent cachées — c'est une décision, et le cabinet ne vend
+ * que ce qui s'observe. Le rang, lui, se déduit du marché : on voit qui livre
+ * qui, et un concurrent mono-source est visiblement vulnérable.
+ */
+export interface SupplierRank {
+  rank: number;
+  name: string;
+  /** Vous vous approvisionnez chez lui aussi : vous pesez sur le même carnet. */
+  sharedWithYou: boolean;
+}

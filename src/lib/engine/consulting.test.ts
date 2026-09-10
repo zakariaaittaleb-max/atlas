@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   STUDY_BASE_PRICES, STUDY_FIELDS, STUDY_TIERS, TIER_PROFILES, buildStudyDeliverable, discloseField, normalizedError, perturb, quantize, studyPrice, type DisclosureContext, type NumericFieldSpec, type StudyTier,
 } from './consulting';
-import { buildParams } from './params';
+import { DEFAULT_PARAMS, buildParams } from './params';
 
 const params = buildParams();
 
@@ -347,5 +347,60 @@ describe('couverture des outils d’analyse stratégique', () => {
     const faibles = Object.values(STUDY_FIELDS).flat().filter((f) => f.weakSignal);
     expect(faibles.length).toBeGreaterThan(0);
     expect(faibles.length / toutesLesEtudes.length).toBeLessThan(0.2);
+  });
+});
+
+describe('accord entre la constante et le paramètre moteur', () => {
+  /**
+   * `TIER_PROFILES` et `DEFAULT_PARAMS` déclarent tous deux la marge d'erreur
+   * d'un palier, et c'est le PARAMÈTRE qui gagne — la constante ne sert que de
+   * repli. Les désaccorder est silencieux et coûteux : le catalogue affiche au
+   * facilitateur une précision, le moteur en applique une autre aux équipes, et
+   * rien ne le signale. C'est exactement ce qui est arrivé en resserrant les
+   * marges.
+   */
+  it('annonce la même marge des deux côtés', () => {
+    for (const tier of STUDY_TIERS) {
+      expect(DEFAULT_PARAMS[`consulting.tier.${tier}.error_margin`]).toBe(
+        TIER_PROFILES[tier].errorMargin,
+      );
+      expect(DEFAULT_PARAMS[`consulting.tier.${tier}.price_multiplier`]).toBe(
+        TIER_PROFILES[tier].priceMultiplier,
+      );
+    }
+  });
+});
+
+describe('une estimation reste dans le domaine du possible', () => {
+  /**
+   * Le bruit en mode absolu déplace la valeur de quelques points sans savoir ce
+   * qu'elle représente : une couverture de distribution nulle ressortait à
+   * −1,3 %, ce qui ne veut rien dire. Le cabinet se trompe, il ne délire pas.
+   */
+  const borne: NumericFieldSpec = {
+    key: 'distribution_coverage',
+    label: 'Couverture de distribution',
+    errorMode: 'absolute',
+    range: 100,
+    min: 0,
+    max: 100,
+  };
+
+  it('ne descend pas sous le plancher du champ', () => {
+    for (let i = 0; i < 60; i += 1) {
+      const d = discloseField(0, borne, 'express', { ...ctx, subjectId: `s-${i}` }, params);
+      if (d.mode === 'estimate' || d.mode === 'exact') {
+        expect(d.value).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it('ne dépasse pas le plafond du champ', () => {
+    for (let i = 0; i < 60; i += 1) {
+      const d = discloseField(100, borne, 'express', { ...ctx, subjectId: `s-${i}` }, params);
+      if (d.mode === 'estimate' || d.mode === 'exact') {
+        expect(d.value).toBeLessThanOrEqual(100);
+      }
+    }
   });
 });
