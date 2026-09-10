@@ -9,6 +9,10 @@ import { z } from 'zod';
 
 import { logAdminAction } from '@/lib/admin-audit';
 import { getUser } from '@/lib/dal';
+import {
+  writeFacilitatorCapability,
+  type FacilitatorCapability,
+} from '@/lib/facilitator-capabilities';
 import { IMPERSONATION_LABEL_COOKIE, IMPERSONATION_RETURN_COOKIE } from '@/lib/impersonation';
 import { isSuperAdminEmail } from '@/lib/security-config';
 import { createAdminClient, createServerClient } from '@/lib/supabase/server';
@@ -106,6 +110,35 @@ export async function resetFacilitatorPasswordAction(input: {
   // Jamais le mot de passe lui-même dans le journal.
   await logAdminAction(admin_.id, 'facilitator_reset_password', 'user', parsed.data.userId, {});
 
+  return { ok: true };
+}
+
+const SetCapability = z.object({
+  userId: z.string().uuid(),
+  capability: z.enum(['join_team_as_player']),
+  enabled: z.boolean(),
+});
+
+/** Ouvre ou ferme un droit à un facilitateur donné. */
+export async function setFacilitatorCapabilityAction(input: {
+  userId: string;
+  capability: FacilitatorCapability;
+  enabled: boolean;
+}): Promise<ActionResult> {
+  const admin_ = await requireSuperAdmin();
+  if (!admin_) return { ok: false, error: 'Accès refusé.' };
+
+  const parsed = SetCapability.safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Droit inconnu.' };
+
+  await writeFacilitatorCapability(
+    parsed.data.userId,
+    parsed.data.capability,
+    parsed.data.enabled,
+    admin_.id,
+  );
+
+  revalidatePath('/admin/facilitators');
   return { ok: true };
 }
 

@@ -66,7 +66,9 @@ export const getTeamContext = cache(async (): Promise<TeamContext | null> => {
   const supabase = await createServerClient();
   const { data, error } = await supabase
     .from('team_members')
-    .select('display_role, team_id, teams(id, name, pool_id, session_id, is_liquidated)')
+    .select(
+      'display_name, is_facilitator, team_id, teams(id, name, pool_id, session_id, is_liquidated)',
+    )
     .eq('user_id', user.id)
     .limit(1)
     .maybeSingle();
@@ -88,7 +90,8 @@ export const getTeamContext = cache(async (): Promise<TeamContext | null> => {
     teamName: team.name,
     poolId: team.pool_id,
     sessionId: team.session_id,
-    displayRole: data.display_role,
+    displayName: (data.display_name as string | null) ?? null,
+    isFacilitator: Boolean(data.is_facilitator),
     isLiquidated: team.is_liquidated,
   };
 });

@@ -25,7 +25,10 @@ export interface TeamContext {
   teamName: string;
   poolId: string | null;
   sessionId: string;
-  displayRole: string;
+  /** Prénom saisi à la connexion. `null` tant que le membre n'en a pas donné. */
+  displayName: string | null;
+  /** Vrai quand c'est le facilitateur qui joue dans le groupe. */
+  isFacilitator: boolean;
   isLiquidated: boolean;
 }
 

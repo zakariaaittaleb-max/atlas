@@ -31,7 +31,9 @@ export interface TeamProgress {
   name: string;
   joinCode: string;
   isLiquidated: boolean;
-  connectedMembers: number;
+  colorHex: string;
+  colorLabel: string;
+  memberCount: number;
   hasCorporate: boolean;
   dasDone: number;
   dasExpected: number;
@@ -41,6 +43,16 @@ export interface TeamProgress {
   treasuryStatus: string;
   iaScore: number | null;
 }
+
+/**
+ * L'action arrive en prop plutôt que par import : la faire entrer ici ferait
+ * entrer `lib/dal` dans le graphe d'un composant client.
+ */
+export type JoinTeamAction = (input: {
+  sessionId: string;
+  teamId: string;
+  visible: boolean;
+}) => Promise<{ ok: true } | { ok: false; error: string }>;
 
 interface Card {
   key: string; name: string; description: string; nature: string;
@@ -60,10 +72,14 @@ const DIMENSIONS: Record<string, string> = {
 export function FacilitatorView({
   sessionId, sessionName, joinCode, status, roundNumber, plannedRounds, maxRounds,
   teams, das, cards, activeShocks, runs, difficulty, dials, difficultyLocked, sectors,
+  canPlayInTeam, playingTeamId, joinTeamAction,
 }: {
   sessionId: string; sessionName: string; joinCode: string; status: string;
   roundNumber: number; plannedRounds: number; maxRounds: number;
   teams: TeamProgress[];
+  canPlayInTeam: boolean;
+  playingTeamId: string | null;
+  joinTeamAction: JoinTeamAction;
   das: { id: string; name: string; marketOpen: boolean; hasTargets: boolean }[];
   cards: Card[];
   difficulty: string;
@@ -271,7 +287,7 @@ export function FacilitatorView({
               <tr className="border-b border-(--border) text-left">
                 <th className="py-2 pr-4 font-medium">Équipe</th>
                 <th className="py-2 pr-4 font-medium">Code</th>
-                <th className="py-2 pr-4 text-center font-medium">Connectés</th>
+                <th className="py-2 pr-4 text-center font-medium">Membres</th>
                 <th className="py-2 pr-4 text-center font-medium">Corporate</th>
                 <th className="py-2 pr-4 text-center font-medium">DAS</th>
                 <th className="py-2 pr-4 text-center font-medium">Distribution</th>
@@ -284,9 +300,23 @@ export function FacilitatorView({
             <tbody className="tabular">
               {teams.map((t) => (
                 <tr key={t.teamId} className="border-b border-(--border) last:border-0">
-                  <td className="py-2.5 pr-4 font-medium">{t.name}</td>
+                  <td className="py-2.5 pr-4 font-medium">
+                    <span className="flex items-center gap-2">
+                      {/* La couleur du groupe, la même que sur l'écran des
+                          participants — doublée de son nom, jamais seule. */}
+                      <span
+                        aria-hidden
+                        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: t.colorHex }}
+                      />
+                      {t.name}
+                      <span className="font-normal text-xs text-(--foreground-muted)">
+                        {t.colorLabel}
+                      </span>
+                    </span>
+                  </td>
                   <td className="py-2.5 pr-4 tracking-widest text-(--foreground-muted)">{t.joinCode}</td>
-                  <td className="py-2.5 pr-4 text-center">{t.connectedMembers}</td>
+                  <td className="py-2.5 pr-4 text-center">{t.memberCount}</td>
                   <td className="py-2.5 pr-4 text-center"><Tick on={t.hasCorporate} /></td>
                   <td className="py-2.5 pr-4 text-center">
                     <Tick on={t.dasDone >= t.dasExpected && t.dasExpected > 0} label={`${t.dasDone}/${t.dasExpected}`} />
@@ -338,6 +368,14 @@ export function FacilitatorView({
             ))}
           </div>
         </div>
+
+        <JoinTeamBlock
+          sessionId={sessionId}
+          teams={teams}
+          canPlay={canPlayInTeam}
+          playingTeamId={playingTeamId}
+          joinTeamAction={joinTeamAction}
+        />
       </section>
 
       {/* ── Cartes de crise ──────────────────────────────────────────────── */}
@@ -556,5 +594,94 @@ function Confirm({
         Annuler
       </button>
     </span>
+  );
+}
+
+/**
+ * Entrer dans un groupe pour y jouer.
+ *
+ * Le facilitateur devient un membre de l'équipe comme un autre : ses saisies
+ * comptent. C'est délibéré — animer un atelier depuis la place d'un participant
+ * est la seule façon de voir ce qu'une équipe voit, y compris ce qu'elle ne
+ * trouve pas.
+ *
+ * Discret ou visible : les deux ont leur usage. Visible, il vient prêter
+ * main-forte à une table qui décroche. Discret, il observe un groupe qui se
+ * tient autrement dès que le formateur s'assoit à côté.
+ */
+function JoinTeamBlock({
+  sessionId,
+  teams,
+  canPlay,
+  playingTeamId,
+  joinTeamAction,
+}: {
+  sessionId: string;
+  teams: TeamProgress[];
+  canPlay: boolean;
+  playingTeamId: string | null;
+  joinTeamAction: JoinTeamAction;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [visible, setVisible] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!canPlay) return null;
+
+  const joinable = teams.filter((t) => !t.isLiquidated);
+  if (joinable.length === 0) return null;
+
+  function join(teamId: string) {
+    setError(null);
+    startTransition(async () => {
+      const result = await joinTeamAction({ sessionId, teamId, visible });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.push('/cockpit');
+    });
+  }
+
+  return (
+    <div className="mt-6 border-t border-(--border) pt-5">
+      <h3 className="text-sm font-medium">Entrer dans un groupe comme participant</h3>
+      <p className="mt-1 mb-3 text-xs text-(--foreground-muted)">
+        Vous jouez réellement dans l’équipe : vos saisies comptent pour elle. Un bandeau vous
+        ramène ici à tout moment, et vous ne pouvez être que dans un groupe à la fois.
+      </p>
+
+      <label className="mb-3 flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={visible}
+          onChange={(event) => setVisible(event.target.checked)}
+          disabled={pending}
+        />
+        M’afficher dans la liste des connectés du groupe
+      </label>
+
+      {error ? <p className="mb-3 text-sm text-(--negative)">{error}</p> : null}
+
+      <div className="flex flex-wrap gap-2">
+        {joinable.map((t) => (
+          <button
+            key={t.teamId}
+            type="button"
+            disabled={pending}
+            onClick={() => join(t.teamId)}
+            className="flex items-center gap-2 rounded-lg border border-(--border) px-3 py-1.5 text-sm disabled:opacity-40"
+          >
+            <span
+              aria-hidden
+              className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: t.colorHex }}
+            />
+            {playingTeamId === t.teamId ? `Revenir dans ${t.name}` : `Rejoindre ${t.name}`}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

@@ -1,9 +1,11 @@
 import Link from 'next/link';
 
 import { DasSwitcher } from '@/components/das-scope';
+import { PresenceBar } from '@/components/presence-bar';
 import { getTeamContext, getRoundState } from '@/lib/dal';
 import { formatMadCompact } from '@/lib/format';
 import { loadMoneyBar } from '@/lib/server/money-bar';
+import { loadPresenceContext } from '@/lib/server/presence-context';
 
 /**
  * Barre de navigation d'équipe.
@@ -56,9 +58,10 @@ export async function TeamNav() {
   const team = await getTeamContext();
   if (!team) return null;
 
-  const [round, money] = await Promise.all([
+  const [round, money, presence] = await Promise.all([
     getRoundState(team.sessionId),
     loadMoneyBar(),
+    loadPresenceContext(),
   ]);
   const status = String(round?.status ?? 'draft');
   const currentRound = Number(round?.current_round ?? 0);
@@ -104,6 +107,7 @@ export async function TeamNav() {
           <a href="/api/export?type=resultats_tour" className="hover:underline">
             Mes résultats
           </a>
+          {presence ? <PresenceBar context={presence} /> : null}
           <span className="tabular text-(--foreground-muted)">
             {currentRound === 0 ? 'T0' : `Tour ${currentRound}`}
           </span>

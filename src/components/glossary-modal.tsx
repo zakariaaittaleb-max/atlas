@@ -48,7 +48,7 @@ export function GlossaryModal({ open, onClose }: { open: boolean; onClose: () =>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-xl bg-(--surface) shadow-lg">
         <div className="sticky top-0 bg-(--surface) border-b border-(--border) px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Concepts clés d\'Atlas</h2>
+          <h2 className="text-xl font-semibold">Concepts clés d’Atlas</h2>
           <button
             onClick={onClose}
             className="text-sm text-(--foreground-muted) hover:text-(--foreground) transition"

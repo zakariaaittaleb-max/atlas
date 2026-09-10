@@ -2,6 +2,12 @@
 
 import { useState, useTransition } from 'react';
 
+import {
+  FACILITATOR_CAPABILITIES,
+  type FacilitatorCapability,
+  type FacilitatorCapabilityState,
+} from '@/lib/facilitator-capabilities-types';
+
 type ActionResult = { ok: true } | { ok: false; error: string };
 
 interface Facilitator {
@@ -11,6 +17,7 @@ interface Facilitator {
   lastSignInAt: string | null;
   banned: boolean;
   sessionCount: number;
+  capabilities: FacilitatorCapabilityState;
 }
 
 interface Props {
@@ -20,6 +27,11 @@ interface Props {
   resetPasswordAction: (input: { userId: string; newPassword: string }) => Promise<ActionResult>;
   deleteAction: (input: { userId: string }) => Promise<ActionResult>;
   impersonateAction: (userId: string) => Promise<ActionResult>;
+  setCapabilityAction: (input: {
+    userId: string;
+    capability: FacilitatorCapability;
+    enabled: boolean;
+  }) => Promise<ActionResult>;
 }
 
 function formatDate(iso: string | null): string {
@@ -34,6 +46,7 @@ export function FacilitatorsPanel({
   resetPasswordAction,
   deleteAction,
   impersonateAction,
+  setCapabilityAction,
 }: Props) {
   return (
     <section className="space-y-8">
@@ -48,6 +61,7 @@ export function FacilitatorsPanel({
             resetPasswordAction={resetPasswordAction}
             deleteAction={deleteAction}
             impersonateAction={impersonateAction}
+            setCapabilityAction={setCapabilityAction}
           />
         ))}
       </ul>
@@ -144,13 +158,16 @@ function FacilitatorRow({
   resetPasswordAction,
   deleteAction,
   impersonateAction,
+  setCapabilityAction,
 }: {
   facilitator: Facilitator;
   setBannedAction: Props['setBannedAction'];
   resetPasswordAction: Props['resetPasswordAction'];
   deleteAction: Props['deleteAction'];
   impersonateAction: Props['impersonateAction'];
+  setCapabilityAction: Props['setCapabilityAction'];
 }) {
+  const [capabilities, setCapabilities] = useState(facilitator.capabilities);
   const [banned, setBanned] = useState(facilitator.banned);
   const [deleted, setDeleted] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
@@ -197,6 +214,23 @@ function FacilitatorRow({
       const result = await deleteAction({ userId: facilitator.id });
       if (result.ok) {
         setDeleted(true);
+      } else {
+        setMessage({ kind: 'error', text: result.error });
+      }
+    });
+  }
+
+  function toggleCapability(capability: FacilitatorCapability) {
+    const next = !capabilities[capability];
+    setMessage(null);
+    startTransition(async () => {
+      const result = await setCapabilityAction({
+        userId: facilitator.id,
+        capability,
+        enabled: next,
+      });
+      if (result.ok) {
+        setCapabilities((current) => ({ ...current, [capability]: next }));
       } else {
         setMessage({ kind: 'error', text: result.error });
       }
@@ -265,6 +299,33 @@ function FacilitatorRow({
             Supprimer
           </button>
         </div>
+      </div>
+
+      <div className="mt-4 border-t border-(--border) pt-4">
+        <p className="text-xs font-medium tracking-wide text-(--foreground-muted) uppercase">
+          Droits
+        </p>
+        <ul className="mt-2 space-y-2">
+          {FACILITATOR_CAPABILITIES.map((capability) => (
+            <li key={capability.name}>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={capabilities[capability.name]}
+                  onChange={() => toggleCapability(capability.name)}
+                  disabled={pending}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="font-medium">{capability.label}</span>
+                  <span className="block text-xs text-(--foreground-muted)">
+                    {capability.description}
+                  </span>
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
       </div>
 
       {resetOpen ? (

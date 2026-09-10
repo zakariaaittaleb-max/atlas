@@ -77,7 +77,7 @@ function ParticipantForm() {
     const payload = {
       sessionCode: String(form.get("sessionCode") ?? "").trim(),
       teamCode: String(form.get("teamCode") ?? "").trim(),
-      displayRole: "membre",
+      displayName: String(form.get("displayName") ?? "").trim(),
     };
 
     try {
@@ -133,6 +133,13 @@ function ParticipantForm() {
         uppercase
       />
       <Field name="teamCode" label="Code d'equipe" autoComplete="off" uppercase />
+      <Field
+        name="displayName"
+        label="Votre prenom"
+        hint="Affiche a vos coequipiers pour qu'ils sachent qui travaille avec eux"
+        autoComplete="given-name"
+        maxLength={40}
+      />
 
       {error ? <ErrorBanner>{error}</ErrorBanner> : null}
 
@@ -233,6 +240,7 @@ function Field({
   autoComplete,
   type,
   uppercase,
+  maxLength,
 }: {
   name: string;
   label: string;
@@ -240,6 +248,7 @@ function Field({
   autoComplete?: string;
   type?: string;
   uppercase?: boolean;
+  maxLength?: number;
 }) {
   return (
     <div>
@@ -252,6 +261,7 @@ function Field({
         type={type ?? "text"}
         required
         autoComplete={autoComplete}
+        maxLength={maxLength}
         autoCapitalize={uppercase ? "characters" : "off"}
         spellCheck={false}
         className={

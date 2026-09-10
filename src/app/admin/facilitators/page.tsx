@@ -1,6 +1,10 @@
 import 'server-only';
 
 import { listFacilitatorUsers, isBanned } from '@/lib/admin-users';
+import {
+  DEFAULT_FACILITATOR_CAPABILITIES,
+  readCapabilitiesFor,
+} from '@/lib/facilitator-capabilities';
 import { createAdminClient } from '@/lib/supabase/server';
 
 import {
@@ -9,6 +13,7 @@ import {
   impersonateFacilitatorAction,
   resetFacilitatorPasswordAction,
   setFacilitatorBannedAction,
+  setFacilitatorCapabilityAction,
 } from './actions';
 import { FacilitatorsPanel } from './facilitators-panel';
 
@@ -27,6 +32,8 @@ export default async function FacilitatorsAdminPage() {
     sessionCountByFacilitator.set(id, (sessionCountByFacilitator.get(id) ?? 0) + 1);
   }
 
+  const capabilities = await readCapabilitiesFor(users.map((u) => u.id));
+
   const facilitators = users
     .map((u) => ({
       id: u.id,
@@ -35,6 +42,7 @@ export default async function FacilitatorsAdminPage() {
       lastSignInAt: u.last_sign_in_at ?? null,
       banned: isBanned(u),
       sessionCount: sessionCountByFacilitator.get(u.id) ?? 0,
+      capabilities: capabilities.get(u.id) ?? { ...DEFAULT_FACILITATOR_CAPABILITIES },
     }))
     .sort((a, b) => a.email.localeCompare(b.email));
 
@@ -55,6 +63,7 @@ export default async function FacilitatorsAdminPage() {
         resetPasswordAction={resetFacilitatorPasswordAction}
         deleteAction={deleteFacilitatorAction}
         impersonateAction={impersonateFacilitatorAction}
+        setCapabilityAction={setFacilitatorCapabilityAction}
       />
     </main>
   );

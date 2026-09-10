@@ -21,7 +21,10 @@ import { createAdminClient } from '@/lib/supabase/server';
 const JoinRequest = z.object({
   sessionCode: z.string().trim().min(4).max(32),
   teamCode: z.string().trim().min(4).max(32),
-  displayRole: z.enum(['dg', 'daf', 'dcm', 'dt', 'drh', 'membre']).default('membre'),
+  // Le prénom sert à une seule chose : que chacun voie qui travaille avec lui
+  // dans son groupe. Aucun nom de famille n'est demandé, aucune vérification
+  // n'est faite — c'est une étiquette de table, pas une identité.
+  displayName: z.string().trim().min(1).max(40),
 });
 
 export async function POST(request: Request) {
@@ -39,10 +42,13 @@ export async function POST(request: Request) {
 
   const parsed = JoinRequest.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Codes invalides.' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'Prénom manquant ou codes invalides.' },
+      { status: 400 },
+    );
   }
 
-  const { sessionCode, teamCode, displayRole } = parsed.data;
+  const { sessionCode, teamCode, displayName } = parsed.data;
   const admin = createAdminClient();
 
   const { data: session } = await admin
@@ -83,7 +89,7 @@ export async function POST(request: Request) {
   const { error } = await admin
     .from('team_members')
     .upsert(
-      { team_id: team.id, user_id: user.id, display_role: displayRole },
+      { team_id: team.id, user_id: user.id, display_name: displayName },
       { onConflict: 'team_id,user_id' },
     );
 

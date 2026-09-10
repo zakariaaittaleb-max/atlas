@@ -4,9 +4,18 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import { endImpersonationAction } from "@/app/actions/end-impersonation";
+import {
+  leaveTeamAsFacilitatorAction,
+  setFacilitatorVisibilityAction,
+} from "@/app/actions/facilitator-play";
 import { DasScopeProvider } from "@/components/das-scope";
+import { FacilitatorPlayBanner } from "@/components/facilitator-play-banner";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { TeamNav } from "@/components/team-nav";
+import {
+  FACILITATOR_PLAY_COOKIE,
+  parseFacilitatorPlayCookie,
+} from "@/lib/facilitator-play";
 import { IMPERSONATION_LABEL_COOKIE } from "@/lib/impersonation";
 import { loadDasScope } from "@/lib/server/das-scope";
 import { readSecurityConfig } from "@/lib/security-config";
@@ -33,7 +42,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   // l'onglet actif et le contenu ne peuvent pas diverger.
   const scope = await loadDasScope();
   const securityConfig = await readSecurityConfig();
-  const impersonationLabel = (await cookies()).get(IMPERSONATION_LABEL_COOKIE)?.value ?? null;
+  const jar = await cookies();
+  const impersonationLabel = jar.get(IMPERSONATION_LABEL_COOKIE)?.value ?? null;
+  const facilitatorPlay = parseFacilitatorPlayCookie(jar.get(FACILITATOR_PLAY_COOKIE)?.value);
 
   return (
     <html
@@ -48,6 +59,15 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           <ImpersonationBanner
             adminEmail={impersonationLabel}
             endImpersonationAction={endImpersonationAction}
+          />
+        ) : null}
+        {facilitatorPlay ? (
+          <FacilitatorPlayBanner
+            sessionId={facilitatorPlay.sessionId}
+            teamName={facilitatorPlay.teamName}
+            visible={facilitatorPlay.visible}
+            leaveAction={leaveTeamAsFacilitatorAction}
+            setVisibilityAction={setFacilitatorVisibilityAction}
           />
         ) : null}
         <DasScopeProvider scope={scope}>

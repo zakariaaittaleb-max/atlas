@@ -2,9 +2,12 @@ import 'server-only';
 
 import { notFound } from 'next/navigation';
 
+import { joinTeamAsFacilitatorAction } from '@/app/actions/facilitator-play';
 import { getFacilitatorContext } from '@/lib/dal';
 import { dialsFor, type DifficultyDials } from '@/lib/engine/difficulty';
+import { facilitatorCan } from '@/lib/facilitator-capabilities';
 import { createAdminClient } from '@/lib/supabase/server';
+import { assignTeamColors } from '@/lib/team-colors';
 
 import { FacilitatorView, type TeamProgress } from './facilitator-view';
 
@@ -50,7 +53,7 @@ export default async function FacilitatorPage({
       admin.from('das_decisions').select('team_id, das_id').in('team_id', ids).eq('round_number', roundNumber),
       admin.from('financial_budgets').select('team_id').in('team_id', ids).eq('round_number', roundNumber),
       admin.from('distribution_contracts').select('team_id, das_id').in('team_id', ids).eq('round_number', roundNumber),
-      admin.from('team_members').select('team_id, user_id').in('team_id', ids),
+      admin.from('team_members').select('team_id, user_id, is_facilitator').in('team_id', ids),
       admin.from('pnl_statements').select('team_id, treasury_end_mad').in('team_id', ids).eq('round_number', roundNumber - 1),
       admin.from('team_round_state').select('team_id, treasury_status, ia_score').in('team_id', ids).eq('round_number', roundNumber - 1),
     ]);
@@ -65,17 +68,38 @@ export default async function FacilitatorPage({
   const count = <T extends { team_id: unknown }>(rows: T[] | null, teamId: string) =>
     (rows ?? []).filter((r) => String(r.team_id) === teamId).length;
 
+  // Le code couleurs des groupes est le même partout : ici, sur le projecteur,
+  // et dans la barre de présence d'un participant.
+  const colours = new Map(
+    assignTeamColors(
+      (teams ?? []).map((t) => ({ id: String(t.id), name: String(t.name) })),
+    ).map((t) => [t.id, t.color]),
+  );
+
+  // Où le facilitateur joue-t-il en ce moment, si tant est qu'il joue ?
+  const playingTeamId =
+    (members ?? []).find(
+      (m) => m.is_facilitator && String(m.user_id) === context.userId,
+    )?.team_id ?? null;
+
   const progress: TeamProgress[] = (teams ?? []).map((t) => {
     const teamId = String(t.id);
     const expectedDas = unitsByTeam.get(teamId) ?? 0;
     const state = (states ?? []).find((s) => String(s.team_id) === teamId);
+    const colour = colours.get(teamId);
 
     return {
       teamId,
       name: String(t.name),
       joinCode: String(t.join_code),
       isLiquidated: Boolean(t.is_liquidated),
-      connectedMembers: count(members, teamId),
+      colorHex: colour?.hex ?? 'var(--accent)',
+      colorLabel: colour?.label ?? '',
+      // Les étudiants rattachés, sans compter l'animateur lui-même : le
+      // formateur veut savoir si la table est complète, pas se compter.
+      memberCount: (members ?? []).filter(
+        (m) => String(m.team_id) === teamId && !m.is_facilitator,
+      ).length,
       hasCorporate: count(strategies, teamId) > 0,
       dasDone: count(decisions, teamId),
       dasExpected: expectedDas,
@@ -99,6 +123,9 @@ export default async function FacilitatorPage({
       plannedRounds={Number(session?.planned_rounds ?? 3)}
       maxRounds={Number(session?.max_rounds ?? 10)}
       teams={progress}
+      canPlayInTeam={await facilitatorCan(context.userId, 'join_team_as_player')}
+      playingTeamId={playingTeamId === null ? null : String(playingTeamId)}
+      joinTeamAction={joinTeamAsFacilitatorAction}
       das={(das ?? []).map((d) => {
         const mine = (targets ?? []).filter((t) => String(t.das_id) === String(d.id));
         return {
