@@ -44,6 +44,7 @@ import {
   type CorporateValues, type DasDecisionValues, type DasEntry, type DecisionContext,
 } from '@/lib/decision-types';
 import { deepEqual } from '@/lib/deep-equal';
+import { anyOn, isOn, type EnabledModules } from '@/lib/modules-state';
 import { useAutosave } from '@/lib/use-autosave';
 
 const CORPORATE = [
@@ -79,10 +80,29 @@ const VALUE_LABELS: Record<string, string> = {
   ancrage_territorial: 'Ancrage territorial', fiabilite_service: 'Fiabilité de service',
 };
 
+/**
+ * Fonctions centralisables, chacune avec la clé du module qui l'ouvre : le
+ * facilitateur peut n'ouvrir que les achats, et la ligne n'affiche alors qu'un
+ * seul interrupteur.
+ */
 const FUNCTIONS = [
-  ['centralPurchasing', 'Achats'], ['centralIt', 'Système d’information'],
-  ['centralRd', 'R&D'], ['centralHr', 'Ressources humaines'], ['centralFinance', 'Finance'],
+  ['centralPurchasing', 'Achats', 'strategie.central_purchasing'],
+  ['centralIt', 'Système d’information', 'strategie.central_it'],
+  ['centralRd', 'R&D', 'strategie.central_rd'],
+  ['centralHr', 'Ressources humaines', 'strategie.central_hr'],
+  ['centralFinance', 'Finance', 'strategie.central_finance'],
 ] as const;
+
+const CENTRALISATION_KEYS = FUNCTIONS.map(([, , moduleKey]) => moduleKey);
+
+/** Les cinq postes d'engagement du domaine, réunis dans un même bloc. */
+const INVESTMENT_KEYS = [
+  'das.capex_capacity',
+  'das.capex_automation',
+  'das.capex_own_network',
+  'das.rd_budget',
+  'das.marketing_budget',
+];
 
 /* ══════════════════════════════════════════════════════════════════════════
    NIVEAU 1 — LE GROUPE                                          `/strategie`
@@ -97,8 +117,12 @@ const FUNCTIONS = [
  * affiché dans la barre semblait gouverner l'ensemble.
  */
 export function StrategieGroupeView({
-  context, missing,
-}: { context: DecisionContext; missing: MissingDecision[] }) {
+  context, missing, modules,
+}: {
+  context: DecisionContext;
+  missing: MissingDecision[];
+  modules: EnabledModules;
+}) {
   const router = useRouter();
   const autosave = useAutosave();
   const locked = !context.decisionsOpen;
@@ -132,6 +156,7 @@ export function StrategieGroupeView({
         </header>
 
         <section className="rounded-xl border border-(--border) bg-(--surface) p-6">
+          {isOn(modules, 'strategie.corporate_strategy') ? (
           <fieldset disabled={locked}>
             <legend className="mb-2 text-sm font-medium">Votre logique de portefeuille</legend>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -146,7 +171,9 @@ export function StrategieGroupeView({
               ))}
             </div>
           </fieldset>
+          ) : null}
 
+          {isOn(modules, 'strategie.structure_type') ? (
           <fieldset disabled={locked} className="mt-6">
             <legend className="mb-2 text-sm font-medium">
               Structure organisationnelle
@@ -166,7 +193,9 @@ export function StrategieGroupeView({
               ))}
             </div>
           </fieldset>
+          ) : null}
 
+          {anyOn(modules, CENTRALISATION_KEYS) ? (
           <fieldset disabled={locked} className="mt-6">
             <legend className="mb-1 text-sm font-medium">Fonctions pilotées au siège</legend>
             <p className="mb-3 text-xs text-(--foreground-muted)">
@@ -174,17 +203,21 @@ export function StrategieGroupeView({
               étrangers, cela produit surtout de la coordination.
             </p>
             <div className="flex flex-wrap gap-2">
-              {FUNCTIONS.map(([key, label]) => (
-                <Toggle
-                  key={key}
-                  label={label}
-                  on={corporate[key] as boolean}
-                  onToggle={() => pushCorporate({ ...corporate, [key]: !corporate[key] })}
-                />
-              ))}
+              {FUNCTIONS.filter(([, , moduleKey]) => isOn(modules, moduleKey)).map(
+                ([key, label]) => (
+                  <Toggle
+                    key={key}
+                    label={label}
+                    on={corporate[key] as boolean}
+                    onToggle={() => pushCorporate({ ...corporate, [key]: !corporate[key] })}
+                  />
+                ),
+              )}
             </div>
           </fieldset>
+          ) : null}
 
+          {anyOn(modules, ['strategie.shared_production', 'strategie.shared_rd']) ? (
           <fieldset disabled={locked} className="mt-6">
             <legend className="mb-1 text-sm font-medium">Mutualisation effective</legend>
             <p className="mb-3 text-xs text-(--foreground-muted)">
@@ -192,13 +225,19 @@ export function StrategieGroupeView({
               métiers achètent les mêmes choses. Seul le partage réel compte.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Toggle label="Production partagée" on={corporate.sharedProduction}
-                onToggle={() => pushCorporate({ ...corporate, sharedProduction: !corporate.sharedProduction })} />
-              <Toggle label="R&D mutualisée" on={corporate.sharedRd}
-                onToggle={() => pushCorporate({ ...corporate, sharedRd: !corporate.sharedRd })} />
+              {isOn(modules, 'strategie.shared_production') ? (
+                <Toggle label="Production partagée" on={corporate.sharedProduction}
+                  onToggle={() => pushCorporate({ ...corporate, sharedProduction: !corporate.sharedProduction })} />
+              ) : null}
+              {isOn(modules, 'strategie.shared_rd') ? (
+                <Toggle label="R&D mutualisée" on={corporate.sharedRd}
+                  onToggle={() => pushCorporate({ ...corporate, sharedRd: !corporate.sharedRd })} />
+              ) : null}
             </div>
           </fieldset>
+          ) : null}
 
+          {anyOn(modules, ['strategie.value1', 'strategie.value2']) ? (
           <fieldset disabled={locked} className="mt-6">
             <legend className="mb-1 text-sm font-medium">Vos deux valeurs communiquées</legend>
             <p className="mb-3 text-xs text-(--foreground-muted)">
@@ -206,19 +245,25 @@ export function StrategieGroupeView({
               jouant le prix bas est une contradiction que le moteur relève.
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
-              <ValueSelect
-                label="Première valeur" value={corporate.value1}
-                exclude={corporate.value2}
-                onChange={(v) => pushCorporate({ ...corporate, value1: v })}
-              />
-              <ValueSelect
-                label="Seconde valeur" value={corporate.value2}
-                exclude={corporate.value1}
-                onChange={(v) => pushCorporate({ ...corporate, value2: v })}
-              />
+              {isOn(modules, 'strategie.value1') ? (
+                <ValueSelect
+                  label="Première valeur" value={corporate.value1}
+                  exclude={corporate.value2}
+                  onChange={(v) => pushCorporate({ ...corporate, value1: v })}
+                />
+              ) : null}
+              {isOn(modules, 'strategie.value2') ? (
+                <ValueSelect
+                  label="Seconde valeur" value={corporate.value2}
+                  exclude={corporate.value1}
+                  onChange={(v) => pushCorporate({ ...corporate, value2: v })}
+                />
+              ) : null}
             </div>
           </fieldset>
+          ) : null}
 
+          {anyOn(modules, ['strategie.vision', 'strategie.mission']) ? (
           <fieldset disabled={locked} className="mt-6">
             <legend className="mb-1 text-sm font-medium">Vision et mission du Groupe</legend>
             <p className="mb-3 text-xs text-(--foreground-muted)">
@@ -228,28 +273,33 @@ export function StrategieGroupeView({
               déclinaison en axes, elle, qui pèse sur votre alignement.
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block">
-                <span className="text-sm">Vision du Groupe</span>
-                <textarea
-                  rows={3} maxLength={600}
-                  defaultValue={corporate.vision ?? ''}
-                  placeholder="Ce que le Groupe veut devenir d’ici cinq ans."
-                  onBlur={(e) => pushCorporate({ ...corporate, vision: e.target.value || null })}
-                  className="mt-2 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm">Mission du Groupe</span>
-                <textarea
-                  rows={3} maxLength={600}
-                  defaultValue={corporate.mission ?? ''}
-                  placeholder="Ce qu’il apporte, à qui, et en quoi c’est différent."
-                  onBlur={(e) => pushCorporate({ ...corporate, mission: e.target.value || null })}
-                  className="mt-2 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
-                />
-              </label>
+              {isOn(modules, 'strategie.vision') ? (
+                <label className="block">
+                  <span className="text-sm">Vision du Groupe</span>
+                  <textarea
+                    rows={3} maxLength={600}
+                    defaultValue={corporate.vision ?? ''}
+                    placeholder="Ce que le Groupe veut devenir d’ici cinq ans."
+                    onBlur={(e) => pushCorporate({ ...corporate, vision: e.target.value || null })}
+                    className="mt-2 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
+                  />
+                </label>
+              ) : null}
+              {isOn(modules, 'strategie.mission') ? (
+                <label className="block">
+                  <span className="text-sm">Mission du Groupe</span>
+                  <textarea
+                    rows={3} maxLength={600}
+                    defaultValue={corporate.mission ?? ''}
+                    placeholder="Ce qu’il apporte, à qui, et en quoi c’est différent."
+                    onBlur={(e) => pushCorporate({ ...corporate, mission: e.target.value || null })}
+                    className="mt-2 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
+                  />
+                </label>
+              ) : null}
             </div>
           </fieldset>
+          ) : null}
 
           <SectionActions
             what="la stratégie du Groupe"
@@ -289,8 +339,12 @@ export function StrategieGroupeView({
  * retenu ici doit être encore celui des achats et de l'organisation.
  */
 export function StrategieDasView({
-  context, missing,
-}: { context: DecisionContext; missing: MissingDecision[] }) {
+  context, missing, modules,
+}: {
+  context: DecisionContext;
+  missing: MissingDecision[];
+  modules: EnabledModules;
+}) {
   const router = useRouter();
   const autosave = useAutosave();
   const { activeDasId } = useDasScope();
@@ -424,34 +478,45 @@ export function StrategieDasView({
               </div>
             </fieldset>
 
+            {anyOn(modules, INVESTMENT_KEYS) ? (
             <fieldset disabled={locked} className="mt-6">
               <legend className="mb-3 text-sm font-medium">Investissements du tour (millions DH)</legend>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <Money label="Investir dans l’outil de production" value={d.capexCapacityMad}
-                  hint="Disponible au tour SUIVANT : il faut anticiper la demande."
-                  previous={b.capexCapacityMad}
-                  shareOf={context.treasuryMad} shareLabel="de la trésorerie"
-                  onChange={(v) => pushDas(das.dasId, { ...d, capexCapacityMad: v })} />
-                <Money label="Investir dans l’automatisation" value={d.capexAutomationMad}
-                  hint="Baisse le coût variable, augmente les coûts fixes."
-                  previous={b.capexAutomationMad}
-                  shareOf={context.treasuryMad} shareLabel="de la trésorerie"
-                  onChange={(v) => pushDas(das.dasId, { ...d, capexAutomationMad: v })} />
-                <Money label="Investir dans votre réseau de vente" value={d.capexOwnNetworkMad}
-                  hint="Supprime la marge distributeur. Lent à construire."
-                  previous={b.capexOwnNetworkMad}
-                  shareOf={context.treasuryMad} shareLabel="de la trésorerie"
-                  onChange={(v) => pushDas(das.dasId, { ...d, capexOwnNetworkMad: v })} />
-                <Money label="Recherche & développement" value={d.rdBudgetMad}
-                  hint="Effet DIFFÉRÉ d’un tour sur la qualité."
-                  previous={b.rdBudgetMad}
-                  shareOf={context.treasuryMad} shareLabel="de la trésorerie"
-                  onChange={(v) => pushDas(das.dasId, { ...d, rdBudgetMad: v })} />
-                <Money label="Marketing" value={d.marketingBudgetMad}
-                  hint="Effet immédiat sur la notoriété, à rendement décroissant."
-                  previous={b.marketingBudgetMad}
-                  shareOf={context.treasuryMad} shareLabel="de la trésorerie"
-                  onChange={(v) => pushDas(das.dasId, { ...d, marketingBudgetMad: v })} />
+                {isOn(modules, 'das.capex_capacity') ? (
+                  <Money label="Investir dans l’outil de production" value={d.capexCapacityMad}
+                    hint="Disponible au tour SUIVANT : il faut anticiper la demande."
+                    previous={b.capexCapacityMad}
+                    shareOf={context.treasuryMad} shareLabel="de la trésorerie"
+                    onChange={(v) => pushDas(das.dasId, { ...d, capexCapacityMad: v })} />
+                ) : null}
+                {isOn(modules, 'das.capex_automation') ? (
+                  <Money label="Investir dans l’automatisation" value={d.capexAutomationMad}
+                    hint="Baisse le coût variable, augmente les coûts fixes."
+                    previous={b.capexAutomationMad}
+                    shareOf={context.treasuryMad} shareLabel="de la trésorerie"
+                    onChange={(v) => pushDas(das.dasId, { ...d, capexAutomationMad: v })} />
+                ) : null}
+                {isOn(modules, 'das.capex_own_network') ? (
+                  <Money label="Investir dans votre réseau de vente" value={d.capexOwnNetworkMad}
+                    hint="Supprime la marge distributeur. Lent à construire."
+                    previous={b.capexOwnNetworkMad}
+                    shareOf={context.treasuryMad} shareLabel="de la trésorerie"
+                    onChange={(v) => pushDas(das.dasId, { ...d, capexOwnNetworkMad: v })} />
+                ) : null}
+                {isOn(modules, 'das.rd_budget') ? (
+                  <Money label="Recherche & développement" value={d.rdBudgetMad}
+                    hint="Effet DIFFÉRÉ d’un tour sur la qualité."
+                    previous={b.rdBudgetMad}
+                    shareOf={context.treasuryMad} shareLabel="de la trésorerie"
+                    onChange={(v) => pushDas(das.dasId, { ...d, rdBudgetMad: v })} />
+                ) : null}
+                {isOn(modules, 'das.marketing_budget') ? (
+                  <Money label="Marketing" value={d.marketingBudgetMad}
+                    hint="Effet immédiat sur la notoriété, à rendement décroissant."
+                    previous={b.marketingBudgetMad}
+                    shareOf={context.treasuryMad} shareLabel="de la trésorerie"
+                    onChange={(v) => pushDas(das.dasId, { ...d, marketingBudgetMad: v })} />
+                ) : null}
               </div>
               <p className="tabular mt-3 text-sm text-(--foreground-muted)">
                 Total engagé sur ce domaine : <strong>{formatMadCompact(engagedOn(d))}</strong>
@@ -464,7 +529,9 @@ export function StrategieDasView({
                 ) : null}
               </p>
             </fieldset>
+            ) : null}
 
+            {isOn(modules, 'das.declare_blue_ocean') ? (
             <fieldset disabled={locked} className="mt-6 border-t border-(--border) pt-5">
               <Toggle
                 label="Déclarer un océan bleu sur ce domaine"
@@ -476,6 +543,7 @@ export function StrategieDasView({
                 multipliée par 2,5 — en cas de succès. L’entrée coûte cher et peut échouer.
               </p>
             </fieldset>
+            ) : null}
 
             <SectionActions
               what={`la stratégie de ${das.name}`}

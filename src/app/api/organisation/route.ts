@@ -19,6 +19,13 @@ import { z } from 'zod';
 
 import { decisionsAreOpen, getRoundState, getTeamContext } from '@/lib/dal';
 import { refreshHrRollup } from '@/lib/server/hr-rollup';
+import {
+  ModuleClosedError,
+  enforceDirectives,
+  enforceHr,
+  requireOpen,
+} from '@/lib/server/module-enforcement';
+import { loadEnabledModules } from '@/lib/server/modules';
 import { createAdminClient } from '@/lib/supabase/server';
 
 const Payload = z.discriminatedUnion('block', [
@@ -144,7 +151,34 @@ export async function POST(request: Request) {
 
   const roundNumber = (round?.current_round as number) ?? 0;
   const admin = createAdminClient();
-  const body = parsed.data;
+
+  // Masquer un bloc dans l'interface ne le protège pas : cette route est
+  // joignable par POST direct. Les blocs entièrement fermés sont refusés, les
+  // champs fermés d'un bloc ouvert reviennent à leur valeur du tour précédent.
+  const modules = await loadEnabledModules(team.sessionId);
+  let body = parsed.data;
+  try {
+    if (body.block === 'axes') requireOpen(modules, 'org.axes', 'Axes stratégiques');
+    if (body.block === 'design') requireOpen(modules, 'org.delegation', 'Délégation');
+    if (body.block === 'positions') requireOpen(modules, 'org.positions', 'Organigramme');
+    if (body.block === 'kpis') requireOpen(modules, 'org.kpis', 'Indicateurs de pilotage');
+    if (body.block === 'budgets') requireOpen(modules, 'org.budgets', 'Répartition des moyens');
+    if (body.block === 'mutualisation') {
+      requireOpen(modules, 'org.shared_resources', 'Ressources mutualisées');
+    }
+    if (body.block === 'hr') {
+      body = await enforceHr(admin, team.teamId, body.dasId, roundNumber, body, modules);
+    }
+    if (body.block === 'directives') {
+      body = await enforceDirectives(admin, team.teamId, body.dasId, roundNumber, body, modules);
+    }
+  } catch (error) {
+    if (error instanceof ModuleClosedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    throw error;
+  }
+
   const scope = { team_id: team.teamId, das_id: body.dasId, round_number: roundNumber };
 
   try {

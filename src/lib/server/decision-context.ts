@@ -22,6 +22,7 @@ import 'server-only';
  */
 
 import { decisionsAreOpen, getRoundState, requireTeam } from '@/lib/dal';
+import { isOn, screenIsOpen, type EnabledModules } from '@/lib/modules-state';
 import {
   CORPORATE_DEFAULTS, FINANCE_DEFAULTS, dasDecisionDefaults,
   type ActorEntry, type CorporateValues, type DasDecisionValues, type DasEntry,
@@ -370,28 +371,36 @@ function linesOf<T>(
  * concerné, faute de quoi « distribution manquante » sur un portefeuille de
  * trois domaines ne dit pas lequel ouvrir.
  */
-export function missingDecisions(context: DecisionContext) {
+/**
+ * Ce qu'il reste à saisir.
+ *
+ * `modules` n'est pas optionnel par confort : une décision fermée par le
+ * facilitateur ne doit JAMAIS figurer ici. La barre de validation resterait
+ * grisée en réclamant un écran que l'équipe ne peut plus ouvrir, et le tour ne
+ * pourrait pas être déclaré prêt.
+ */
+export function missingDecisions(context: DecisionContext, modules: EnabledModules) {
   const missing: { label: string; href: string; dasId: string | null }[] = [];
 
-  if (!context.corporateRecorded) {
+  if (!context.corporateRecorded && screenIsOpen(modules, 'strategie')) {
     missing.push({ label: 'stratégie du Groupe', href: '/strategie', dasId: null });
   }
   for (const das of context.das) {
     if (!das.progress.strategy) {
       missing.push({ label: `stratégie ${das.name}`, href: '/strategie/das', dasId: das.dasId });
     }
-    if (!das.progress.distribution) {
+    if (!das.progress.distribution && isOn(modules, 'marches.distribution')) {
       // Sans distributeur, la couverture est nulle et l'équipe ne vend RIEN.
       missing.push({ label: `distribution ${das.name}`, href: '/marches', dasId: das.dasId });
     }
-    if (!das.progress.procurement) {
+    if (!das.progress.procurement && isOn(modules, 'marches.procurement')) {
       missing.push({ label: `achats ${das.name}`, href: '/marches', dasId: das.dasId });
     }
     if (!das.progress.hr) {
       missing.push({ label: `RH ${das.name}`, href: '/organisation', dasId: das.dasId });
     }
   }
-  if (!context.financeRecorded) {
+  if (!context.financeRecorded && screenIsOpen(modules, 'finance')) {
     missing.push({ label: 'budget du Groupe', href: '/finance', dasId: null });
   }
 

@@ -1,9 +1,12 @@
+import { Fragment } from 'react';
 import Link from 'next/link';
 
 import { DasSwitcher } from '@/components/das-scope';
 import { PresenceBar } from '@/components/presence-bar';
 import { getTeamContext, getRoundState } from '@/lib/dal';
 import { formatMadCompact } from '@/lib/format';
+import { openScreenHrefs } from '@/lib/modules-state';
+import { loadEnabledModules } from '@/lib/server/modules';
 import { loadMoneyBar } from '@/lib/server/money-bar';
 import { loadPresenceContext } from '@/lib/server/presence-context';
 
@@ -58,11 +61,19 @@ export async function TeamNav() {
   const team = await getTeamContext();
   if (!team) return null;
 
-  const [round, money, presence] = await Promise.all([
+  const [round, money, presence, modules] = await Promise.all([
     getRoundState(team.sessionId),
     loadMoneyBar(),
     loadPresenceContext(),
+    loadEnabledModules(team.sessionId),
   ]);
+
+  // Un écran dont plus aucun champ n'est ouvert n'a rien à montrer : garder son
+  // onglet ferait croire à une panne à qui l'ouvrirait. Le Cockpit et la
+  // Révélation ne sont pas des écrans de saisie et restent toujours là.
+  const openScreens = openScreenHrefs(modules);
+  const visible = (href: string) =>
+    href === '/cockpit' || href === '/revelation' || openScreens.has(href);
   const status = String(round?.status ?? 'draft');
   const currentRound = Number(round?.current_round ?? 0);
   const open = status === 'round_active' || status === 'onboarding';
@@ -73,29 +84,26 @@ export async function TeamNav() {
         <span className="font-semibold tracking-tight">Atlas</span>
 
         <ul className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-          {GROUP_LINKS.map((link) => (
-            <li key={link.href}>
-              <Link href={link.href} className="hover:underline">
-                {link.label}
-              </Link>
-            </li>
-          ))}
-          <li aria-hidden className="text-(--foreground-muted)">|</li>
-          {DAS_LINKS.map((link) => (
-            <li key={link.href}>
-              <Link href={link.href} className="hover:underline">
-                {link.label}
-              </Link>
-            </li>
-          ))}
-          <li aria-hidden className="text-(--foreground-muted)">|</li>
-          {SHARED_LINKS.map((link) => (
-            <li key={link.href}>
-              <Link href={link.href} className="hover:underline">
-                {link.label}
-              </Link>
-            </li>
-          ))}
+          {[GROUP_LINKS, DAS_LINKS, SHARED_LINKS]
+            .map((group) => group.filter((link) => visible(link.href)))
+            .filter((group) => group.length > 0)
+            .map((group, index) => (
+              <Fragment key={group[0].href}>
+                {/* Le séparateur appartient au groupe qui SUIT : le poser après
+                    chaque groupe laisserait une barre orpheline en fin de ligne
+                    dès qu'un groupe est entièrement fermé. */}
+                {index > 0 ? (
+                  <li aria-hidden className="text-(--foreground-muted)">|</li>
+                ) : null}
+                {group.map((link) => (
+                  <li key={link.href}>
+                    <Link href={link.href} className="hover:underline">
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </Fragment>
+            ))}
         </ul>
 
         <div className="ml-auto flex items-center gap-4 text-sm">

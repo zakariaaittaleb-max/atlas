@@ -1,4 +1,5 @@
 import { loadDecisionContext, missingDecisions } from '@/lib/server/decision-context';
+import { loadEnabledModules } from '@/lib/server/modules';
 
 import { StrategieDasView } from '../strategie-view';
 
@@ -7,5 +8,12 @@ export const dynamic = 'force-dynamic';
 
 export default async function StrategieDasPage() {
   const context = await loadDecisionContext();
-  return <StrategieDasView context={context} missing={missingDecisions(context)} />;
+  const modules = await loadEnabledModules(context.team.sessionId);
+  return (
+    <StrategieDasView
+      context={context}
+      missing={missingDecisions(context, modules)}
+      modules={modules}
+    />
+  );
 }

@@ -2,11 +2,13 @@
 
 import { useState, useTransition } from 'react';
 
+import { ModulesPicker } from '@/components/modules-picker';
 import {
   FACILITATOR_CAPABILITIES,
   type FacilitatorCapability,
   type FacilitatorCapabilityState,
 } from '@/lib/facilitator-capabilities-types';
+import type { EnabledModules } from '@/lib/modules-state';
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -18,6 +20,8 @@ interface Facilitator {
   banned: boolean;
   sessionCount: number;
   capabilities: FacilitatorCapabilityState;
+  /** Plafond de modules : ce que ce facilitateur a le droit d'ouvrir. */
+  modules: EnabledModules;
 }
 
 interface Props {
@@ -31,6 +35,10 @@ interface Props {
     userId: string;
     capability: FacilitatorCapability;
     enabled: boolean;
+  }) => Promise<ActionResult>;
+  setModulesAction: (input: {
+    userId: string;
+    fields: Record<string, boolean>;
   }) => Promise<ActionResult>;
 }
 
@@ -47,6 +55,7 @@ export function FacilitatorsPanel({
   deleteAction,
   impersonateAction,
   setCapabilityAction,
+  setModulesAction,
 }: Props) {
   return (
     <section className="space-y-8">
@@ -62,6 +71,7 @@ export function FacilitatorsPanel({
             deleteAction={deleteAction}
             impersonateAction={impersonateAction}
             setCapabilityAction={setCapabilityAction}
+            setModulesAction={setModulesAction}
           />
         ))}
       </ul>
@@ -159,6 +169,7 @@ function FacilitatorRow({
   deleteAction,
   impersonateAction,
   setCapabilityAction,
+  setModulesAction,
 }: {
   facilitator: Facilitator;
   setBannedAction: Props['setBannedAction'];
@@ -166,8 +177,11 @@ function FacilitatorRow({
   deleteAction: Props['deleteAction'];
   impersonateAction: Props['impersonateAction'];
   setCapabilityAction: Props['setCapabilityAction'];
+  setModulesAction: Props['setModulesAction'];
 }) {
   const [capabilities, setCapabilities] = useState(facilitator.capabilities);
+  const [modules, setModules] = useState(facilitator.modules);
+  const [modulesDirty, setModulesDirty] = useState(false);
   const [banned, setBanned] = useState(facilitator.banned);
   const [deleted, setDeleted] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
@@ -231,6 +245,19 @@ function FacilitatorRow({
       });
       if (result.ok) {
         setCapabilities((current) => ({ ...current, [capability]: next }));
+      } else {
+        setMessage({ kind: 'error', text: result.error });
+      }
+    });
+  }
+
+  function saveModules() {
+    setMessage(null);
+    startTransition(async () => {
+      const result = await setModulesAction({ userId: facilitator.id, fields: modules });
+      if (result.ok) {
+        setModulesDirty(false);
+        setMessage({ kind: 'success', text: 'Plafond de modules enregistré.' });
       } else {
         setMessage({ kind: 'error', text: result.error });
       }
@@ -327,6 +354,33 @@ function FacilitatorRow({
           ))}
         </ul>
       </div>
+
+      <details className="mt-4 border-t border-(--border) pt-4">
+        <summary className="cursor-pointer text-xs font-medium tracking-wide text-(--foreground-muted) uppercase">
+          Modules autorisés
+        </summary>
+        <p className="mt-2 mb-3 text-xs text-(--foreground-muted)">
+          Le plafond de ce facilitateur. Il choisira ensuite, session par session, ce qu’il
+          ouvre là-dedans — il ne pourra jamais ouvrir ce que vous fermez ici.
+        </p>
+        <ModulesPicker
+          value={modules}
+          ceiling={null}
+          disabled={pending}
+          onChange={(next) => {
+            setModules(next);
+            setModulesDirty(true);
+          }}
+        />
+        <button
+          type="button"
+          disabled={pending || !modulesDirty}
+          onClick={saveModules}
+          className="mt-3 rounded-lg bg-(--accent) px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+        >
+          {pending ? 'Enregistrement…' : 'Enregistrer le plafond'}
+        </button>
+      </details>
 
       {resetOpen ? (
         <form onSubmit={submitReset} className="mt-4 flex flex-wrap items-end gap-3">

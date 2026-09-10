@@ -10,6 +10,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { decisionsAreOpen, getRoundState, getTeamContext } from '@/lib/dal';
+import { isOn } from '@/lib/modules-state';
+import { loadEnabledModules } from '@/lib/server/modules';
 import { engineParamsFrom } from '@/lib/server/divest';
 import { createAdminClient } from '@/lib/supabase/server';
 
@@ -52,6 +54,14 @@ export async function POST(request: Request) {
 
   const roundNumber = (round?.current_round as number) ?? 0;
   const admin = createAdminClient();
+
+  const modules = await loadEnabledModules(team.sessionId);
+  if (!isOn(modules, 'warroom.events')) {
+    return NextResponse.json(
+      { error: 'La War Room n’est pas ouverte sur cette session.' },
+      { status: 403 },
+    );
+  }
 
   // Le choc doit appartenir à la session de l'équipe et être déjà survenu.
   const { data: shock } = await admin

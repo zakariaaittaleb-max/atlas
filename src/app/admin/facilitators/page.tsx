@@ -5,6 +5,7 @@ import {
   DEFAULT_FACILITATOR_CAPABILITIES,
   readCapabilitiesFor,
 } from '@/lib/facilitator-capabilities';
+import { loadCeilingsFor } from '@/lib/server/modules';
 import { createAdminClient } from '@/lib/supabase/server';
 
 import {
@@ -14,6 +15,7 @@ import {
   resetFacilitatorPasswordAction,
   setFacilitatorBannedAction,
   setFacilitatorCapabilityAction,
+  setFacilitatorModulesAction,
 } from './actions';
 import { FacilitatorsPanel } from './facilitators-panel';
 
@@ -32,7 +34,11 @@ export default async function FacilitatorsAdminPage() {
     sessionCountByFacilitator.set(id, (sessionCountByFacilitator.get(id) ?? 0) + 1);
   }
 
-  const capabilities = await readCapabilitiesFor(users.map((u) => u.id));
+  const ids = users.map((u) => u.id);
+  const [capabilities, ceilings] = await Promise.all([
+    readCapabilitiesFor(ids),
+    loadCeilingsFor(ids),
+  ]);
 
   const facilitators = users
     .map((u) => ({
@@ -43,6 +49,7 @@ export default async function FacilitatorsAdminPage() {
       banned: isBanned(u),
       sessionCount: sessionCountByFacilitator.get(u.id) ?? 0,
       capabilities: capabilities.get(u.id) ?? { ...DEFAULT_FACILITATOR_CAPABILITIES },
+      modules: ceilings.get(u.id) ?? {},
     }))
     .sort((a, b) => a.email.localeCompare(b.email));
 
@@ -64,6 +71,7 @@ export default async function FacilitatorsAdminPage() {
         deleteAction={deleteFacilitatorAction}
         impersonateAction={impersonateFacilitatorAction}
         setCapabilityAction={setFacilitatorCapabilityAction}
+        setModulesAction={setFacilitatorModulesAction}
       />
     </main>
   );

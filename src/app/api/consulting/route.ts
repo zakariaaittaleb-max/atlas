@@ -22,6 +22,8 @@ import {
   type StudyTier,
 } from '@/lib/engine/consulting';
 import { decisionsAreOpen, getRoundState, getTeamContext } from '@/lib/dal';
+import { isOn } from '@/lib/modules-state';
+import { loadEnabledModules } from '@/lib/server/modules';
 import { fulfilStudy } from '@/lib/server/consulting-fulfil';
 import { engineParamsFrom } from '@/lib/server/divest';
 import { createAdminClient } from '@/lib/supabase/server';
@@ -52,6 +54,16 @@ export async function POST(request: Request) {
 
   const roundNumber = (round?.current_round as number) ?? 0;
   const { studyKey, tier } = parsed.data;
+
+  // Le catalogue est réglé par le facilitateur. Une étude qu'il a retirée ne
+  // doit pas être commandable en devinant sa clé.
+  const modules = await loadEnabledModules(team.sessionId);
+  if (!isOn(modules, `cabinet.${studyKey}`)) {
+    return NextResponse.json(
+      { error: 'Cette étude n’est pas au catalogue de cette session.' },
+      { status: 403 },
+    );
+  }
   const dasId = parsed.data.dasId ?? null;
   const targetActorId = parsed.data.targetActorId ?? null;
 

@@ -1,4 +1,5 @@
 import { decisionsAreOpen, getRoundState, requireTeam } from '@/lib/dal';
+import { loadEnabledModules } from '@/lib/server/modules';
 import { createServerClient } from '@/lib/supabase/server';
 
 import {
@@ -13,6 +14,7 @@ export default async function CessionPage() {
   const round = await getRoundState(team.sessionId);
   const roundNumber = (round?.current_round as number) ?? 0;
   const open = decisionsAreOpen(round?.status as string);
+  const modules = await loadEnabledModules(team.sessionId);
 
   const supabase = await createServerClient();
 
@@ -109,6 +111,7 @@ export default async function CessionPage() {
           offerMad: Number(o.offer_mad),
           integrationBudgetMad: Number(o.integration_budget_mad),
         }))}
+      modules={modules}
       integrationTargets={(links ?? []).map((l): IntegrationTarget => ({
         targetActorId: String(l.target_actor_id),
         targetName: String(l.target_name),

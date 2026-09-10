@@ -18,6 +18,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { NumberInput } from '@/components/decision-shell';
+import { isOn, type EnabledModules } from '@/lib/modules-state';
 import { formatMadCompact, formatPct, formatUnits } from '@/lib/format';
 
 export interface SellableDas {
@@ -92,9 +93,10 @@ interface MyBid {
 
 export function CessionView({
   roundNumber, decisionsOpen, sellable, ownListings, market, myBids, targets, myOffers,
-  integrationTargets,
+  integrationTargets, modules,
 }: {
   roundNumber: number;
+  modules: EnabledModules;
   decisionsOpen: boolean;
   sellable: SellableDas[];
   ownListings: OwnListing[];
@@ -162,6 +164,7 @@ export function CessionView({
       ) : null}
 
       {/* ── Vendre ────────────────────────────────────────────────────────── */}
+      {isOn(modules, 'cession.sell') ? (
       <section className="mb-10">
         <h2 className="mb-4 text-xl font-medium">Vos DAS</h2>
 
@@ -196,8 +199,10 @@ export function CessionView({
           </ul>
         )}
       </section>
+      ) : null}
 
       {/* ── Acquérir pour ENTRER dans un nouveau domaine ─────────────────── */}
+      {isOn(modules, 'cession.acquire') ? (
       <section className="mb-10">
         <h2 className="mb-2 text-xl font-medium">Entrer dans un nouveau domaine</h2>
         <p className="mb-4 max-w-3xl text-sm text-(--foreground-muted)">
@@ -231,8 +236,10 @@ export function CessionView({
           </ul>
         )}
       </section>
+      ) : null}
 
       {/* ── Intégrer un maillon de sa PROPRE filière ─────────────────────── */}
+      {isOn(modules, 'cession.integration') ? (
       <section className="mb-10">
         <h2 className="mb-2 text-xl font-medium">Intégrer votre filière</h2>
         <p className="mb-4 max-w-3xl text-sm text-(--foreground-muted)">
@@ -275,8 +282,10 @@ export function CessionView({
           </ul>
         )}
       </section>
+      ) : null}
 
       {/* ── Acheter un DAS mis en vente par une concurrente ──────────────── */}
+      {isOn(modules, 'cession.bid') ? (
       <section>
         <h2 className="mb-2 text-xl font-medium">DAS en vente dans votre pool</h2>
         <p className="mb-4 max-w-3xl text-sm text-(--foreground-muted)">
@@ -303,6 +312,7 @@ export function CessionView({
           </ul>
         )}
       </section>
+      ) : null}
     </main>
   );
 }

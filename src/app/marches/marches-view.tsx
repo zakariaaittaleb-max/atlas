@@ -32,13 +32,18 @@ import type {
   DecisionContext, DistributionLine, ProcurementLine,
 } from '@/lib/decision-types';
 import { deepEqual } from '@/lib/deep-equal';
+import { isOn, type EnabledModules } from '@/lib/modules-state';
 import { useAutosave } from '@/lib/use-autosave';
 
 import { checklistOf } from '../strategie/strategie-view';
 
 export function MarchesView({
-  context, missing,
-}: { context: DecisionContext; missing: MissingDecision[] }) {
+  context, missing, modules,
+}: {
+  context: DecisionContext;
+  missing: MissingDecision[];
+  modules: EnabledModules;
+}) {
   const router = useRouter();
   const autosave = useAutosave();
   const { activeDasId } = useDasScope();
@@ -127,6 +132,7 @@ export function MarchesView({
           </div>
 
           {/* ── Amont ───────────────────────────────────────────────────── */}
+          {isOn(modules, 'marches.procurement') ? (
           <fieldset disabled={locked} className="mt-6">
             <legend className="mb-1 text-sm font-medium">Fournisseurs</legend>
             <p className="mb-3 text-xs text-(--foreground-muted)">
@@ -228,8 +234,10 @@ export function MarchesView({
               onReset={() => pushProcurement(das.dasId, das.baseline.procurement)}
             />
           </fieldset>
+          ) : null}
 
           {/* ── Aval ────────────────────────────────────────────────────── */}
+          {isOn(modules, 'marches.distribution') ? (
           <fieldset disabled={locked} className="mt-8 border-t border-(--border) pt-6">
             <legend className="mb-1 text-sm font-medium">Distributeurs</legend>
             <p className="mb-3 text-xs text-(--foreground-muted)">
@@ -333,6 +341,7 @@ export function MarchesView({
               onReset={() => pushDistribution(das.dasId, das.baseline.distribution)}
             />
           </fieldset>
+          ) : null}
         </section>
       </main>
 

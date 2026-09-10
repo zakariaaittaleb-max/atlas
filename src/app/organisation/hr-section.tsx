@@ -19,6 +19,7 @@
 
 import { HeadcountStepper, NumberInput } from '@/components/decision-shell';
 import { Term } from '@/components/term';
+import { anyOn, isOn, type EnabledModules } from '@/lib/modules-state';
 import { formatMadCompact } from '@/lib/format';
 import type { DasHr, DasHrState } from '@/lib/org-types';
 
@@ -37,12 +38,13 @@ const RESTRUCTURING = [
 ] as const;
 
 export function HrSection({
-  hr, state, locked, onChange,
+  hr, state, locked, onChange, modules,
 }: {
   hr: DasHr;
   state: DasHrState | null;
   locked: boolean;
   onChange: (hr: DasHr) => void;
+  modules: EnabledModules;
 }) {
   const patch = (values: Partial<DasHr>) => onChange({ ...hr, ...values });
 
@@ -159,6 +161,7 @@ export function HrSection({
             hint="Les flèches vont de dix en dix ; le champ accepte n’importe quelle valeur."
           />
 
+          {isOn(modules, 'org.restructuring') ? (
           <div className="self-end">
             <label className="block">
               <span className="text-sm font-medium">Nature de la restructuration</span>
@@ -173,6 +176,7 @@ export function HrSection({
               </select>
             </label>
           </div>
+          ) : null}
         </div>
       </fieldset>
 
@@ -195,14 +199,16 @@ export function HrSection({
               onChange={(v) => patch({ hireCadres: v })} />
           </div>
 
-          <div className="mt-3">
-            <Count
-              label="Venus d’un autre domaine du groupe"
-              value={hr.internalTransfersIn}
-              onChange={(v) => patch({ internalTransfersIn: v })}
-              hint="Ils connaissent déjà la maison : contrairement à un recrutement externe, ils ne diluent pas le niveau moyen."
-            />
-          </div>
+          {isOn(modules, 'org.internal_transfers') ? (
+            <div className="mt-3">
+              <Count
+                label="Venus d’un autre domaine du groupe"
+                value={hr.internalTransfersIn}
+                onChange={(v) => patch({ internalTransfersIn: v })}
+                hint="Ils connaissent déjà la maison : contrairement à un recrutement externe, ils ne diluent pas le niveau moyen."
+              />
+            </div>
+          ) : null}
 
           {remainder !== 0 ? (
             <p
@@ -281,19 +287,22 @@ export function HrSection({
           </span>
         </label>
 
-        <label className="block">
-          <span className="text-sm font-medium">Budget de formation</span>
-          <NumberInput
-            value={hr.trainingBudgetMad} disabled={locked}
-            onChange={(v) => patch({ trainingBudgetMad: v })}
-            className="mt-1.5 w-full"
-          />
-          <span className="mt-1 block text-xs text-(--foreground-muted)">
-            Améliore la compétence et le climat, et amortit le choc d’une automatisation.
-          </span>
-        </label>
+        {isOn(modules, 'org.training_budget') ? (
+          <label className="block">
+            <span className="text-sm font-medium">Budget de formation</span>
+            <NumberInput
+              value={hr.trainingBudgetMad} disabled={locked}
+              onChange={(v) => patch({ trainingBudgetMad: v })}
+              className="mt-1.5 w-full"
+            />
+            <span className="mt-1 block text-xs text-(--foreground-muted)">
+              Améliore la compétence et le climat, et amortit le choc d’une automatisation.
+            </span>
+          </label>
+        ) : null}
       </fieldset>
 
+      {isOn(modules, 'org.training_focus') ? (
       <fieldset disabled={locked}>
         <legend className="text-sm font-medium">Sur quoi former</legend>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -313,35 +322,46 @@ export function HrSection({
           ))}
         </div>
       </fieldset>
+      ) : null}
 
       {/* ── Financements publics ───────────────────────────────────────── */}
+      {anyOn(modules, ['org.skills_audit', 'org.claim_giac', 'org.claim_ofppt']) ? (
       <fieldset disabled={locked}>
         <legend className="text-sm font-medium">Diagnostic et financements</legend>
         <div className="mt-3 space-y-2">
-          <Check
-            checked={hr.orderSkillsAudit} disabled={locked}
-            onChange={(v) => patch({ orderSkillsAudit: v, claimGiac: v && hr.claimGiac })}
-            label="Commander un bilan de compétences"
-            hint="Un plan de formation bâti sur un diagnostic rend nettement plus qu’un plan improvisé. C’est aussi ce que le GIAC finance."
-          />
-          <Check
-            checked={hr.claimOfppt} disabled={locked}
-            onChange={(v) => patch({ claimOfppt: v })}
-            label="Solliciter l’OFPPT (contrats spéciaux de formation)"
-            hint="Rembourse 70 % de la formation, dans la limite de votre droit de tirage — 1,6 % de votre masse salariale. Dépenser au-delà ne rembourse pas davantage."
-          />
-          <Check
-            checked={hr.claimGiac} disabled={locked || !hr.orderSkillsAudit}
-            onChange={(v) => patch({ claimGiac: v })}
-            label="Solliciter le GIAC sectoriel"
-            hint={
-              hr.orderSkillsAudit
-                ? "Finance l’ingénierie de formation — le diagnostic, l’analyse des besoins, le plan."
-                : "Exige un bilan de compétences : le GIAC finance l’ingénierie, pas la formation. Sans diagnostic, il n’y a rien à rembourser."
-            }
-          />
+          {isOn(modules, 'org.skills_audit') ? (
+            <Check
+              checked={hr.orderSkillsAudit} disabled={locked}
+              onChange={(v) => patch({ orderSkillsAudit: v, claimGiac: v && hr.claimGiac })}
+              label="Commander un bilan de compétences"
+              hint="Un plan de formation bâti sur un diagnostic rend nettement plus qu’un plan improvisé. C’est aussi ce que le GIAC finance."
+            />
+          ) : null}
+          {isOn(modules, 'org.claim_ofppt') ? (
+            <Check
+              checked={hr.claimOfppt} disabled={locked}
+              onChange={(v) => patch({ claimOfppt: v })}
+              label="Solliciter l’OFPPT (contrats spéciaux de formation)"
+              hint="Rembourse 70 % de la formation, dans la limite de votre droit de tirage — 1,6 % de votre masse salariale. Dépenser au-delà ne rembourse pas davantage."
+            />
+          ) : null}
+          {/* Le GIAC exige le bilan : si le facilitateur a fermé le bilan, la
+              case resterait cochable mais jamais satisfaisable. */}
+          {isOn(modules, 'org.claim_giac') && isOn(modules, 'org.skills_audit') ? (
+            <Check
+              checked={hr.claimGiac} disabled={locked || !hr.orderSkillsAudit}
+              onChange={(v) => patch({ claimGiac: v })}
+              label="Solliciter le GIAC sectoriel"
+              hint={
+                hr.orderSkillsAudit
+                  ? "Finance l’ingénierie de formation — le diagnostic, l’analyse des besoins, le plan."
+                  : "Exige un bilan de compétences : le GIAC finance l’ingénierie, pas la formation. Sans diagnostic, il n’y a rien à rembourser."
+              }
+            />
+          ) : null}
         </div>
       </fieldset>
+      ) : null}
     </div>
   );
 }

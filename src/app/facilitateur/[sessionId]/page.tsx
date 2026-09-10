@@ -6,10 +6,22 @@ import { joinTeamAsFacilitatorAction } from '@/app/actions/facilitator-play';
 import { getFacilitatorContext } from '@/lib/dal';
 import { dialsFor, type DifficultyDials } from '@/lib/engine/difficulty';
 import { facilitatorCan } from '@/lib/facilitator-capabilities';
+import { ALL_MODULE_FIELDS } from '@/lib/modules-catalog';
+import {
+  loadEnabledModules,
+  loadFacilitatorCeiling,
+  loadSavedPresets,
+} from '@/lib/server/modules';
 import { createAdminClient } from '@/lib/supabase/server';
 import { assignTeamColors } from '@/lib/team-colors';
 
 import { FacilitatorView, type TeamProgress } from './facilitator-view';
+import {
+  deleteModulePresetAction,
+  saveModulePresetAction,
+  setSessionModulesAction,
+} from './modules-actions';
+import { ModulesSection } from './modules-section';
 
 export const metadata = { title: 'Atlas — Pilotage de session' };
 export const dynamic = 'force-dynamic';
@@ -76,6 +88,18 @@ export default async function FacilitatorPage({
     ).map((t) => [t.id, t.color]),
   );
 
+  // Modules : l'état résolu (ce que les équipes voient), le plafond posé par le
+  // super-admin (ce que le facilitateur a le droit d'ouvrir), et ses préréglages.
+  const [modules, ceiling, presets] = await Promise.all([
+    loadEnabledModules(sessionId),
+    loadFacilitatorCeiling(context.userId),
+    loadSavedPresets(context.userId),
+  ]);
+  const ceilingState: Record<string, boolean> = {};
+  for (const field of ALL_MODULE_FIELDS) {
+    ceilingState[field.key] = ceiling.get(field.key) ?? true;
+  }
+
   // Où le facilitateur joue-t-il en ce moment, si tant est qu'il joue ?
   const playingTeamId =
     (members ?? []).find(
@@ -126,6 +150,17 @@ export default async function FacilitatorPage({
       canPlayInTeam={await facilitatorCan(context.userId, 'join_team_as_player')}
       playingTeamId={playingTeamId === null ? null : String(playingTeamId)}
       joinTeamAction={joinTeamAsFacilitatorAction}
+      modulesSection={
+        <ModulesSection
+          sessionId={sessionId}
+          modules={modules}
+          ceiling={ceilingState}
+          savedPresets={presets}
+          setModulesAction={setSessionModulesAction}
+          savePresetAction={saveModulePresetAction}
+          deletePresetAction={deleteModulePresetAction}
+        />
+      }
       das={(das ?? []).map((d) => {
         const mine = (targets ?? []).filter((t) => String(t.das_id) === String(d.id));
         return {

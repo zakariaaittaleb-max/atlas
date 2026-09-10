@@ -19,6 +19,15 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { decisionsAreOpen, getRoundState, getTeamContext } from '@/lib/dal';
+import type { EnabledModules } from '@/lib/modules-state';
+import {
+  ModuleClosedError,
+  enforceCorporate,
+  enforceDas,
+  enforceFinance,
+  requireOpen,
+} from '@/lib/server/module-enforcement';
+import { loadEnabledModules } from '@/lib/server/modules';
 import { createAdminClient } from '@/lib/supabase/server';
 
 const VALUES = [
@@ -167,7 +176,20 @@ export async function POST(request: Request) {
 
   const roundNumber = (round?.current_round as number) ?? 0;
   const admin = createAdminClient();
-  const body = parsed.data;
+
+  // Un bloc masqué dans l'interface n'est pas protégé pour autant : cette
+  // route est joignable par POST direct. Les champs fermés sont ramenés à leur
+  // valeur du tour précédent AVANT toute écriture.
+  const modules = await loadEnabledModules(team.sessionId);
+  let body: Body;
+  try {
+    body = await enforce(admin, team.teamId, roundNumber, parsed.data, modules);
+  } catch (error) {
+    if (error instanceof ModuleClosedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    throw error;
+  }
 
   try {
     await write(admin, team.teamId, roundNumber, body);
@@ -191,6 +213,31 @@ export async function POST(request: Request) {
 
 type Admin = ReturnType<typeof createAdminClient>;
 type Body = z.infer<typeof Payload>;
+
+/** Neutralise les champs fermés, refuse les blocs entièrement fermés. */
+async function enforce(
+  admin: Admin,
+  teamId: string,
+  round: number,
+  body: Body,
+  modules: EnabledModules,
+): Promise<Body> {
+  if (body.plan === 'corporate') {
+    return enforceCorporate(admin, teamId, round, body, modules);
+  }
+  if (body.plan === 'das') {
+    return enforceDas(admin, teamId, body.dasId, round, body, modules);
+  }
+  if (body.plan === 'finance') {
+    return enforceFinance(admin, teamId, round, body, modules);
+  }
+  if (body.plan === 'procurement') {
+    requireOpen(modules, 'marches.procurement', 'Contrats fournisseurs');
+    return body;
+  }
+  requireOpen(modules, 'marches.distribution', 'Contrats distributeurs');
+  return body;
+}
 
 async function write(admin: Admin, teamId: string, round: number, body: Body): Promise<void> {
   const fail = (error: { message: string } | null) => {

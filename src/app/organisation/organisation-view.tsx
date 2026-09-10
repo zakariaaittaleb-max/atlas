@@ -31,6 +31,8 @@ import { formatMadCompact, formatPct } from '@/lib/format';
 import type { DasOrganisation, OrgContext, PositionDraft } from '@/lib/org-types';
 import { useAutosave } from '@/lib/use-autosave';
 
+import { anyOn, isOn, type EnabledModules } from '@/lib/modules-state';
+
 import { HrSection } from './hr-section';
 
 const PORTFOLIO_ROLES = [
@@ -45,12 +47,28 @@ const PORTFOLIO_ROLES = [
 ] as const;
 
 const HQ_FUNCTIONS = [
-  ['hqPurchasing', 'Achats'],
-  ['hqIt', 'Systèmes d’information'],
-  ['hqRd', 'Recherche & développement'],
-  ['hqHr', 'Ressources humaines'],
-  ['hqFinance', 'Finance'],
+  ['hqPurchasing', 'Achats', 'org.hq_purchasing'],
+  ['hqIt', 'Systèmes d’information', 'org.hq_it'],
+  ['hqRd', 'Recherche & développement', 'org.hq_rd'],
+  ['hqHr', 'Ressources humaines', 'org.hq_hr'],
+  ['hqFinance', 'Finance', 'org.hq_finance'],
 ] as const;
+
+const HQ_KEYS = HQ_FUNCTIONS.map(([, , moduleKey]) => moduleKey);
+
+/** Tout ce que porte le bloc « directives » : s'il est vide, il disparaît. */
+const DIRECTIVES_KEYS = ['org.portfolio_role', ...HQ_KEYS, 'org.shared_resources'];
+
+/**
+ * Tout ce que porte le bloc RH. Les effectifs sont du noyau : ce bloc ne
+ * disparaît donc jamais en pratique — la liste sert à ne pas avoir à le savoir.
+ */
+const HR_KEYS = [
+  'org.hire_operateurs', 'org.hire_techniciens', 'org.hire_experts', 'org.hire_cadres',
+  'org.layoffs', 'org.avg_salary', 'org.internal_transfers',
+  'org.training_budget', 'org.training_focus',
+  'org.claim_ofppt', 'org.claim_giac', 'org.skills_audit', 'org.restructuring',
+];
 
 /** Correspondance entre la fonction vue du DAS et la directive du groupe. */
 const CENTRAL_OF = {
@@ -65,7 +83,13 @@ const LEVELS = [
   [1, 'Direction'], [2, 'Encadrement supérieur'], [3, 'Encadrement intermédiaire'], [4, 'Opérationnel'],
 ] as const;
 
-export function OrganisationView({ context }: { context: OrgContext }) {
+export function OrganisationView({
+  context,
+  modules,
+}: {
+  context: OrgContext;
+  modules: EnabledModules;
+}) {
   const router = useRouter();
   const autosave = useAutosave();
   const [pending, startTransition] = useTransition();
@@ -145,6 +169,7 @@ export function OrganisationView({ context }: { context: OrgContext }) {
             et rien ne disait laquelle faisait foi. */}
 
         {/* ── Directives du Groupe ─────────────────────────────────────── */}
+        {anyOn(modules, DIRECTIVES_KEYS) ? (
         <Section
           title="Ce DAS face aux directives du Groupe"
           hint="Le groupe arbitre, ce DAS se situe. Suivre une directive inadaptée à votre métier dégrade votre cohérence propre ; s’en écarter dégrade celle du groupe. Les deux coûtent — c’est l’arbitrage."
@@ -157,6 +182,7 @@ export function OrganisationView({ context }: { context: OrgContext }) {
             </p>
           ) : (
             <fieldset disabled={locked} className="space-y-6">
+              {isOn(modules, 'org.portfolio_role') ? (
               <div>
                 <span className="text-sm font-medium">
                   Rôle de ce DAS dans le portefeuille
@@ -189,7 +215,9 @@ export function OrganisationView({ context }: { context: OrgContext }) {
                   ))}
                 </div>
               </div>
+              ) : null}
 
+              {anyOn(modules, HQ_KEYS) ? (
               <div>
                 <span className="text-sm font-medium">Fonctions déléguées au siège</span>
                 <p className="mt-1 text-sm text-(--foreground-muted)">
@@ -198,7 +226,7 @@ export function OrganisationView({ context }: { context: OrgContext }) {
                   exige de la réactivité vous coûte cette réactivité.
                 </p>
                 <div className="mt-3 space-y-2">
-                  {HQ_FUNCTIONS.map(([key, label]) => {
+                  {HQ_FUNCTIONS.filter(([, , moduleKey]) => isOn(modules, moduleKey)).map(([key, label]) => {
                     const central = context.group![CENTRAL_OF[key]];
                     const delegated = das.directives[key];
                     return (
@@ -237,8 +265,9 @@ export function OrganisationView({ context }: { context: OrgContext }) {
                   })}
                 </div>
               </div>
+              ) : null}
 
-              {das.sharedOffers.length > 0 ? (
+              {das.sharedOffers.length > 0 && isOn(modules, 'org.shared_resources') ? (
                 <div>
                   <span className="text-sm font-medium">Ressources mutualisées ouvertes à ce DAS</span>
                   <p className="mt-1 text-sm text-(--foreground-muted)">
@@ -314,8 +343,10 @@ export function OrganisationView({ context }: { context: OrgContext }) {
             </fieldset>
           )}
         </Section>
+        ) : null}
 
         {/* ── Ressources humaines ──────────────────────────────────────── */}
+        {anyOn(modules, HR_KEYS) ? (
         <Section
           title="Ressources humaines de ce domaine"
           hint="Chaque métier a sa pyramide et sa sensibilité à la formation. Les indicateurs du dernier exercice figurent en tête : on décide en regardant d’où l’on part."
@@ -324,18 +355,21 @@ export function OrganisationView({ context }: { context: OrgContext }) {
             hr={das.hr}
             state={das.hrState}
             locked={locked}
+            modules={modules}
             onChange={(hr) => {
               update({ hr });
               push('hr', { ...hr });
             }}
           />
         </Section>
+        ) : null}
 
         {/* ── Axes stratégiques ────────────────────────────────────────────
             La vision et la mission ont été retirées d'ici : elles étaient déjà
             saisies au niveau Groupe, sur `/strategie`. Une entreprise a UNE
             vision ; ce qu'un domaine déclare de spécifique, ce sont ses axes —
             et eux, contrairement à un texte libre, pèsent sur l'alignement. */}
+        {isOn(modules, 'org.axes') ? (
         <Section
           title="Axes stratégiques"
           hint="La vision et la mission du Groupe se déclarent dans l’écran Stratégie. Ici, ce domaine dit ce qu’il PRIORISE — et c’est cela qui est mesuré."
@@ -383,6 +417,7 @@ export function OrganisationView({ context }: { context: OrgContext }) {
             </ol>
           </fieldset>
         </Section>
+        ) : null}
 
         {/* ── Délégation ───────────────────────────────────────────────────
             La FORME de structure a été retirée d'ici : elle se décide au niveau
@@ -391,6 +426,7 @@ export function OrganisationView({ context }: { context: OrgContext }) {
             pour un seul » — ce qui n'a de sens qu'à l'échelle de l'entreprise. La
             copie par domaine n'était lue par aucun calcul : deux commandes pour
             une seule question, dont une sans effet. */}
+        {isOn(modules, 'org.delegation') ? (
         <Section
           title="Délégation"
           hint="La forme de structure se décide au niveau Groupe, dans l’écran Stratégie. Ce qui se règle ici est le degré d’autonomie laissé à CE métier — et ni le sommet ni le terrain n’ont raison dans l’absolu : standardiser sert les coûts, décider vite sert une niche exigeante."
@@ -414,8 +450,10 @@ export function OrganisationView({ context }: { context: OrgContext }) {
             </div>
           </fieldset>
         </Section>
+        ) : null}
 
         {/* ── Organigramme ─────────────────────────────────────────────── */}
+        {isOn(modules, 'org.positions') ? (
         <Section
           title="Organigramme"
           hint={`Déclarer un poste CLÉ, c'est y concentrer l'attention et les moyens. Au-delà de trois, « clé » cesse de vouloir dire quelque chose — vous en avez ${keyCount}.`}
@@ -430,8 +468,10 @@ export function OrganisationView({ context }: { context: OrgContext }) {
             }}
           />
         </Section>
+        ) : null}
 
         {/* ── Pilotage ─────────────────────────────────────────────────── */}
+        {isOn(modules, 'org.kpis') ? (
         <Section
           title="Indicateurs de pilotage"
           hint="Choisir un indicateur, c'est décider de ce que la direction va optimiser — donc de ce qu'elle va sacrifier. Un responsable de production suivi sur le coût unitaire et un autre suivi sur le taux de rebut ne prendront pas les mêmes décisions."
@@ -475,8 +515,10 @@ export function OrganisationView({ context }: { context: OrgContext }) {
             })}
           </div>
         </Section>
+        ) : null}
 
         {/* ── Budgets ──────────────────────────────────────────────────── */}
+        {isOn(modules, 'org.budgets') ? (
         <Section
           title="Répartition des moyens"
           hint="Là où va l'argent dit ce que vous faites vraiment. Déclarer une différenciation en finançant la production comme une usine low-cost est l'incohérence que le moteur relève le plus sûrement."
@@ -513,6 +555,7 @@ export function OrganisationView({ context }: { context: OrgContext }) {
             })}
           </div>
         </Section>
+        ) : null}
       </main>
 
       <div className="sticky bottom-0 border-t border-(--border) bg-(--surface)">

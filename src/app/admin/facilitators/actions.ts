@@ -13,6 +13,8 @@ import {
   writeFacilitatorCapability,
   type FacilitatorCapability,
 } from '@/lib/facilitator-capabilities';
+import { ALL_MODULE_FIELDS } from '@/lib/modules-catalog';
+import { writeFacilitatorModules } from '@/lib/server/modules';
 import { IMPERSONATION_LABEL_COOKIE, IMPERSONATION_RETURN_COOKIE } from '@/lib/impersonation';
 import { isSuperAdminEmail } from '@/lib/security-config';
 import { createAdminClient, createServerClient } from '@/lib/supabase/server';
@@ -137,6 +139,42 @@ export async function setFacilitatorCapabilityAction(input: {
     parsed.data.enabled,
     admin_.id,
   );
+
+  revalidatePath('/admin/facilitators');
+  return { ok: true };
+}
+
+/**
+ * Plafond de modules d'un facilitateur.
+ *
+ * Le super-admin ferme ce qu'il ne veut pas voir animé ; le facilitateur
+ * choisira ensuite, session par session, ce qu'il ouvre là-dedans. Les clés
+ * inconnues du catalogue sont écartées : une clé retirée du code ne doit pas
+ * repeupler la table à la première sauvegarde.
+ */
+export async function setFacilitatorModulesAction(input: {
+  userId: string;
+  fields: Record<string, boolean>;
+}): Promise<ActionResult> {
+  const admin_ = await requireSuperAdmin();
+  if (!admin_) return { ok: false, error: 'Accès refusé.' };
+
+  if (!z.string().uuid().safeParse(input.userId).success) {
+    return { ok: false, error: 'Facilitateur inconnu.' };
+  }
+
+  const known: Record<string, boolean> = {};
+  for (const field of ALL_MODULE_FIELDS) {
+    if (field.tier === 'noyau') continue;
+    if (field.key in input.fields) known[field.key] = Boolean(input.fields[field.key]);
+  }
+
+  await writeFacilitatorModules(input.userId, known, admin_.id);
+  await logAdminAction(admin_.id, 'modules_ceiling_set', 'user', input.userId, {
+    closed: Object.entries(known)
+      .filter(([, enabled]) => !enabled)
+      .map(([key]) => key),
+  });
 
   revalidatePath('/admin/facilitators');
   return { ok: true };

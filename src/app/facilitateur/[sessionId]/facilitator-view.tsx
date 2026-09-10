@@ -72,7 +72,7 @@ const DIMENSIONS: Record<string, string> = {
 export function FacilitatorView({
   sessionId, sessionName, joinCode, status, roundNumber, plannedRounds, maxRounds,
   teams, das, cards, activeShocks, runs, difficulty, dials, difficultyLocked, sectors,
-  canPlayInTeam, playingTeamId, joinTeamAction,
+  canPlayInTeam, playingTeamId, joinTeamAction, modulesSection,
 }: {
   sessionId: string; sessionName: string; joinCode: string; status: string;
   roundNumber: number; plannedRounds: number; maxRounds: number;
@@ -80,6 +80,8 @@ export function FacilitatorView({
   canPlayInTeam: boolean;
   playingTeamId: string | null;
   joinTeamAction: JoinTeamAction;
+  /** Rendu côté serveur puis passé tel quel : voir `modules-section.tsx`. */
+  modulesSection: React.ReactNode;
   das: { id: string; name: string; marketOpen: boolean; hasTargets: boolean }[];
   cards: Card[];
   difficulty: string;
@@ -377,6 +379,9 @@ export function FacilitatorView({
           joinTeamAction={joinTeamAction}
         />
       </section>
+
+      {/* ── Ce que la session fait jouer ─────────────────────────────────── */}
+      {modulesSection}
 
       {/* ── Cartes de crise ──────────────────────────────────────────────── */}
       <SettingsSection

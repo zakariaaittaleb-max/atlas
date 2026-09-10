@@ -1,6 +1,8 @@
 import { STUDY_BASE_PRICES, STUDY_TIERS, studyPrice, TIER_PROFILES } from '@/lib/engine/consulting';
 import { buildParams } from '@/lib/engine/params';
 import { decisionsAreOpen, getRoundState, requireTeam } from '@/lib/dal';
+import { isOn } from '@/lib/modules-state';
+import { loadEnabledModules } from '@/lib/server/modules';
 import { createServerClient } from '@/lib/supabase/server';
 
 import { CabinetView, type OrderedStudy, type StudyOffer } from './cabinet-view';
@@ -35,20 +37,31 @@ export default async function CabinetPage() {
   // le facilitateur peut durcir ou assouplir le curseur entre deux promotions.
   const params = buildParams();
 
-  const offers: StudyOffer[] = (studies ?? []).map((s) => ({
-    key: String(s.key),
-    name: String(s.name),
-    description: String(s.description ?? ''),
-    scope: String(s.scope) as StudyOffer['scope'],
-    tiers: STUDY_TIERS.map((tier) => ({
-      tier,
-      label: TIER_PROFILES[tier].label,
-      priceMad: studyPrice(STUDY_BASE_PRICES[String(s.key)] ?? Number(s.base_price_mad), tier, params),
-      errorMargin: TIER_PROFILES[tier].errorMargin,
-      includesWeakSignals: TIER_PROFILES[tier].includesWeakSignals,
-      bandCount: TIER_PROFILES[tier].bandCount,
-    })),
-  }));
+  // Le catalogue du cabinet est réglé par le facilitateur : une étude fermée
+  // n'est pas grisée, elle n'est pas au catalogue. Les commandes déjà passées
+  // restent lisibles plus bas — on ne réécrit pas l'histoire d'un tour joué.
+  const modules = await loadEnabledModules(team.sessionId);
+
+  const offers: StudyOffer[] = (studies ?? [])
+    .filter((s) => isOn(modules, `cabinet.${String(s.key)}`))
+    .map((s) => ({
+      key: String(s.key),
+      name: String(s.name),
+      description: String(s.description ?? ''),
+      scope: String(s.scope) as StudyOffer['scope'],
+      tiers: STUDY_TIERS.map((tier) => ({
+        tier,
+        label: TIER_PROFILES[tier].label,
+        priceMad: studyPrice(
+          STUDY_BASE_PRICES[String(s.key)] ?? Number(s.base_price_mad),
+          tier,
+          params,
+        ),
+        errorMargin: TIER_PROFILES[tier].errorMargin,
+        includesWeakSignals: TIER_PROFILES[tier].includesWeakSignals,
+        bandCount: TIER_PROFILES[tier].bandCount,
+      })),
+    }));
 
   return (
     <CabinetView

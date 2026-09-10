@@ -16,6 +16,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { decisionsAreOpen, getRoundState, getTeamContext } from '@/lib/dal';
+import { isOn } from '@/lib/modules-state';
+import { loadEnabledModules } from '@/lib/server/modules';
 import { computeListing, engineParamsFrom } from '@/lib/server/divest';
 import { createAdminClient } from '@/lib/supabase/server';
 
@@ -58,6 +60,21 @@ export async function POST(request: Request) {
   const roundNumber = (round?.current_round as number) ?? 0;
   const admin = createAdminClient();
   const body = parsed.data;
+
+  const modules = await loadEnabledModules(team.sessionId);
+  const CESSION_MODULE: Record<typeof body.action, [string, string]> = {
+    list: ['cession.sell', 'Mettre un domaine en vente'],
+    withdraw: ['cession.sell', 'Mettre un domaine en vente'],
+    choice: ['cession.sell', 'Mettre un domaine en vente'],
+    bid: ['cession.bid', 'Enchérir sur un domaine mis en vente'],
+  };
+  const [moduleKey, what] = CESSION_MODULE[body.action];
+  if (!isOn(modules, moduleKey)) {
+    return NextResponse.json(
+      { error: `« ${what} » n’est pas ouvert sur cette session.` },
+      { status: 403 },
+    );
+  }
 
   if (body.action === 'list') {
     const { data: paramRows } = await admin

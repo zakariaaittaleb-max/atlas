@@ -37,6 +37,7 @@ import type { DecisionContext, FinanceValues } from '@/lib/decision-types';
 import { deepEqual } from '@/lib/deep-equal';
 import type { MoneyBar, ResultsContext } from '@/lib/results-types';
 import { ResultsSection } from './results-section';
+import { isOn, screenIsOpen, type EnabledModules } from '@/lib/modules-state';
 import { useAutosave } from '@/lib/use-autosave';
 
 const REGIMES = [
@@ -46,10 +47,11 @@ const REGIMES = [
 ] as const;
 
 export function FinanceView({
-  context, missing, results, money,
+  context, missing, modules, results, money,
 }: {
   context: DecisionContext;
   missing: MissingDecision[];
+  modules: EnabledModules;
   results: ResultsContext;
   /** La MÊME définition que la barre du haut : un seul « engagé ce tour ». */
   money: MoneyBar | null;
@@ -171,30 +173,38 @@ export function FinanceView({
         </section>
 
         {/* ── Plan 7 : finance ──────────────────────────────────────────── */}
+        {screenIsOpen(modules, 'finance') ? (
         <section className="mt-8 rounded-xl border border-(--border) bg-(--surface) p-6">
           <h2 className="text-xl font-medium">Vos décisions financières</h2>
 
           <fieldset disabled={locked} className="mt-5 grid gap-4 sm:grid-cols-3">
-            <MoneyField
-              label="Frais de fonctionnement du siège"
-              value={finance.opexMad}
-              onChange={(v) => pushFinance({ ...finance, opexMad: v })}
-              hint="Loyers, systèmes, direction générale. Mutualiser des métiers proches les allège."
-            />
-            <MoneyField
-              label="Crédit que vous prenez"
-              value={finance.debtDrawnMad}
-              onChange={(v) => pushFinance({ ...finance, debtDrawnMad: v })}
-              hint="Plus vous devez, plus la banque exige : le taux monte avec ce que vous avez déjà emprunté."
-            />
-            <MoneyField
-              label="Crédit que vous remboursez"
-              value={finance.debtRepaidMad}
-              onChange={(v) => pushFinance({ ...finance, debtRepaidMad: v })}
-              hint="Allège les intérêts que vous paierez les années suivantes."
-            />
+            {isOn(modules, 'finance.opex') ? (
+              <MoneyField
+                label="Frais de fonctionnement du siège"
+                value={finance.opexMad}
+                onChange={(v) => pushFinance({ ...finance, opexMad: v })}
+                hint="Loyers, systèmes, direction générale. Mutualiser des métiers proches les allège."
+              />
+            ) : null}
+            {isOn(modules, 'finance.debt_drawn') ? (
+              <MoneyField
+                label="Crédit que vous prenez"
+                value={finance.debtDrawnMad}
+                onChange={(v) => pushFinance({ ...finance, debtDrawnMad: v })}
+                hint="Plus vous devez, plus la banque exige : le taux monte avec ce que vous avez déjà emprunté."
+              />
+            ) : null}
+            {isOn(modules, 'finance.debt_repaid') ? (
+              <MoneyField
+                label="Crédit que vous remboursez"
+                value={finance.debtRepaidMad}
+                onChange={(v) => pushFinance({ ...finance, debtRepaidMad: v })}
+                hint="Allège les intérêts que vous paierez les années suivantes."
+              />
+            ) : null}
           </fieldset>
 
+          {isOn(modules, 'finance.tax_regime') ? (
           <fieldset disabled={locked} className="mt-6">
             <legend className="mb-2 text-sm font-medium">Votre régime d’imposition</legend>
             <div className="grid gap-2 sm:grid-cols-3">
@@ -215,6 +225,7 @@ export function FinanceView({
               ))}
             </div>
           </fieldset>
+          ) : null}
 
           <p className="mt-5 border-t border-(--border) pt-4 text-sm text-(--foreground-muted)">
             Une équipe déficitaire paie tout de même la cotisation minimale de 0,25 % du
@@ -234,6 +245,7 @@ export function FinanceView({
             onReset={() => pushFinance(context.financeBaseline)}
           />
         </section>
+        ) : null}
       </main>
 
       <DecisionBar

@@ -17,6 +17,8 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
+import { MODULE_PRESETS } from '@/lib/modules-catalog';
+
 export function SessionLauncher({ sectors }: { sectors: { key: string; name: string }[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -35,6 +37,7 @@ export function SessionLauncher({ sectors }: { sectors: { key: string; name: str
   // provisionnerait des équipes sur un DAS qui n'existe pas.
   const [starting, setStarting] = useState<string[]>([sectors[0]?.key ?? '']);
   const [plannedRounds, setPlannedRounds] = useState(3);
+  const [modulePreset, setModulePreset] = useState('standard');
 
   const disabled = busy || pending;
 
@@ -88,6 +91,7 @@ export function SessionLauncher({ sectors }: { sectors: { key: string; name: str
           sectorKeys: selected,
           startingSectorKeys: starting,
           plannedRounds,
+          modulePreset,
           maxRounds: 10,
         }),
       });
@@ -279,6 +283,38 @@ export function SessionLauncher({ sectors }: { sectors: { key: string; name: str
               ? ` · ${selected.length - starting.length} domaine(s) en réserve.`
               : ' · aucune réserve : rien à acquérir en cours de partie.'}
           </p>
+        </fieldset>
+
+        {/* ── L'ampleur du jeu ────────────────────────────────────────────
+            Atlas complet demande plusieurs séances. Le préréglage se choisit
+            d'entrée pour que les équipes n'ouvrent jamais un écran qu'on ne
+            traitera pas, et s'affine champ par champ depuis l'écran de
+            pilotage, même en cours de partie. */}
+        <fieldset>
+          <legend className="mb-1 text-sm font-medium">Ampleur du jeu</legend>
+          <p className="mb-3 text-xs text-(--foreground-muted)">
+            Vous pourrez ouvrir ou fermer chaque champ ensuite, depuis l’écran de pilotage.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {MODULE_PRESETS.map((preset) => (
+              <button
+                key={preset.key}
+                type="button"
+                onClick={() => setModulePreset(preset.key)}
+                aria-pressed={modulePreset === preset.key}
+                className="rounded-lg border p-3 text-left"
+                style={{
+                  borderColor: modulePreset === preset.key ? 'var(--accent)' : 'var(--border)',
+                  background: modulePreset === preset.key ? 'var(--surface-muted)' : undefined,
+                }}
+              >
+                <span className="block text-sm font-medium">{preset.label}</span>
+                <span className="mt-1 block text-xs text-(--foreground-muted)">
+                  {preset.description}
+                </span>
+              </button>
+            ))}
+          </div>
         </fieldset>
 
         <label className="block max-w-xs">

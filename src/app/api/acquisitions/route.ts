@@ -22,6 +22,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { decisionsAreOpen, getRoundState, getTeamContext } from '@/lib/dal';
+import { isOn } from '@/lib/modules-state';
+import { loadEnabledModules } from '@/lib/server/modules';
 import { createAdminClient } from '@/lib/supabase/server';
 
 const Payload = z.discriminatedUnion('action', [
@@ -94,6 +96,22 @@ export async function POST(request: Request) {
     target.actor_type === 'fournisseur' ? 'integration_amont'
       : target.actor_type === 'distributeur' ? 'integration_aval'
         : 'entree_das';
+
+  // Les deux opérations sont deux modules distincts : un formateur peut vouloir
+  // faire jouer l'intégration verticale sans ouvrir la diversification.
+  const modules = await loadEnabledModules(team.sessionId);
+  const moduleKey = operation === 'entree_das' ? 'cession.acquire' : 'cession.integration';
+  if (!isOn(modules, moduleKey)) {
+    return NextResponse.json(
+      {
+        error:
+          operation === 'entree_das'
+            ? '« Entrer dans un nouveau domaine » n’est pas ouvert sur cette session.'
+            : '« Intégrer sa filière » n’est pas ouvert sur cette session.',
+      },
+      { status: 403 },
+    );
+  }
 
   const { data: existing } = await admin
     .from('team_units')
