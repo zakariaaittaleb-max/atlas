@@ -28,11 +28,33 @@ import { fulfilStudy } from '@/lib/server/consulting-fulfil';
 import { engineParamsFrom } from '@/lib/server/divest';
 import { createAdminClient } from '@/lib/supabase/server';
 
+/**
+ * Études qui portent sur une CIBLE nommée, et non sur un domaine.
+ *
+ * Sans cette contrainte, une due diligence sans cible était acceptée, facturée,
+ * et produisait un livrable sur un acteur inexistant — sept champs bruités
+ * calculés à partir de zéro. L'équipe payait 660 000 DH pour des chiffres qui
+ * ne décrivaient rien, et rien ne le lui disait.
+ */
+const TARGET_REQUIRED = new Set(['due_diligence']);
+
+/** Études qui portent sur un DOMAINE : sans lui, il n'y a rien à analyser. */
+const DAS_REQUIRED = new Set([
+  'pestel_sectoriel', 'concurrentielle', 'panel_conso',
+  'benchmark_fourn', 'benchmark_distri',
+]);
+
 const OrderRequest = z.object({
   studyKey: z.enum(Object.keys(STUDY_BASE_PRICES) as [string, ...string[]]),
   tier: z.enum(STUDY_TIERS),
   dasId: z.string().uuid().nullable().optional(),
   targetActorId: z.string().uuid().nullable().optional(),
+}).refine((o) => !TARGET_REQUIRED.has(o.studyKey) || Boolean(o.targetActorId), {
+  message: 'Cette étude porte sur une cible : précisez laquelle.',
+  path: ['targetActorId'],
+}).refine((o) => !DAS_REQUIRED.has(o.studyKey) || Boolean(o.dasId), {
+  message: 'Cette étude porte sur un domaine : précisez lequel.',
+  path: ['dasId'],
 });
 
 export async function POST(request: Request) {
@@ -41,7 +63,12 @@ export async function POST(request: Request) {
 
   const parsed = OrderRequest.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Requête invalide.' }, { status: 400 });
+    // Le message du schéma plutôt qu'un « requête invalide » générique : une
+    // étude refusée doit dire ce qui lui manque.
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? 'Requête invalide.' },
+      { status: 400 },
+    );
   }
 
   const round = await getRoundState(team.sessionId);

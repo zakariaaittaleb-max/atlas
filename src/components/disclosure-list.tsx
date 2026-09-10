@@ -20,7 +20,7 @@
  * paie un palier bon marché) et `withheld` (non couvert, avec la raison).
  */
 
-import { formatMadCompact, formatScore } from '@/lib/format';
+import { formatMadCompact, formatScore, formatUnits } from '@/lib/format';
 import type { FieldDisclosure } from '@/lib/consulting-types';
 
 export function DisclosureList({ fields }: { fields: FieldDisclosure[] }) {
@@ -81,8 +81,17 @@ function Value({ field }: { field: FieldDisclosure }) {
   return <strong>{show(field.value, field.unit)}</strong>;
 }
 
+/**
+ * Un chiffre divulgué, lisible.
+ *
+ * Le bruit du cabinet produit des décimales sur des grandeurs qui n'en ont
+ * pas : « 57601,5 » salariés, « 829206947,2 » unités de capacité. Au-delà du
+ * millier on compte donc en entiers groupés ; en dessous, la décimale porte
+ * l'information — un score de 32,1 n'est pas un score de 32.
+ */
 function show(value: number, unit: string | undefined): string {
   if (unit === 'DH') return formatMadCompact(value);
   if (unit === '%') return `${formatScore(value, 1)} %`;
+  if (Math.abs(value) >= 1000) return formatUnits(Math.round(value));
   return formatScore(value, 1);
 }

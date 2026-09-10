@@ -379,13 +379,25 @@ async function dueDiligence(
 
   // La part de marché de la cible sur son domaine. Le chiffre d'affaires seul
   // ne dit pas si c'est une position dominante ou résiduelle.
-  const { data: summary } = await input.admin
-    .from('pool_round_summary')
-    .select('market_size_mad')
-    .eq('das_id', String(actor?.das_id ?? ''))
-    .eq('round_number', round)
-    .maybeSingle();
-  const marketSize = num(summary?.market_size_mad);
+  //
+  // Le récapitulatif de pool n'existe qu'APRÈS une résolution : s'y fier seul
+  // privait la due diligence de sa part de marché pendant tout l'onboarding,
+  // c'est-à-dire précisément quand les équipes préparent leurs acquisitions.
+  // On retombe sur la taille de marché de base, écrite au provisionnement.
+  const [{ data: summary }, { data: unit }] = await Promise.all([
+    input.admin
+      .from('pool_round_summary')
+      .select('market_size_mad')
+      .eq('das_id', String(actor?.das_id ?? ''))
+      .eq('round_number', round)
+      .maybeSingle(),
+    input.admin
+      .from('strategic_units')
+      .select('base_market_size_mad')
+      .eq('id', String(actor?.das_id ?? ''))
+      .maybeSingle(),
+  ]);
+  const marketSize = num(summary?.market_size_mad) || num(unit?.base_market_size_mad);
 
   return {
     subjects: [{
