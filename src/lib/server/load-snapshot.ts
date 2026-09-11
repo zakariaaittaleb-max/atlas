@@ -802,11 +802,28 @@ export async function loadResolutionSnapshot(
         previousExpertShare: num(state?.talent_mix, num(params['endowment.expert_share'], 20)),
       },
       finance: {
-        // Décisions du tour : jamais reportées.
-        opexMad: num(current?.opex_mad),
+        // ── Deux natures, et non une ────────────────────────────────────
+        //
+        // Les quatre champs étaient lus au seul tour courant, au motif que
+        // reporter une décision ferait retirer le même crédit indéfiniment.
+        // C'est vrai du tirage et du remboursement, qui sont des GESTES.
+        // Ce ne l'est pas des frais de siège ni du régime fiscal, qui sont des
+        // ENGAGEMENTS : un bail, une direction générale et un statut fiscal ne
+        // s'évaporent pas parce qu'une équipe n'a pas rouvert l'écran.
+        //
+        // L'écran, lui, reconduisait déjà les deux — c'est le défaut que
+        // `reconduction.ts` existe pour empêcher : l'équipe lisait un siège de
+        // 597 M et un régime CFC, le moteur résolvait un siège nul et le droit
+        // commun. Une équipe pouvait changer de taux d'impôt sans l'avoir
+        // décidé, et rien ne pouvait le lui révéler.
+        opexMad: current ? num(current.opex_mad) : num(budget?.opex_mad),
+        // Gestes du tour : jamais reportés.
         debtDrawnMad: num(current?.debt_drawn_mad),
         debtRepaidMad: num(current?.debt_repaid_mad),
-        taxRegime: (str(current?.tax_regime, 'droit_commun') as TeamSnapshot['finance']['taxRegime']),
+        taxRegime: (str(
+          current?.tax_regime ?? budget?.tax_regime,
+          'droit_commun',
+        ) as TeamSnapshot['finance']['taxRegime']),
         // État : reporté depuis le dernier budget connu.
         treasuryStartMad: num(pnl?.treasury_end_mad, num(budget?.treasury_start_mad)),
         equityMad: num(budget?.equity_mad),

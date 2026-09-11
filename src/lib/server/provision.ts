@@ -14,7 +14,8 @@ import 'server-only';
 
 import { computeEndowment } from '@/lib/engine/endowment';
 import { makeRng, seedFrom } from '@/lib/engine/math';
-import { DEFAULT_PARAMS, buildParams } from '@/lib/engine/params';
+import { payrollCost } from '@/lib/engine/finance';
+import { DEFAULT_PARAMS, buildParams, param } from '@/lib/engine/params';
 import type { DasParameters } from '@/lib/engine/types';
 
 import { DAS_CATALOG, SECTOR_PROXIMITY } from './das-catalog';
@@ -542,9 +543,19 @@ export async function provisionSession(
         );
       }
 
+      // Le siège existe AVANT que l'équipe n'y touche : il était doté à zéro,
+      // si bien qu'un groupe de soixante-dix mille personnes commençait la
+      // partie sans direction générale, sans finance et sans systèmes. Le
+      // curseur de l'écran finance a besoin d'un point de départ, et un
+      // pourcentage de zéro vaut zéro — sans ce montant, le champ restait
+      // inerte pour toute la partie.
       fail(await admin.from('financial_budgets').insert({
         team_id: teamId,
         round_number: 0,
+        opex_mad: Math.round(
+          payrollCost(group.headcount, group.avgSalaryMad, params) *
+            param(params, 'finance.hq_opex_share_of_payroll'),
+        ),
         treasury_start_mad: group.treasuryMad,
         equity_mad: group.equityMad,
         debt_outstanding_mad: group.debtMad,

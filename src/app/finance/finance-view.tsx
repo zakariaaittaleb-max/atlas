@@ -49,7 +49,8 @@ import { useAutosave } from '@/lib/use-autosave';
  */
 const FINANCE_FIELDS = [
   ['finance.opex', 'opexMad', 'siege', 'Frais de fonctionnement du siège',
-    'Loyers, systèmes, direction générale. Mutualiser des métiers proches les allège.'],
+    'Loyers, systèmes, direction générale. Mutualiser des métiers proches les allège. '
+    + 'Un siège se dégraisse, il ne se supprime pas : sous un plancher, la charge revient.'],
   ['finance.debt_drawn', 'debtDrawnMad', 'credit', 'Crédit que vous prenez',
     'Plus vous devez, plus la banque exige : le taux monte avec ce que vous avez déjà emprunté.'],
   ['finance.debt_repaid', 'debtRepaidMad', 'credit', 'Crédit que vous remboursez',

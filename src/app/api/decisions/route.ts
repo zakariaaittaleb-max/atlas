@@ -226,9 +226,12 @@ type Body = z.infer<typeof Payload>;
 /**
  * Les grandeurs de dotation, pour les champs sans tour précédent exploitable.
  *
- * Une seule ligne lue : la trésorerie de clôture du dernier exercice, qui est
- * l'assiette de tout engagement. Les autres grandeurs ne servent qu'aux écrans
- * d'organisation, dont les écritures passent par une autre route.
+ * Deux lignes lues sur le dernier exercice clos : la trésorerie, assiette de
+ * tout engagement, et la masse salariale, sur laquelle se dimensionne le siège.
+ * Sans cette seconde, le repli des frais de siège valait zéro ici et le clamp
+ * serveur laissait passer n'importe quel montant. Les autres grandeurs ne
+ * servent qu'aux écrans d'organisation, dont les écritures passent par une
+ * autre route.
  */
 async function loadBasis(
   admin: Admin,
@@ -237,7 +240,7 @@ async function loadBasis(
 ): Promise<VariationBasis> {
   const { data } = await admin
     .from('pnl_statements')
-    .select('treasury_end_mad')
+    .select('treasury_end_mad, payroll_mad')
     .eq('team_id', teamId)
     .eq('round_number', round - 1)
     .maybeSingle();
@@ -245,7 +248,7 @@ async function loadBasis(
   const treasuryMad = Number(data?.treasury_end_mad ?? 0);
   return {
     treasuryMad,
-    payrollMad: 0,
+    payrollMad: Number(data?.payroll_mad ?? 0),
     headcount: 0,
     smigMad: 0,
     operatingBudgetMad: 0,

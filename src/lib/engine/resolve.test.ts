@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildParams } from './params';
+import { payrollCost } from './finance';
+import { buildParams, param } from './params';
 import { checkInvariants, resolveRound, type DasMetricsOutput } from './resolve';
 import type {
   DasSnapshot,
@@ -1368,6 +1369,45 @@ describe('stocks dans la résolution complète', () => {
     // Rien en magasin, et la capacité redevient la seule limite.
     expect(metric.inputStockUnits).toBe(0);
     expect(metric.volumeSold).toBeGreaterThan(0);
+  });
+});
+
+describe('frais de siège', () => {
+  /**
+   * Le siège était doté à zéro et jamais reconduit : une équipe qui n'ouvrait
+   * pas l'écran finance dirigeait un groupe de plusieurs milliers de personnes
+   * sans direction générale, sans finance et sans systèmes — gratuitement.
+   */
+  function overheadOf(opexMad: number) {
+    const alpha = team('alpha');
+    const result = resolveRound(
+      baseInput({ teams: [{ ...alpha, finance: { ...alpha.finance, opexMad } }] }),
+      params,
+    );
+    return result.teams[0].pnl.overheadMad;
+  }
+
+  it('fait payer un siège même à qui n’a rien déclaré', () => {
+    expect(overheadOf(0)).toBeGreaterThan(0);
+  });
+
+  it('assied le plancher sur la masse salariale du groupe', () => {
+    // 240 personnes payées 5 800 DH sur douze mois, charges comprises, dont le
+    // plancher retient 4 %. Le multiplicateur de synergie s'applique ensuite.
+    const payroll = payrollCost(240, 5_800, params);
+    const plancher = payroll * param(params, 'finance.hq_opex_floor_share_of_payroll');
+
+    // La borne basse est le plancher nu ; la synergie ne peut que le déplacer
+    // dans une fourchette étroite autour de lui.
+    expect(overheadOf(0)).toBeGreaterThan(plancher * 0.5);
+    expect(overheadOf(0)).toBeLessThan(plancher * 1.5);
+  });
+
+  it('laisse décider l’équipe au-dessus du plancher', () => {
+    const petit = overheadOf(0);
+    const grand = overheadOf(200_000_000);
+
+    expect(grand).toBeGreaterThan(petit);
   });
 });
 

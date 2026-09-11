@@ -194,6 +194,25 @@ export const DEFAULT_PARAMS = {
   'finance.amortization_rounds': 5,
   'finance.bam_key_rate': 0.0225,
 
+  // --- Frais de siège -------------------------------------------------------
+  //
+  // Un siège, c'est d'abord des gens : direction générale, finance, juridique,
+  // systèmes, et les locaux qui vont avec. Il se dimensionne donc sur la MASSE
+  // SALARIALE du groupe, la seule grandeur du jeu qui suive sa taille réelle.
+  //
+  // Le chiffre d'affaires serait la convention du métier — les management fees
+  // d'un groupe marocain tournent autour de 2 % du CA — mais la dotation de
+  // départ affiche un chiffre d'affaires deux fois et demie au-dessus du niveau
+  // réellement joué. Assis dessus, le siège aurait absorbé l'essentiel de
+  // l'EBITDA dès le premier tour. Un dixième de la masse salariale place la
+  // charge là où ces 2 % la mettraient une fois la partie lancée.
+  'finance.hq_opex_share_of_payroll': 0.1,
+  // Un siège ne peut pas être gratuit : même réduit à sa plus simple
+  // expression, il reste une direction, une paie et un bail. Le plancher vaut
+  // 40 % de la référence, soit trois ou quatre tours de coupes maximales avant
+  // de le toucher — l'arbitrage reste réel, la suppression n'existe pas.
+  'finance.hq_opex_floor_share_of_payroll': 0.04,
+
   // --- Fiscalité et social marocains ---------------------------------------
   // ⚠️ à revérifier avant chaque session
   'fiscal.is_rate_standard': 0.2,

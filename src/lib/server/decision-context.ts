@@ -55,8 +55,8 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
 
   const [
     { data: units }, { data: segments }, { data: decisions },
-    { data: strategies }, { data: budget },
-    { data: previousBudget }, { data: pnl }, { data: state },
+    { data: strategies }, { data: budgets },
+    { data: pnl }, { data: state },
     { data: procurement }, { data: distribution }, { data: actors },
     { data: orgDesigns }, { data: dasHrDecisions }, { data: dasHrStates },
     { data: supplyMetrics },
@@ -75,8 +75,13 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
       .eq('team_id', team.teamId).lte('round_number', roundNumber),
     supabase.from('team_round_strategy').select('*')
       .eq('team_id', team.teamId).lte('round_number', roundNumber),
-    supabase.from('financial_budgets').select('*').eq('team_id', team.teamId).eq('round_number', roundNumber).maybeSingle(),
-    supabase.from('financial_budgets').select('*').eq('team_id', team.teamId).eq('round_number', previous).maybeSingle(),
+    // `lte` et non `eq` : une ligne de budget n'existe que pour les tours où
+    // l'équipe a écrit quelque chose, plus celui de la dotation. Lire le seul
+    // tour précédent faisait donc disparaître les frais de siège et le régime
+    // fiscal dès qu'une équipe sautait un exercice — alors que le moteur, lui,
+    // les reconduit. Une seule règle, celle de `reconduction.ts`.
+    supabase.from('financial_budgets').select('*')
+      .eq('team_id', team.teamId).lte('round_number', roundNumber),
     supabase.from('pnl_statements').select('treasury_end_mad').eq('team_id', team.teamId).eq('round_number', previous).maybeSingle(),
     supabase.from('team_round_state').select('headcount').eq('team_id', team.teamId).eq('round_number', previous).maybeSingle(),
     // `lte` : les contrats sont RECONDUITS tant qu'on ne les renégocie pas.
@@ -106,6 +111,12 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
       .select('das_id, volume_sold, volume_lost, input_stock_units, finished_stock_units, effective_capacity_units')
       .eq('team_id', team.teamId).eq('round_number', previous),
   ]);
+
+  // Le budget ÉCRIT ce tour, s'il existe : c'est lui qui dit « saisi » plutôt
+  // que « reconduit ». La base, elle, remonte au dernier exercice connu.
+  const budget =
+    ((budgets ?? []) as Row[]).find((b) => num(b.round_number) === roundNumber) ?? null;
+  const previousBudget = latestAtMost(budgets as Row[] | null, previous);
 
   const strategyRow = latestAtMost(strategies as Row[] | null, roundNumber);
   const previousStrategyRow = latestAtMost(strategies as Row[] | null, previous);

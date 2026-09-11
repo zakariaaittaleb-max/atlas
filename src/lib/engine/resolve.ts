@@ -1513,6 +1513,11 @@ export function resolveRound(
           )
         : 60) + weightedShock((s) => s.workingCapitalDaysDelta);
 
+    // La masse salariale de base sert deux fois : la ligne de personnel et le
+    // plancher des frais de siège. Un seul calcul, pour qu'elles ne puissent
+    // pas diverger.
+    const basePayrollMad = payrollCost(headcount, team.hr.avgSalaryBrutMad, params);
+
     const pnl = buildPnl(
       {
         revenueMad,
@@ -1526,14 +1531,21 @@ export function resolveRound(
         // Les subventions OFPPT et GIAC viennent en DÉDUCTION : elles
         // remboursent de la formation, qui est dans cette même ligne.
         payrollMad:
-          payrollCost(headcount, team.hr.avgSalaryBrutMad, params) *
-            (1 + weightedShock((s) => s.payrollPct)) +
+          basePayrollMad * (1 + weightedShock((s) => s.payrollPct)) +
           hrCash.severanceMad +
           team.hr.trainingBudgetMad * (1 - weightedShock((s) => s.trainingSubsidyPct)) -
           hrCash.subsidiesMad,
         marketingMad,
         rdMad,
-        overheadMad: team.finance.opexMad,
+        // Un siège ne peut pas être gratuit. Il l'était pourtant : le
+        // provisionnement n'écrivait aucun montant, et une équipe qui n'ouvrait
+        // pas l'écran finance dirigeait un groupe sans direction générale, sans
+        // finance et sans systèmes. Le plancher rend la charge inévitable, sans
+        // rien imposer au-delà : au-dessus de lui, c'est l'équipe qui décide.
+        overheadMad: Math.max(
+          team.finance.opexMad,
+          basePayrollMad * param(params, 'finance.hq_opex_floor_share_of_payroll'),
+        ),
         overheadMultiplier: synergy.opexMultiplier,
         fixedProductionMad,
         consultingMad: team.finance.consultingSpendMad,

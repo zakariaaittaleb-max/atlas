@@ -51,7 +51,13 @@ const SPECS: Readonly<Record<string, VariationFieldSpec>> = {
   'das.marketing_budget': { family: 'marketing', endowment: (b) => b.treasuryMad * 0.04 },
 
   // ── Finance du Groupe ─────────────────────────────────────────────────────
-  'finance.opex': { family: 'siege', endowment: (b) => b.treasuryMad * 0.06 },
+  // Le siège se dimensionne sur la masse salariale du groupe, et non sur sa
+  // trésorerie : un siège, ce sont des gens et leurs locaux, pas un placement.
+  // La proportion est celle de `finance.hq_opex_share_of_payroll`, recopiée ici
+  // parce que ce module est client — un écran ne peut pas lire les paramètres
+  // de session. C'est un REPLI : la vraie valeur vient du provisionnement, puis
+  // du tour précédent.
+  'finance.opex': { family: 'siege', endowment: (b) => b.payrollMad * 0.1 },
   'finance.debt_drawn': { family: 'credit', endowment: (b) => b.treasuryMad * 0.1 },
   'finance.debt_repaid': { family: 'credit', endowment: (b) => b.treasuryMad * 0.1 },
 
