@@ -107,6 +107,28 @@ export async function loadResolutionSnapshot(
     previousMarketSize.set(str(row.das_id), num(row.market_size_mad));
   }
 
+  // ── Les concurrents non joueurs encore indépendants ──────────────────────
+  //
+  // `owner_team_id is null` : une cible rachetée n'est plus un concurrent, son
+  // chiffre d'affaires a rejoint celui de l'équipe qui l'a acquise. La laisser
+  // dans ce compte reviendrait à lui faire prélever deux fois la même part.
+  const { data: npcRows } = await admin
+    .from('ecosystem_actors')
+    .select('das_id, ecosystem_actor_rounds(round_number, revenue_mad)')
+    .eq('session_id', sessionId)
+    .eq('actor_type', 'cible_acquisition')
+    .is('owner_team_id', null);
+
+  const npcRevenue = new Map<string, number>();
+  for (const actor of npcRows ?? []) {
+    const rounds = ((actor.ecosystem_actor_rounds ?? []) as Row[])
+      .filter((r) => num(r.round_number) <= roundNumber)
+      .sort((a, b) => num(b.round_number) - num(a.round_number));
+    const revenue = num(rounds[0]?.revenue_mad);
+    const dasId = str(actor.das_id);
+    npcRevenue.set(dasId, (npcRevenue.get(dasId) ?? 0) + revenue);
+  }
+
   const das: DasSnapshot[] = (dasRows ?? []).map((row: Row) => {
     const dasId = str(row.id);
     const parameters: DasParameters = {
@@ -141,6 +163,7 @@ export async function loadResolutionSnapshot(
       previousMarketSizeMad:
         previousMarketSize.get(dasId) ?? num(row.base_market_size_mad),
       growthRate,
+      npcRevenueMad: npcRevenue.get(dasId) ?? 0,
       segments: (segmentRows ?? [])
         .filter((s) => str(s.das_id) === dasId)
         .map((s) => ({

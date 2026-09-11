@@ -53,6 +53,9 @@ function das(over: Partial<DasSnapshot> = {}): DasSnapshot {
   return {
     previousMarketSizeMad: 1_000_000_000,
     growthRate: 0.02,
+    // Aucun concurrent installé : les cas de test portent sur la compétition
+    // entre équipes, qu'un prélèvement extérieur brouillerait.
+    npcRevenueMad: 0,
     segments: [
       { segmentKey: 'grand_public', marketSharePct: 0.6, qualityRequirement: 40, priceSensitivity: 1.4 },
       { segmentKey: 'premium', marketSharePct: 0.4, qualityRequirement: 75, priceSensitivity: 0.8 },
@@ -1346,5 +1349,49 @@ describe('stocks dans la résolution complète', () => {
     // Rien en magasin, et la capacité redevient la seule limite.
     expect(metric.inputStockUnits).toBe(0);
     expect(metric.volumeSold).toBeGreaterThan(0);
+  });
+});
+
+describe('concurrents non joueurs', () => {
+  /**
+   * Un domaine ne contient pas que les équipes de la salle. Les entreprises
+   * installées — celles que le facilitateur peut mettre en vente — servaient
+   * déjà une part du marché sans figurer dans la répartition : les équipes se
+   * partageaient 100 % d'un marché déjà entamé, et le total servi dépassait la
+   * taille du marché.
+   */
+  function marketOf(npcRevenueMad: number) {
+    const base = baseInput({
+      teams: [team('alpha'), team('beta')],
+    });
+    return resolveRound(
+      { ...base, das: base.das.map((d) => ({ ...d, npcRevenueMad })) },
+      params,
+    );
+  }
+
+  it('laisse les équipes se partager tout le marché quand il n’y a aucun installé', () => {
+    const total = marketOf(0).dasMetrics.reduce((acc, m) => acc + m.marketSharePct, 0);
+    expect(total).toBeCloseTo(1, 3);
+  });
+
+  it('réduit la part des équipes de ce que les installés servent déjà', () => {
+    // La taille du marché est dérivée du cas lui-même plutôt que codée en
+    // dur : un montant fixe aurait tout absorbé le jour où la dotation change.
+    const marche = marketOf(0).dasMetrics[0].marketSizeMad;
+    const avec = marketOf(marche * 0.2);
+    const total = avec.dasMetrics.reduce((acc, m) => acc + m.marketSharePct, 0);
+
+    // Un installé qui sert un cinquième du marché en laisse quatre aux équipes.
+    expect(total).toBeCloseTo(0.8, 2);
+    for (const m of avec.dasMetrics) {
+      expect(m.marketSharePct).toBeLessThan(0.5);
+    }
+  });
+
+  it('ne laisse rien aux équipes si les installés servent tout le marché', () => {
+    const total = marketOf(500_000_000_000).dasMetrics
+      .reduce((acc, m) => acc + m.marketSharePct, 0);
+    expect(total).toBeCloseTo(0, 6);
   });
 });

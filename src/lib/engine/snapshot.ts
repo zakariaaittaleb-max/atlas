@@ -39,6 +39,20 @@ export interface DasSnapshot {
   previousMarketSizeMad: number;
   /** Tiré en amont de façon déterministe, dans [growth_min, growth_max]. */
   growthRate: number;
+  /**
+   * Chiffre d'affaires des concurrents NON JOUEURS encore indépendants.
+   *
+   * Un domaine ne contient pas que les équipes présentes dans la salle : il a
+   * ses entreprises installées, que le facilitateur peut mettre en vente. Elles
+   * existaient dans l'écosystème sans exister dans la répartition — les équipes
+   * se partageaient 100 % d'un marché dont ces acteurs servaient déjà une part,
+   * si bien que le marché était servi à plus de 100 % de sa taille.
+   *
+   * Elles prélèvent donc leur part EN PREMIER, et les équipes se disputent le
+   * reste. Une cible rachetée sort de ce compte : sa part revient à l'équipe
+   * qui l'a acquise, ce qui est précisément ce qu'on achète.
+   */
+  npcRevenueMad: number;
   segments: SegmentSnapshot[];
 }
 

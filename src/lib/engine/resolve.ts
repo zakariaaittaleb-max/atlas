@@ -1083,12 +1083,29 @@ export function resolveRound(
       );
     }
 
+    // ── Ce qui reste aux équipes ────────────────────────────────────────
+    //
+    // Un domaine ne contient pas que les équipes présentes dans la salle : il a
+    // ses entreprises installées, que le facilitateur peut mettre en vente.
+    // Elles servaient déjà une part du marché sans figurer dans la répartition,
+    // si bien que les équipes se partageaient 100 % d'un marché déjà entamé —
+    // le marché était servi à plus de 100 % de sa taille.
+    //
+    // Elles prélèvent donc leur part d'abord. Les équipes se disputent le
+    // reste, et leur part affichée reste une part du marché TOTAL : c'est ce
+    // que le mot « part de marché » veut dire, et c'est ce qui rend le rachat
+    // d'une cible lisible — sa part passe de l'écosystème à l'acquéreur.
+    const marketSize = marketSizeByDas.get(dasId) ?? 0;
+    const npcRevenue = Math.min(dasById.get(dasId)?.npcRevenueMad ?? 0, marketSize);
+    const playersShareOfMarket = marketSize > 0 ? 1 - npcRevenue / marketSize : 1;
+
     for (const w of list) {
-      w.rawShare = allocation.shares[w.teamId] ?? 0;
-      w.marketShare = shares[w.teamId] ?? 0;
+      w.rawShare = (allocation.shares[w.teamId] ?? 0) * playersShareOfMarket;
+      w.marketShare = (shares[w.teamId] ?? 0) * playersShareOfMarket;
 
       // Océan bleu : hors du pool, l'équipe se taille une part sur un marché
-      // vierge plutôt que d'en disputer une.
+      // vierge plutôt que d'en disputer une. Les installés n'y sont pas non
+      // plus — c'est tout l'intérêt d'en sortir.
       if (w.blueOceanActive) {
         w.marketShare = clamp01(w.competitiveness);
         w.rawShare = w.marketShare;
