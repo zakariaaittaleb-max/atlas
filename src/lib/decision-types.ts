@@ -119,7 +119,11 @@ export interface DasProgress {
 
 export interface DasEntry {
   dasId: string;
+  /** La marque de l'équipe, ou le nom du secteur à défaut. */
   name: string;
+  /** Le nom du secteur, toujours. */
+  activityName: string;
+  brandName: string | null;
   sectorKey: string;
   /** `listed_for_sale` : encore piloté, mais mis en vente ce tour. */
   status: 'active' | 'listed_for_sale';

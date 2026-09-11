@@ -45,9 +45,13 @@ export async function loadMoneyBar(): Promise<MoneyBar | null> {
     await Promise.all([
       supabase.from('pnl_statements').select('treasury_end_mad')
         .eq('team_id', team.teamId).eq('round_number', roundNumber - 1).maybeSingle(),
+      // Tous les budgets connus : l'état (dette, siège reconduit) se lit sur le
+      // DERNIER, les gestes du tour (tirage, remboursement, dividende) sur
+      // celui du tour COURANT seulement. Les confondre comptait le tirage d'un
+      // tour précédent comme un encaissement du tour en cours.
       supabase.from('financial_budgets').select('*')
         .eq('team_id', team.teamId).lte('round_number', roundNumber)
-        .order('round_number', { ascending: false }).limit(1).maybeSingle(),
+        .order('round_number'),
       supabase.from('das_decisions').select('*')
         .eq('team_id', team.teamId).eq('round_number', roundNumber),
       supabase.from('hr_metrics').select('*')
@@ -56,7 +60,13 @@ export async function loadMoneyBar(): Promise<MoneyBar | null> {
         .eq('team_id', team.teamId).eq('round_number', roundNumber - 1).maybeSingle(),
     ]);
 
-  const drawnThisRoundMad = num(budget?.debt_drawn_mad);
+  const budgets = (budget ?? []) as Record<string, unknown>[];
+  /** Le dernier budget connu : il porte l'ÉTAT — dette en cours, frais de siège. */
+  const lastBudget = budgets.at(-1) ?? null;
+  /** Celui du tour courant : il porte les GESTES, qui ne se reconduisent pas. */
+  const thisRound = budgets.find((b) => num(b.round_number) === roundNumber) ?? null;
+
+  const drawnThisRoundMad = num(thisRound?.debt_drawn_mad);
 
   // Ce dont on dispose : la trésorerie de clôture du dernier exercice, plus le
   // crédit pris ce tour. Un tirage augmente réellement la capacité à engager —
@@ -84,14 +94,15 @@ export async function loadMoneyBar(): Promise<MoneyBar | null> {
 
   const engagedMad =
     payrollMad + dasEngagedMad +
-    num(budget?.opex_mad) + num(budget?.debt_repaid_mad) + num(hr?.training_budget_mad);
+    num(lastBudget?.opex_mad) + num(thisRound?.debt_repaid_mad) +
+    num(thisRound?.dividend_mad) + num(hr?.training_budget_mad);
 
   return {
     availableMad,
     engagedMad,
     payrollMad,
     dasEngagedMad,
-    debtOutstandingMad: num(budget?.debt_outstanding_mad),
+    debtOutstandingMad: num(lastBudget?.debt_outstanding_mad),
     drawnThisRoundMad,
   };
 }

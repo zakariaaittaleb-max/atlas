@@ -14,6 +14,7 @@ import type {
   AxisRef, DasOrganisation, DirectionRef, KpiRef, OrgContext, PositionDraft,
 } from '@/lib/org-types';
 import { createServerClient } from '@/lib/supabase/server';
+import { latestAtMost } from './reconduction';
 
 type Row = Record<string, unknown>;
 const num = (v: unknown, d = 0) => (typeof v === 'number' ? v : Number(v ?? d) || d);
@@ -67,10 +68,17 @@ export async function loadOrgContext(): Promise<OrgContext> {
       .eq('session_id', team.sessionId),
     supabase.from('das_hr_decisions').select('*')
       .eq('team_id', team.teamId).eq('round_number', roundNumber),
-    // Le tour précédent sert de RÉFÉRENCE aux curseurs de variation : sans lui,
-    // « +30 % de formation » ne se rapporterait à rien.
+    // Le dernier exercice SAISI sert de RÉFÉRENCE aux curseurs de variation :
+    // sans lui, « +30 % de formation » ne se rapporterait à rien.
+    //
+    // `lt` et non `eq` sur le tour précédent : une ligne de décision n'existe
+    // que pour les tours où l'équipe a écrit quelque chose. Lire le seul tour
+    // d'avant faisait perdre la référence à toute équipe qui avait sauté un
+    // exercice — les curseurs retombaient alors sur la dotation, c'est-à-dire
+    // sur des valeurs qu'elle n'avait jamais décidées.
     supabase.from('das_hr_decisions').select('*')
-      .eq('team_id', team.teamId).eq('round_number', roundNumber - 1),
+      .eq('team_id', team.teamId).lt('round_number', roundNumber)
+      .order('round_number'),
     // L'état du dernier exercice CLOS : on décide en regardant d'où l'on part.
     //
     // `lte` et non `lt` : une ligne n'existe pour le tour courant qu'APRÈS sa
@@ -204,7 +212,12 @@ export async function loadOrgContext(): Promise<OrgContext> {
         };
       })(),
       hrPrevious: (() => {
-        const h = ((hrPreviousRows ?? []) as Row[]).find((r) => str(r.das_id) === dasId);
+        // La DERNIÈRE décision connue de ce domaine, et non celle d'un tour
+        // précis : c'est la règle de reconduction, la même partout.
+        const h = latestAtMost(
+          ((hrPreviousRows ?? []) as Row[]).filter((r) => str(r.das_id) === dasId),
+          roundNumber - 1,
+        );
         return {
           hireOperateurs: num(h?.hire_operateurs),
           hireTechniciens: num(h?.hire_techniciens),

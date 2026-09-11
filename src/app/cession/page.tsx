@@ -33,7 +33,7 @@ export default async function CessionPage() {
   const [
     { data: units }, { data: ownListings }, { data: interest },
     { data: market }, { data: myBids }, { data: targets }, { data: myOffers },
-    { data: links },
+    { data: links }, { data: segments },
   ] =
     await Promise.all([
       // Portefeuille de l'équipe. `strategic_units` n'expose que l'identité du
@@ -72,6 +72,9 @@ export default async function CessionPage() {
       // que l'équipe EXPLOITE. Identité seulement — capacité, fiabilité et
       // marge exigée restent au cabinet.
       supabase.from('integration_targets_public').select('*'),
+      // Le référentiel des segments : il dit ce qu'un domaine vend, et il est
+      // public — c'est le marché, pas un secret d'équipe.
+      supabase.from('market_segments').select('das_id, name'),
     ]);
 
   const interestByListing = new Map(
@@ -115,6 +118,12 @@ export default async function CessionPage() {
           targetName: String(t.target_name),
           dasName: String(t.das_name),
           regionKey: t.region_key ? String(t.region_key) : null,
+          sizeClass: String(t.size_class ?? 'moyenne') as 'petite' | 'moyenne' | 'grande',
+          // Les segments du domaine disent ce que l'entreprise vend. Ils sont
+          // publics — c'est le référentiel du marché, pas un secret d'équipe.
+          segments: (segments ?? [])
+            .filter((s) => String(s.das_id) === String(t.das_id))
+            .map((s) => String(s.name)),
         }))}
       myOffers={(myOffers ?? [])
         .filter((o) => String(o.status) === 'sealed')

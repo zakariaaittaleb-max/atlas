@@ -45,6 +45,7 @@ import {
 } from '@/lib/decision-types';
 import { deepEqual } from '@/lib/deep-equal';
 import { anyOn, isOn, type EnabledModules } from '@/lib/modules-state';
+import { BrandName } from '@/components/brand-name';
 import { VariationField } from '@/components/variation-field';
 import { endowmentReference } from '@/lib/variation-references';
 import { referenceOr, type VariationScale } from '@/lib/variation-scale';
@@ -361,11 +362,20 @@ export function StrategieGroupeView({
  */
 export function StrategieDasView({
   context, missing, modules, scales,
+  renameBrandAction,
 }: {
   context: DecisionContext;
   missing: MissingDecision[];
   modules: EnabledModules;
   scales: Readonly<Record<string, VariationScale>>;
+  /**
+   * Passée en PROPRIÉTÉ et non importée : un composant client qui importe une
+   * action serveur tire tout le graphe `server-only` dans son bundle, et
+   * `boundaries.test.ts` refuse cette dépendance — y compris transitive, ce
+   * qu'a montré `marches-view`, qui n'importe que `checklistOf` d'ici.
+   */
+  renameBrandAction: (input: { dasId: string; brandName: string }) =>
+    Promise<{ ok: true; name: string } | { ok: false; error: string }>;
 }) {
   const router = useRouter();
   const autosave = useAutosave();
@@ -421,7 +431,21 @@ export function StrategieDasView({
             Tour {context.roundNumber} · niveau domaine
           </p>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-            {das ? `Stratégie de ${das.name}` : 'Stratégie du domaine'}
+            {das ? (
+              <>
+                Stratégie de{' '}
+                {/* Le domaine EST une marque : c'est ici qu'on la nomme, dans
+                    le titre de l'écran qui la pilote. */}
+                <BrandName
+                  dasId={das.dasId}
+                  brandName={das.brandName}
+                  activityName={das.activityName}
+                  renameAction={renameBrandAction}
+                />
+              </>
+            ) : (
+              'Stratégie du domaine'
+            )}
           </h1>
           <p className="mt-3 max-w-3xl text-(--foreground-muted)">
             Ces choix ne concernent que le domaine piloté. Changez de domaine dans la barre du

@@ -24,7 +24,7 @@ export async function loadDasScope(): Promise<DasScope | null> {
   const supabase = await createServerClient();
   const { data: units } = await supabase
     .from('team_units')
-    .select('das_id, status, launched_round, strategic_units(id, name, sector_key)')
+    .select('das_id, status, launched_round, brand_name, strategic_units(id, name, sector_key)')
     .eq('team_id', team.teamId)
     .in('status', ['active', 'listed_for_sale']);
 
@@ -34,9 +34,13 @@ export async function loadDasScope(): Promise<DasScope | null> {
         { id: string; name: string; sector_key: string } | null;
       if (!unit) return null;
       const launchedRound = Number(u.launched_round ?? 0);
+      const brandName = u.brand_name ? String(u.brand_name) : null;
       return {
         dasId: String(u.das_id),
-        name: unit.name,
+        // La marque prime à l'affichage ; le secteur reste disponible à côté.
+        name: brandName ?? unit.name,
+        activityName: unit.name,
+        brandName,
         sectorKey: unit.sector_key,
         status: (String(u.status) === 'listed_for_sale' ? 'listed_for_sale' : 'active') as
           DasOption['status'],

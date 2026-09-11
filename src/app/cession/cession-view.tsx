@@ -80,6 +80,22 @@ export interface AcquisitionTarget {
   targetName: string;
   dasName: string;
   regionKey: string | null;
+  /**
+   * Taille de l'entreprise, en trois classes.
+   *
+   * Ce qu'un acquéreur sait AVANT d'ouvrir les livres : tout le monde voit si
+   * un concurrent est gros ou petit, personne ne connaît son chiffre d'affaires.
+   * Les montants restent ce que le cabinet vend.
+   */
+  sizeClass?: 'petite' | 'moyenne' | 'grande';
+  /**
+   * Ce que le domaine vend réellement : ses segments de clientèle.
+   *
+   * Absents pour un maillon de la filière : la vue d'intégration n'expose ni
+   * la taille ni le marché d'un fournisseur, et la carte s'adapte plutôt que
+   * d'afficher un blanc.
+   */
+  segments?: string[];
 }
 
 interface MyOffer {
@@ -531,6 +547,43 @@ function AcquisitionCard({
           {target.regionKey ? ` · ${target.regionKey.replace(/_/g, ' ')}` : ''}
         </p>
       </div>
+
+      {/* ── Ce que l'entreprise fait, et de quelle taille ──────────────────
+          L'écran proposait d'acheter une société en n'en disant que le nom, le
+          domaine et la région. On décide d'une acquisition sur ce qu'elle fait
+          et sur son poids, pas sur son état civil. */}
+      {target.sizeClass ? (
+      <p className="mt-3 text-sm">
+        <span
+          className="mr-2 rounded px-1.5 py-0.5 text-xs font-semibold tracking-wide uppercase"
+          style={{
+            background: 'var(--surface-muted)',
+            color:
+              target.sizeClass === 'grande' ? 'var(--warning)'
+              : target.sizeClass === 'petite' ? 'var(--foreground-muted)'
+              : 'var(--accent)',
+          }}
+        >
+          {target.sizeClass === 'grande' ? 'Grande entreprise'
+            : target.sizeClass === 'moyenne' ? 'Entreprise moyenne'
+            : 'Petite entreprise'}
+        </span>
+        <span className="text-(--foreground-muted)">
+          {target.sizeClass === 'grande'
+            ? 'Plus de 8 % du marché de son domaine : une reprise qui change votre position d’un coup, et qui s’intègre lourdement.'
+            : target.sizeClass === 'moyenne'
+              ? 'Entre 2 et 8 % du marché de son domaine.'
+              : 'Moins de 2 % du marché de son domaine : une porte d’entrée, pas une position.'}
+        </span>
+      </p>
+      ) : null}
+
+      {target.segments && target.segments.length > 0 ? (
+        <p className="mt-2 text-sm text-(--foreground-muted)">
+          <span className="font-medium text-(--foreground)">Son marché : </span>
+          {target.segments.join(' · ')}
+        </p>
+      ) : null}
 
       {owned ? (
         <p className="mt-3 text-sm" style={{ color: owned === 'moi' ? 'var(--positive)' : 'var(--warning)' }}>

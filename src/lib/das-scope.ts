@@ -32,7 +32,12 @@ export const DAS_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 export interface DasOption {
   dasId: string;
+  /** Ce qu'on affiche : la marque de l'équipe, ou le nom du secteur à défaut. */
   name: string;
+  /** Le nom du secteur, toujours. Une marque ne remplace pas le métier. */
+  activityName: string;
+  /** La marque telle qu'elle est en base : `null` si l'équipe n'en a pas donné. */
+  brandName: string | null;
   sectorKey: string;
   /** `listed_for_sale` : encore piloté, mais en vente. L'écran doit le dire. */
   status: 'active' | 'listed_for_sale';

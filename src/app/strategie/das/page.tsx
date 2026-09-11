@@ -2,6 +2,8 @@ import { loadDecisionContext, missingDecisions } from '@/lib/server/decision-con
 import { loadEnabledModules } from '@/lib/server/modules';
 import { loadVariationScales } from '@/lib/server/variation-scales';
 
+import { renameBrandAction } from '@/app/actions/brand';
+
 import { StrategieDasView } from '../strategie-view';
 
 export const metadata = { title: 'Atlas — Stratégie du DAS' };
@@ -19,6 +21,7 @@ export default async function StrategieDasPage() {
       missing={missingDecisions(context, modules)}
       modules={modules}
       scales={scales}
+      renameBrandAction={renameBrandAction}
     />
   );
 }

@@ -69,7 +69,7 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
     // et une annonce peut être retirée — le laisser sans décisions le ferait
     // tourner à vide pendant tout le tour.
     supabase.from('team_units')
-      .select('das_id, status, launched_round, strategic_units(id, name, sector_key)')
+      .select('das_id, status, launched_round, brand_name, strategic_units(id, name, sector_key)')
       .eq('team_id', team.teamId).in('status', ['active', 'listed_for_sale']),
     supabase.from('market_segments').select('id, das_id, segment_key, name'),
     // `lte` et non `eq` : la décision du tour précédent est le point de départ
@@ -182,9 +182,12 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
     const catalogueKeys = mySegments.map((seg) => seg.key);
     const baselineDecision = toDasDecision(baselineRow, defaults, catalogueKeys);
 
+    const brandName = u.brand_name ? str(u.brand_name) : null;
     return {
       dasId,
-      name: unit?.name ?? 'DAS',
+      name: brandName ?? unit?.name ?? 'DAS',
+      activityName: unit?.name ?? 'DAS',
+      brandName,
       sectorKey: unit?.sector_key ?? '',
       status: (str(u.status) === 'listed_for_sale' ? 'listed_for_sale' : 'active') as DasEntry['status'],
       launchedRound,
