@@ -1,9 +1,13 @@
 /**
  * Réponse d'une équipe à une carte de crise (War Room).
  *
- * Quatre postures, du renoncement à la contre-attaque. **Ignorer est une
- * réponse légitime** : c'est aussi un arbitrage, et l'écran ne doit pas le
- * présenter comme un oubli.
+ * L'équipe RÉDIGE ce qu'elle fait et engage un budget. Les quatre postures
+ * tabulées — ignorer, atténuer, absorber, retourner — ont disparu : une crise
+ * se jouait au clic, et la meilleure réponse se devinait sans jamais l'écrire.
+ *
+ * Cette route n'interprète RIEN du texte. Elle l'enregistre, et le facilitateur
+ * arbitrera après l'avoir lu. Ne rien écrire reste une réponse : l'événement
+ * s'applique alors tel qu'il est annoncé.
  */
 
 import { NextResponse } from 'next/server';
@@ -12,28 +16,15 @@ import { z } from 'zod';
 import { decisionsAreOpen, getRoundState, getTeamContext } from '@/lib/dal';
 import { isOn } from '@/lib/modules-state';
 import { loadEnabledModules } from '@/lib/server/modules';
-import { engineParamsFrom } from '@/lib/server/divest';
 import { createAdminClient } from '@/lib/supabase/server';
 
 const Request = z.object({
   shockId: z.string().uuid(),
-  response: z.enum(['ignorer', 'attenuer', 'absorber', 'retourner']),
+  // Assez long pour un plan d'action argumenté, assez court pour rester lisible
+  // par un facilitateur qui en parcourt un par équipe, en salle.
+  plan: z.string().trim().max(2000),
+  budgetMad: z.number().finite().min(0),
 });
-
-/** Coût de la réponse, en part du chiffre d'affaires du tour précédent. */
-const COST_KEYS: Record<string, string | null> = {
-  ignorer: null,
-  attenuer: 'pestel.response_attenuate_cost_pct',
-  absorber: 'pestel.response_absorb_cost_pct',
-  retourner: 'pestel.response_reverse_cost_pct',
-};
-
-const EFFECT_KEYS: Record<string, string | null> = {
-  ignorer: null,
-  attenuer: 'pestel.response_attenuate_effect',
-  absorber: 'pestel.response_absorb_effect',
-  retourner: 'pestel.response_reverse_effect',
-};
 
 export async function POST(request: Request) {
   const team = await getTeamContext();
@@ -74,28 +65,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Carte introuvable.' }, { status: 404 });
   }
 
-  const [{ data: paramRows }, { data: pnl }] = await Promise.all([
-    admin.from('engine_parameters').select('key, value').eq('session_id', team.sessionId),
-    admin.from('pnl_statements').select('revenue_mad')
-      .eq('team_id', team.teamId).eq('round_number', roundNumber - 1).maybeSingle(),
-  ]);
-
-  const params = engineParamsFrom(paramRows as { key: string; value: number }[] | null);
-  const revenue = Number(pnl?.revenue_mad ?? 0);
-
-  const costKey = COST_KEYS[parsed.data.response];
-  const effectKey = EFFECT_KEYS[parsed.data.response];
-
   const { error } = await admin.from('shock_responses').upsert(
     {
       shock_id: parsed.data.shockId,
       team_id: team.teamId,
       round_number: roundNumber,
-      response: parsed.data.response,
-      // Le coût est proportionnel au chiffre d'affaires : répondre à une crise
-      // coûte à proportion de ce qu'on a à protéger.
-      cost_mad: costKey ? revenue * (params[costKey] ?? 0) : 0,
-      effectiveness: effectKey ? (params[effectKey] ?? 0) : 0,
+      plan: parsed.data.plan,
+      // Le budget engagé est débité que la carte s'avère bénigne ou non :
+      // c'est le prix de l'assurance, et c'est l'arbitrage de l'équipe.
+      cost_mad: parsed.data.budgetMad,
     },
     { onConflict: 'shock_id,team_id' },
   );
@@ -106,7 +84,7 @@ export async function POST(request: Request) {
 
   await admin.from('decisions_log').insert({
     team_id: team.teamId, round_number: roundNumber, decision_type: 'reponse_crise',
-    payload: { shockId: parsed.data.shockId, response: parsed.data.response },
+    payload: { shockId: parsed.data.shockId, budgetMad: parsed.data.budgetMad },
     decided_by: team.userId,
   });
 

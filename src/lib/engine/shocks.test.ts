@@ -3,8 +3,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import {
-  EFFECT_KEYS, EFFECT_SPECS, describeLevers, emptyLevers, mergeLevers, mitigateShock,
-  sanitiseLevers,
+  EFFECT_KEYS, EFFECT_SPECS, describeLevers, emptyLevers, impactFactor, mergeLevers,
+  sanitiseLevers, scaleShock,
 } from './shocks';
 
 describe('vocabulaire des chocs', () => {
@@ -133,45 +133,65 @@ describe('sens de la phrase', () => {
   });
 });
 
-describe('atténuation par la réponse de l’équipe', () => {
-  // Le sens n'est pas devinable : +20 % de marché est une aubaine, +20 % de
-  // coût d'intrants une tuile. C'est le catalogue qui tranche.
+describe('arbitrage du facilitateur sur une carte', () => {
   const carte = {
     dasId: 'das-1',
-    marketSizePct: -0.20,   // défavorable : le marché se contracte
-    inputCostPct: 0.30,     // défavorable : les achats renchérissent
-    capacityPct: 0.10,      // FAVORABLE : l'outil produit davantage
-    payrollPct: 0.15,       // défavorable
-    qualityFloor: 60,       // défavorable : un seuil s'impose
+    marketSizePct: -0.20,   // le marché se contracte
+    inputCostPct: 0.30,     // les achats renchérissent
+    capacityPct: 0.10,      // l'outil produit davantage
+    payrollPct: 0.15,
+    qualityFloor: 60,
   };
 
-  it('laisse la carte intacte quand l’équipe ignore', () => {
-    expect(mitigateShock(carte, 0)).toEqual(carte);
+  it('laisse la carte intacte sans arbitrage', () => {
+    expect(scaleShock(carte, 1)).toEqual(carte);
   });
 
-  it('réduit de moitié l’effet adverse à efficacité 0,5', () => {
-    const out = mitigateShock(carte, 0.5);
-    expect(out.inputCostPct).toBeCloseTo(0.15, 9);
-    expect(out.payrollPct).toBeCloseTo(0.075, 9);
-    expect(out.marketSizePct).toBeCloseTo(-0.10, 9);
-    expect(out.qualityFloor).toBeCloseTo(30, 9);
-  });
-
-  it('NE TOUCHE PAS ce qui joue en faveur de l’équipe', () => {
-    // « Absorber » un choc favorable effacerait la bonne nouvelle que
-    // l'équipe vient de payer pour garder.
-    expect(mitigateShock(carte, 1).capacityPct).toBeCloseTo(0.10, 9);
-  });
-
-  it('neutralise l’adversité à efficacité 1, sans la convertir en gain', () => {
-    const out = mitigateShock(carte, 1);
+  it('efface l’événement pour l’équipe qui l’a évité', () => {
+    const out = scaleShock(carte, 0);
     expect(out.inputCostPct).toBe(0);
     expect(out.marketSizePct).toBe(0);
     expect(out.qualityFloor).toBe(0);
+    expect(out.capacityPct).toBe(0);
   });
 
-  it('borne les efficacités aberrantes', () => {
-    expect(mitigateShock(carte, 5).inputCostPct).toBe(0);
-    expect(mitigateShock(carte, -3)).toEqual(carte);
+  /**
+   * Toute la carte suit le facteur, et non ses seuls effets adverses. Réserver
+   * l'échelle à l'adversité rendait le curseur inerte sur une opportunité :
+   * « passée à côté » et « trois fois mieux exploitée » n'auraient rien changé.
+   */
+  it('met toute la carte à l’échelle, pas seulement ce qui nuit', () => {
+    const out = scaleShock(carte, 0.5);
+    expect(out.inputCostPct).toBeCloseTo(0.15, 9);
+    expect(out.marketSizePct).toBeCloseTo(-0.10, 9);
+    expect(out.capacityPct).toBeCloseTo(0.05, 9);
+    expect(out.qualityFloor).toBeCloseTo(30, 9);
+  });
+
+  it('peut faire frapper l’événement trois fois plus fort', () => {
+    const out = scaleShock(carte, 3);
+    expect(out.inputCostPct).toBeCloseTo(0.90, 9);
+    expect(out.marketSizePct).toBeCloseTo(-0.60, 9);
+  });
+
+  it('borne les facteurs aberrants', () => {
+    expect(scaleShock(carte, 12).inputCostPct).toBeCloseTo(0.90, 9);
+    expect(scaleShock(carte, -3).inputCostPct).toBe(0);
+  });
+});
+
+describe('conversion du curseur en facteur', () => {
+  // Le curseur parle en écart, le moteur multiplie : la conversion doit vivre
+  // à un seul endroit, sans quoi l'écran et le calcul divergent en silence.
+  it('traduit les trois repères du curseur', () => {
+    expect(impactFactor(-100)).toBe(0);
+    expect(impactFactor(0)).toBe(1);
+    expect(impactFactor(200)).toBe(3);
+  });
+
+  it('borne et neutralise une saisie hors échelle', () => {
+    expect(impactFactor(-500)).toBe(0);
+    expect(impactFactor(900)).toBe(3);
+    expect(impactFactor(Number.NaN)).toBe(1);
   });
 });

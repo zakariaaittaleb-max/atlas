@@ -874,10 +874,9 @@ const secheresse = {
 
 describe('réponses aux chocs', () => {
   /**
-   * Le défaut corrigé : la war room proposait quatre réponses, la route
-   * calculait leur coût et leur efficacité, les écrivait en base — et
-   * personne ne relisait la table. Ignorer était donc la seule réponse
-   * rationnelle, puisque les trois autres se payaient sans rien produire.
+   * Le facteur est l'arbitrage du facilitateur, qui a lu le plan de l'équipe :
+   * 0 l'événement a été évité, 1 il s'applique tel quel, 3 il a frappé trois
+   * fois plus fort.
    */
   it('protège la part de marché de qui répond, face à qui ignore', () => {
     const result = resolveRound(
@@ -885,7 +884,7 @@ describe('réponses aux chocs', () => {
         shocks: [secheresse],
         teams: [
           team('t1', { shockResponses: [
-            { shockId: 'shock-secheresse', effectiveness: 0.75, costMad: 0 },
+            { shockId: 'shock-secheresse', impactFactor: 0.25, costMad: 0 },
           ] }),
           team('t2'),
           team('t3'),
@@ -905,7 +904,7 @@ describe('réponses aux chocs', () => {
             shocks: [secheresse],
             teams: [
               team('t1', { shockResponses: [
-                { shockId: 'shock-secheresse', effectiveness: 0.4, costMad },
+                { shockId: 'shock-secheresse', impactFactor: 0.6, costMad },
               ] }),
               team('t2'), team('t3'),
             ],
@@ -918,13 +917,13 @@ describe('réponses aux chocs', () => {
     expect(build(20_000_000)).toBeCloseTo(build(0) - 20_000_000, 0);
   });
 
-  it('n’atténue une carte que pour l’équipe qui l’a payée', () => {
+  it('n’arbitre une carte que pour l’équipe jugée', () => {
     const result = resolveRound(
       baseInput({
         shocks: [secheresse],
         teams: [
           team('t1', { shockResponses: [
-            { shockId: 'shock-secheresse', effectiveness: 1, costMad: 0 },
+            { shockId: 'shock-secheresse', impactFactor: 0, costMad: 0 },
           ] }),
           team('t2'), team('t3'),
         ],
@@ -946,7 +945,7 @@ describe('réponses aux chocs', () => {
         shocks: [secheresse],
         teams: [
           team('t1', { shockResponses: [
-            { shockId: 'shock-secheresse', effectiveness: 1, costMad: 0 },
+            { shockId: 'shock-secheresse', impactFactor: 0, costMad: 0 },
           ] }),
           team('t2'), team('t3'),
         ],
@@ -964,7 +963,7 @@ describe('réponses aux chocs', () => {
         shocks: [secheresse],
         teams: [
           team('t1', { shockResponses: [
-            { shockId: 'carte-inexistante', effectiveness: 1, costMad: 0 },
+            { shockId: 'carte-inexistante', impactFactor: 0, costMad: 0 },
           ] }),
           team('t2'), team('t3'),
         ],

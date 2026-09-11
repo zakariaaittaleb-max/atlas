@@ -25,6 +25,7 @@ import type {
 } from '@/lib/engine/snapshot';
 import type { DasParameters, GenericStrategy } from '@/lib/engine/types';
 import { makeRng, seedFrom, uniform } from '@/lib/engine/math';
+import { impactFactor } from '@/lib/engine/shocks';
 import {
   directionAffinityFromKpis,
   type Affinity,
@@ -275,7 +276,7 @@ export async function loadResolutionSnapshot(
     admin.from('financial_budgets').select('team_id, round_number').in('team_id', teamIds).lt('round_number', roundNumber),
     admin.from('ecosystem_actors').select('id, actor_type, das_id, owner_team_id, integration_quality, ecosystem_actor_rounds(*)').eq('session_id', sessionId),
     admin.from('market_shocks').select('*').eq('session_id', sessionId).gte('rounds_remaining', 1),
-    admin.from('shock_responses').select('shock_id, team_id, cost_mad, effectiveness')
+    admin.from('shock_responses').select('shock_id, team_id, cost_mad, impact_pct')
       .in('team_id', teamIds).eq('round_number', roundNumber),
     admin.from('das_listings').select('*').eq('session_id', sessionId).eq('round_number', roundNumber).eq('status', 'open'),
     admin.from('das_bids').select('*').eq('round_number', roundNumber).eq('status', 'sealed'),
@@ -853,7 +854,10 @@ export async function loadResolutionSnapshot(
         .filter((r) => str(r.team_id) === teamId)
         .map((r) => ({
           shockId: str(r.shock_id),
-          effectiveness: num(r.effectiveness),
+          // L'arbitrage du facilitateur, converti en facteur au seul endroit
+          // qui fait la conversion. Une ligne sans arbitrage vaut 0 %, donc
+          // un facteur de 1 : la carte s'applique telle qu'elle est écrite.
+          impactFactor: impactFactor(num(r.impact_pct)),
           costMad: num(r.cost_mad),
         })),
     };

@@ -92,7 +92,7 @@ import {
   utilisationEffects,
 } from './operations';
 import { organisationalAxes } from './organisation';
-import { mitigateShock } from './shocks';
+import { scaleShock } from './shocks';
 import { param, type EngineParams } from './params';
 import type {
   AcquisitionOperation,
@@ -404,14 +404,12 @@ interface UnitWorkspace {
 function shocksFor(
   dasId: string,
   shocks: ShockEffects[],
-  mitigation?: Map<string, number>,
+  /** Le jugement du facilitateur, carte par carte : 1 = la carte telle quelle. */
+  judgement?: Map<string, number>,
 ): ShockEffects {
   const relevant = shocks
     .filter((s) => s.dasId === dasId)
-    .map((s) => {
-      const effectiveness = mitigation?.get(s.shockId) ?? 0;
-      return effectiveness > 0 ? mitigateShock(s, effectiveness) : s;
-    });
+    .map((s) => scaleShock(s, judgement?.get(s.shockId) ?? 1));
 
   /**
    * Les pourcentages s'ADDITIONNENT plutôt que de se composer : deux cartes à
@@ -478,14 +476,14 @@ export function resolveRound(
   // capacité, seuil de qualité, RH, trésorerie. Elle ne sert PAS à la taille
   // du marché, calculée plus haut : le marché est partagé par tout le pool, et
   // ne peut pas rétrécir différemment selon l'équipe qui le regarde.
-  const mitigationByTeam = new Map<string, Map<string, number>>(
+  const judgementByTeam = new Map<string, Map<string, number>>(
     activeTeams.map((t) => [
       t.teamId,
-      new Map(t.shockResponses.map((r) => [r.shockId, r.effectiveness])),
+      new Map(t.shockResponses.map((r) => [r.shockId, r.impactFactor])),
     ]),
   );
   const teamShock = (teamId: string, dasId: string): ShockEffects =>
-    shocksFor(dasId, input.shocks, mitigationByTeam.get(teamId));
+    shocksFor(dasId, input.shocks, judgementByTeam.get(teamId));
 
   // ─────────────────────────────────────────────────────────────────────────
   // PHASE A — Par équipe et par DAS : amont, capacité, coûts, qualité, canal

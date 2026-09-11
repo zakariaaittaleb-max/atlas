@@ -98,30 +98,32 @@ export function describeLevers(levers: ShockLevers): string[] {
 }
 
 /**
- * Atténuation d'une carte par la réponse d'une équipe.
+ * Ce que la réponse d'une équipe fait à une carte, pour elle seule.
  *
- * ── POURQUOI CETTE FONCTION EXISTE ─────────────────────────────────────────
- * Répondre à une crise ne faisait RIEN. L'écran de war room proposait quatre
- * réponses — ignorer, atténuer, absorber, retourner — la route calculait
- * consciencieusement leur coût et leur efficacité, les écrivait dans
- * `shock_responses`… et personne ne relisait la table. Le coût n'était jamais
- * débité, l'efficacité jamais appliquée : la seule réponse rationnelle était
- * d'ignorer, puisque les trois autres se payaient sans rien produire.
+ * ── CE QUE CETTE FONCTION A REMPLACÉ ───────────────────────────────────────
+ * Répondre à une crise ne faisait d'abord RIEN : l'écran proposait quatre
+ * postures, la route calculait leur coût et leur efficacité, les écrivait dans
+ * `shock_responses`… et personne ne relisait la table. La correction d'alors a
+ * introduit une atténuation tabulée — « absorber » retirait 75 % de la part
+ * défavorable, quel que soit ce que l'équipe avait réellement prévu de faire.
  *
- * ── CE QUI EST ATTÉNUÉ, ET CE QUI NE L'EST PAS ─────────────────────────────
- * Seule la part DÉFAVORABLE d'un levier recule. Le sens est déclaré au
- * catalogue (`positiveIs`), et il n'est pas devinable : +20 % de taille de
- * marché est une aubaine, +20 % de coût des intrants une tuile. Sans cette
- * lecture, « absorber » un choc favorable aurait effacé la bonne nouvelle que
- * l'équipe venait de payer pour garder.
+ * Une crise ne se joue plus au clic : l'équipe rédige son plan, et le
+ * facilitateur, qui a le texte sous les yeux, arbitre ce qu'il vaut. Le facteur
+ * qui arrive ici est SON jugement, entre 0 (l'événement a été évité) et 3 (il a
+ * frappé trois fois plus fort), 1 laissant la carte s'appliquer telle quelle.
  *
- * Une efficacité de 1 — la réponse « retourner » — ramène l'effet adverse à
- * zéro. Elle ne le transforme pas en gain : on neutralise une crise, on ne la
- * convertit pas en profit.
+ * ── POURQUOI TOUS LES LEVIERS, ET PLUS SEULEMENT LES DÉFAVORABLES ──────────
+ * L'atténuation ne touchait que la part adverse, pour qu'« absorber » une carte
+ * mixte n'efface pas sa bonne nouvelle. Cette prudence n'a plus lieu d'être :
+ * un facteur nul sur une OPPORTUNITÉ doit vouloir dire « cette équipe est
+ * passée à côté », et un facteur de 3 « elle l'a exploitée trois fois mieux ».
+ * Réserver l'échelle aux seuls effets adverses aurait rendu le curseur inerte
+ * sur la moitié du catalogue. Le facteur porte donc sur toute la carte, ce qui
+ * se dit en une phrase : l'événement a compté plus, ou moins, pour elle.
  */
-export function mitigateShock<T extends object>(effects: T, effectiveness: number): T {
-  const factor = 1 - Math.min(Math.max(effectiveness, 0), 1);
-  if (factor >= 1) return effects;
+export function scaleShock<T extends object>(effects: T, factor: number): T {
+  const scale = Math.min(Math.max(factor, 0), 3);
+  if (scale === 1) return effects;
 
   const out = { ...effects } as Record<string, unknown>;
 
@@ -131,11 +133,24 @@ export function mitigateShock<T extends object>(effects: T, effectiveness: numbe
     const value = out[key];
     if (typeof value !== 'number' || value === 0) continue;
 
-    const adverse = spec.positiveIs === 'defavorable' ? value > 0 : value < 0;
     // `|| 0` ramène le −0 de `x * 0` à 0 : il ressortirait tel quel en JSON,
     // et « −0 % de coût des intrants » n'est pas une phrase.
-    if (adverse) out[key] = value * factor || 0;
+    out[key] = value * scale || 0;
   }
 
   return out as T;
+}
+
+/**
+ * Le facteur d'échelle correspondant à l'arbitrage du facilitateur.
+ *
+ * Le curseur parle en POURCENTAGE D'ÉCART — −100 % à +200 % — parce que c'est
+ * ainsi que se pense un jugement : « ils l'ont évité », « ils l'ont pris de
+ * plein fouet ». Le moteur, lui, multiplie. La conversion vit ici, en un seul
+ * endroit, pour que l'écran et le calcul ne puissent pas en donner deux
+ * lectures.
+ */
+export function impactFactor(impactPct: number): number {
+  const pct = Math.min(Math.max(Number.isFinite(impactPct) ? impactPct : 0, -100), 200);
+  return 1 + pct / 100;
 }

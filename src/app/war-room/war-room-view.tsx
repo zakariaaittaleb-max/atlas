@@ -3,10 +3,17 @@
 /**
  * ATLAS — War Room : réponse aux opportunités et aux menaces.
  *
- * Quatre postures, du renoncement à la contre-attaque. **Ignorer est une
- * réponse légitime**, présentée comme telle : c'est un arbitrage budgétaire,
- * pas un oubli. Une équipe étranglée a de bonnes raisons de laisser passer un
- * choc pour préserver sa trésorerie.
+ * ── POURQUOI LA RÉPONSE EST ÉCRITE ─────────────────────────────────────────
+ * L'écran proposait quatre postures — ignorer, atténuer, absorber, retourner —
+ * dont le coût et l'effet étaient tabulés. Une crise se jouait donc au clic, et
+ * la meilleure réponse se devinait sans jamais l'écrire : exactement ce qu'un
+ * atelier de stratégie ne doit pas récompenser.
+ *
+ * L'équipe RÉDIGE désormais son plan et engage un budget. Le facilitateur lit
+ * chaque plan et arbitre lui-même ce qu'il vaut. Ne rien écrire reste une
+ * réponse légitime — une équipe étranglée a de bonnes raisons de laisser passer
+ * un choc pour préserver sa trésorerie — mais c'est alors l'événement tel
+ * qu'annoncé qui s'applique.
  *
  * Ce que l'écran NE DIT PAS : l'amplitude du choc. Les équipes voient le nom, la
  * description et la source institutionnelle — jamais les chiffres. Qu'un
@@ -29,25 +36,16 @@ export interface ActiveShock {
   dasName: string;
   roundNumber: number;
   roundsRemaining: number;
-  response: string | null;
+  /** Le plan rédigé par l'équipe, tel qu'il est en base. */
+  plan: string | null;
+  /** Ce que l'équipe a engagé sur cette réponse. */
+  budgetMad: number;
 }
 
 const DIMENSIONS: Record<string, string> = {
   politique: 'Politique', economique: 'Économique', socioculturel: 'Socioculturel',
   technologique: 'Technologique', ecologique: 'Écologique', legal: 'Légal',
 };
-
-/** Coût en part du CA du tour précédent, et ce que chaque posture achète. */
-const RESPONSES = [
-  ['ignorer', 'Ignorer', 0,
-   'Vous subissez l’effet plein. C’est un choix défendable si votre trésorerie ne permet rien d’autre.'],
-  ['attenuer', 'Atténuer', 0.02,
-   'Réduit l’effet d’environ 40 %. La réponse minimale, souvent la plus raisonnable.'],
-  ['absorber', 'Absorber', 0.05,
-   'Réduit l’effet d’environ 75 %. Coûteux, mais vous restez dans la course.'],
-  ['retourner', 'Retourner', 0.10,
-   'Neutralise l’effet et vous avantage si vos concurrents le subissent. Très cher, et sans garantie.'],
-] as const;
 
 export function WarRoomView({
   roundNumber, decisionsOpen, shocks, previousRevenueMad,
@@ -64,14 +62,31 @@ export function WarRoomView({
 
   const disabled = busy || pending || !decisionsOpen;
 
-  async function respond(shockId: string, response: string) {
+  /** Le brouillon local, pour que la frappe ne dépende pas d'un aller-retour. */
+  const [drafts, setDrafts] = useState<Record<string, { plan: string; budget: string }>>(
+    Object.fromEntries(
+      shocks.map((s) => [
+        s.shockId,
+        { plan: s.plan ?? '', budget: s.budgetMad > 0 ? String(Math.round(s.budgetMad)) : '' },
+      ]),
+    ),
+  );
+  const [saved, setSaved] = useState<string | null>(null);
+
+  async function submit(shockId: string) {
+    const draft = drafts[shockId] ?? { plan: '', budget: '' };
     setError(null);
+    setSaved(null);
     setBusy(true);
     try {
       const res = await fetch('/api/shocks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shockId, response }),
+        body: JSON.stringify({
+          shockId,
+          plan: draft.plan,
+          budgetMad: Number(draft.budget.replace(/\s/g, '')) || 0,
+        }),
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
@@ -79,6 +94,7 @@ export function WarRoomView({
         setBusy(false);
         return;
       }
+      setSaved(shockId);
       startTransition(() => { router.refresh(); setBusy(false); });
     } catch {
       setError('Le réseau est indisponible. Rien n’a été envoyé.');
@@ -86,7 +102,7 @@ export function WarRoomView({
     }
   }
 
-  const unanswered = shocks.filter((s) => s.response === null && s.roundsRemaining > 0);
+  const unanswered = shocks.filter((s) => !s.plan && s.roundsRemaining > 0);
 
   return (
     <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-10">
@@ -102,8 +118,8 @@ export function WarRoomView({
         </p>
         {unanswered.length > 0 ? (
           <p className="mt-3 rounded-lg border border-(--warning) px-4 py-2.5 text-sm text-(--warning)">
-            {unanswered.length} carte{unanswered.length > 1 ? 's' : ''} sans réponse budgétée.
-            Ne rien décider revient à subir l’effet plein.
+            {unanswered.length} carte{unanswered.length > 1 ? 's' : ''} sans plan rédigé.
+            Ne rien écrire revient à subir l’événement tel qu’il est annoncé.
           </p>
         ) : null}
       </header>
@@ -164,38 +180,89 @@ export function WarRoomView({
               ) : null}
 
               <fieldset disabled={disabled} className="mt-5 border-t border-(--border) pt-5">
-                <legend className="mb-3 text-sm font-medium">Votre réponse</legend>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {RESPONSES.map(([value, label, costPct, hint]) => {
-                    const selected = shock.response === value;
-                    const cost = previousRevenueMad * costPct;
-                    return (
-                      <button
-                        key={value}
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() => respond(shock.shockId, value)}
-                        className="rounded-lg border p-3 text-left disabled:opacity-40"
-                        style={{
-                          borderColor: selected ? 'var(--accent)' : 'var(--border)',
-                          background: selected ? 'var(--surface-muted)' : undefined,
-                        }}
-                      >
-                        <span className="block text-sm" style={{ fontWeight: selected ? 600 : 500 }}>
-                          {selected ? '✓ ' : ''}{label}
-                        </span>
-                        <span className="tabular mt-1 block text-sm">
-                          {cost === 0 ? 'Gratuit' : formatMadCompact(cost)}
-                        </span>
-                        <span className="mt-1.5 block text-xs text-(--foreground-muted)">{hint}</span>
-                      </button>
-                    );
-                  })}
+                <legend className="mb-1 text-sm font-medium">Votre réponse</legend>
+                <p className="mb-3 text-xs text-(--foreground-muted)">
+                  Décrivez ce que vous faites, et ce que vous y consacrez. Votre facilitateur
+                  lit ce plan et décide de ce qu’il vous vaut — un plan précis et financé
+                  pèse plus qu’une intention.
+                </p>
+
+                <label className="block text-xs font-medium" htmlFor={`plan-${shock.shockId}`}>
+                  Votre plan d’action
+                </label>
+                <textarea
+                  id={`plan-${shock.shockId}`}
+                  rows={4}
+                  value={drafts[shock.shockId]?.plan ?? ''}
+                  onChange={(e) =>
+                    setDrafts((d) => ({
+                      ...d,
+                      [shock.shockId]: { ...(d[shock.shockId] ?? { plan: '', budget: '' }), plan: e.target.value },
+                    }))
+                  }
+                  maxLength={2000}
+                  placeholder="Ce que vous décidez, pourquoi, et ce que vous en attendez."
+                  className="mt-1 w-full rounded-lg border border-(--border) bg-(--background) px-3 py-2 text-sm"
+                />
+
+                <div className="mt-3 flex flex-wrap items-end gap-4">
+                  <div>
+                    <label className="block text-xs font-medium" htmlFor={`budget-${shock.shockId}`}>
+                      Budget engagé
+                    </label>
+                    <div className="mt-1 flex items-center gap-2">
+                      <input
+                        id={`budget-${shock.shockId}`}
+                        type="text"
+                        inputMode="numeric"
+                        value={drafts[shock.shockId]?.budget ?? ''}
+                        onChange={(e) =>
+                          setDrafts((d) => ({
+                            ...d,
+                            [shock.shockId]: {
+                              ...(d[shock.shockId] ?? { plan: '', budget: '' }),
+                              budget: e.target.value.replace(/[^0-9]/g, ''),
+                            },
+                          }))
+                        }
+                        className="tabular w-44 rounded-lg border border-(--border) bg-(--background) px-3 py-2 text-sm"
+                        placeholder="0"
+                      />
+                      <span className="text-sm text-(--foreground-muted)">DH</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => submit(shock.shockId)}
+                    className="rounded-lg bg-(--accent) px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+                  >
+                    Transmettre au facilitateur
+                  </button>
+
+                  {saved === shock.shockId ? (
+                    <span className="text-sm text-(--positive)">Transmis.</span>
+                  ) : null}
+
+                  {previousRevenueMad > 0 ? (
+                    <span className="tabular text-xs text-(--foreground-muted)">
+                      Repère : 1 % de votre chiffre d’affaires vaut{' '}
+                      {formatMadCompact(previousRevenueMad * 0.01)}
+                    </span>
+                  ) : null}
                 </div>
 
-                {shock.response === null ? (
+                {shock.budgetMad > 0 ? (
+                  <p className="tabular mt-3 text-xs text-(--foreground-muted)">
+                    Engagé sur cette carte : {formatMadCompact(shock.budgetMad)} — débité que
+                    l’événement s’avère bénin ou non.
+                  </p>
+                ) : null}
+
+                {!shock.plan ? (
                   <p className="mt-3 text-sm text-(--foreground-muted)">
-                    Sans réponse budgétée, vous subissez l’effet plein — ce qui reste un choix.
+                    Sans plan transmis, vous subissez l’événement tel qu’il est annoncé — ce
+                    qui reste un choix.
                   </p>
                 ) : null}
               </fieldset>

@@ -23,7 +23,7 @@ export default async function WarRoomPage() {
         .order('round_number', { ascending: false }),
       supabase.from('shock_cards').select('key, name, description, nature, pestel_dimension, source_reference'),
       supabase.from('strategic_units').select('id, name'),
-      supabase.from('shock_responses').select('shock_id, response')
+      supabase.from('shock_responses').select('shock_id, plan, cost_mad')
         .eq('team_id', team.teamId),
       supabase.from('pnl_statements').select('revenue_mad')
         .eq('team_id', team.teamId).eq('round_number', roundNumber - 1).maybeSingle(),
@@ -31,7 +31,12 @@ export default async function WarRoomPage() {
 
   const cardByKey = new Map((cards ?? []).map((c) => [String(c.key), c]));
   const dasByName = new Map((das ?? []).map((d) => [String(d.id), String(d.name)]));
-  const responseByShock = new Map((responses ?? []).map((r) => [String(r.shock_id), String(r.response)]));
+  const responseByShock = new Map(
+    (responses ?? []).map((r) => [
+      String(r.shock_id),
+      { plan: r.plan ? String(r.plan) : null, budgetMad: Number(r.cost_mad ?? 0) },
+    ]),
+  );
 
   const active: ActiveShock[] = (shocks ?? []).map((s) => {
     const card = cardByKey.get(String(s.card_key));
@@ -45,7 +50,8 @@ export default async function WarRoomPage() {
       dasName: dasByName.get(String(s.das_id)) ?? '—',
       roundNumber: Number(s.round_number),
       roundsRemaining: Number(s.rounds_remaining),
-      response: responseByShock.get(String(s.id)) ?? null,
+      plan: responseByShock.get(String(s.id))?.plan ?? null,
+      budgetMad: responseByShock.get(String(s.id))?.budgetMad ?? 0,
     };
   });
 

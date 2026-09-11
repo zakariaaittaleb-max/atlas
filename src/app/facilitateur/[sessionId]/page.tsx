@@ -28,6 +28,8 @@ import {
   setVariationScalesAction,
 } from './scales-actions';
 import { ScalesSection } from './scales-section';
+import { setShockImpactAction } from './warroom-actions';
+import { WarRoomSection, type WarRoomShock } from './warroom-section';
 
 export const metadata = { title: 'Atlas — Pilotage de session' };
 export const dynamic = 'force-dynamic';
@@ -45,7 +47,7 @@ export default async function FacilitatorPage({
 
   const admin = createAdminClient();
 
-  const [{ data: session }, { data: teams }, { data: das }, { data: targets }, { data: cards }, { data: shocks }, { data: runs }] =
+  const [{ data: session }, { data: teams }, { data: das }, { data: targets }, { data: cards }, { data: shocks }, { data: shockResponses }, { data: runs }] =
     await Promise.all([
       admin.from('game_sessions').select('*').eq('id', sessionId).maybeSingle(),
       admin.from('teams').select('id, name, pool_id, join_code, is_liquidated').eq('session_id', sessionId).order('name'),
@@ -55,8 +57,12 @@ export default async function FacilitatorPage({
       // sans cible n'est pas acquérable même si on le déclarait ouvert.
       admin.from('ecosystem_actors').select('das_id, market_open')
         .eq('session_id', sessionId).eq('actor_type', 'cible_acquisition'),
-      admin.from('shock_cards').select('key, name, description, nature, pestel_dimension, target_sectors, duration_rounds, source_reference').order('pestel_dimension'),
+      admin.from('shock_cards').select('key, name, description, nature, pestel_dimension, target_sectors, duration_rounds, source_reference, effects').order('pestel_dimension'),
       admin.from('market_shocks').select('id, card_key, das_id, round_number, rounds_remaining').eq('session_id', sessionId).order('round_number', { ascending: false }),
+      // Les plans des équipes : lecture par la clé de service, `shock_responses`
+      // n'étant lisible que par l'équipe qui la possède. L'autorisation a été
+      // vérifiée plus haut par `getFacilitatorContext`.
+      admin.from('shock_responses').select('shock_id, team_id, plan, cost_mad, impact_pct, reviewed_at'),
       admin.from('resolution_runs').select('round_number, status, duration_ms, error_message, invariant_failures').eq('session_id', sessionId).order('started_at', { ascending: false }).limit(5),
     ]);
 
@@ -144,6 +150,50 @@ export default async function FacilitatorPage({
     };
   });
 
+  // ── War Room : une carte, puis une équipe par ligne ──────────────────────
+  //
+  // Deux leviers du catalogue sont PARTAGÉS par le pool et lus sans arbitrage :
+  // la taille du marché et la redistribution de parts. Une carte qui n'agit que
+  // sur eux frappe toutes les équipes pareil, quoi que le facilitateur règle.
+  const POOL_LEVERS = new Set(['market_size_pct', 'share_redistribution_pts']);
+  const hasTeamLevelLever = (effects: unknown): boolean =>
+    Object.entries((effects ?? {}) as Record<string, unknown>)
+      .some(([key, value]) => !POOL_LEVERS.has(key) && Number(value) !== 0);
+
+  const cardByKey = new Map((cards ?? []).map((c) => [String(c.key), c]));
+  const dasNameById = new Map((das ?? []).map((d) => [String(d.id), String(d.name)]));
+  const responseRows = (shockResponses ?? []) as Record<string, unknown>[];
+
+  const warRoomShocks: WarRoomShock[] = (shocks ?? [])
+    .filter((s) => Number(s.rounds_remaining) > 0)
+    .map((s) => {
+      const card = cardByKey.get(String(s.card_key));
+      const mine = responseRows.filter((r) => String(r.shock_id) === String(s.id));
+      return {
+        shockId: String(s.id),
+        cardName: String(card?.name ?? s.card_key),
+        nature: String(card?.nature ?? 'menace'),
+        dasName: dasNameById.get(String(s.das_id)) ?? '—',
+        roundNumber: Number(s.round_number),
+        arbitrable: hasTeamLevelLever(card?.effects),
+        // Toutes les équipes vivantes figurent, y compris celles qui n'ont rien
+        // écrit : leur silence est une donnée pour le facilitateur.
+        responses: progress
+          .filter((t) => !t.isLiquidated)
+          .map((t) => {
+            const row = mine.find((r) => String(r.team_id) === t.teamId);
+            return {
+              teamId: t.teamId,
+              teamName: t.name,
+              plan: row?.plan ? String(row.plan) : null,
+              budgetMad: Number(row?.cost_mad ?? 0),
+              impactPct: Number(row?.impact_pct ?? 0),
+              reviewed: Boolean(row?.reviewed_at),
+            };
+          }),
+      };
+    });
+
   return (
     <FacilitatorView
       sessionId={sessionId}
@@ -166,6 +216,13 @@ export default async function FacilitatorPage({
           setModulesAction={setSessionModulesAction}
           savePresetAction={saveModulePresetAction}
           deletePresetAction={deleteModulePresetAction}
+        />
+      }
+      warRoomSection={
+        <WarRoomSection
+          sessionId={sessionId}
+          shocks={warRoomShocks}
+          setImpactAction={setShockImpactAction}
         />
       }
       scalesSection={

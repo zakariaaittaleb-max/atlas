@@ -321,11 +321,13 @@ export interface TeamSnapshot {
   /**
    * Ce que l'équipe a répondu aux cartes du tour.
    *
-   * `effectiveness` ∈ [0,1] atténue la part DÉFAVORABLE de la carte visée ;
-   * `costMad` se paie dans tous les cas, y compris si la carte s'avère
-   * bénigne — c'est le prix de l'assurance, et c'est l'arbitrage.
+   * `impactFactor` est l'arbitrage du facilitateur, qui a lu le plan de
+   * l'équipe : 0 l'événement a été évité, 1 il s'applique tel quel, 3 il a
+   * frappé trois fois plus fort. `costMad` est le budget que l'équipe a engagé
+   * sur sa réponse — il se paie dans tous les cas, y compris si la carte
+   * s'avère bénigne. C'est le prix de l'assurance, et c'est l'arbitrage.
    */
-  shockResponses: { shockId: string; effectiveness: number; costMad: number }[];
+  shockResponses: { shockId: string; impactFactor: number; costMad: number }[];
 }
 
 // ---------------------------------------------------------------------------

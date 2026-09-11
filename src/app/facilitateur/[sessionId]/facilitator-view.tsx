@@ -73,6 +73,7 @@ export function FacilitatorView({
   sessionId, sessionName, joinCode, status, roundNumber, plannedRounds, maxRounds,
   teams, das, cards, activeShocks, runs, difficulty, dials, difficultyLocked, sectors,
   canPlayInTeam, playingTeamId, joinTeamAction, modulesSection, scalesSection,
+  warRoomSection,
 }: {
   sessionId: string; sessionName: string; joinCode: string; status: string;
   roundNumber: number; plannedRounds: number; maxRounds: number;
@@ -83,6 +84,7 @@ export function FacilitatorView({
   /** Rendus côté serveur puis passés tels quels : voir `modules-section.tsx`. */
   modulesSection: React.ReactNode;
   scalesSection: React.ReactNode;
+  warRoomSection: React.ReactNode;
   das: { id: string; name: string; marketOpen: boolean; hasTargets: boolean }[];
   cards: Card[];
   difficulty: string;
@@ -386,6 +388,9 @@ export function FacilitatorView({
 
       {/* ── Jusqu'où les équipes peuvent aller ───────────────────────────── */}
       {scalesSection}
+
+      {/* ── Ce que les équipes ont répondu aux cartes ────────────────────── */}
+      {warRoomSection}
 
       {/* ── Cartes de crise ──────────────────────────────────────────────── */}
       <SettingsSection
