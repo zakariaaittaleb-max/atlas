@@ -360,14 +360,25 @@ async function write(admin: Admin, teamId: string, round: number, body: Body): P
   }
 
 
-  // Plan finance : trésorerie, capitaux propres et dette sont REPRIS du tour
-  // précédent, jamais saisis — une équipe ne décide pas de son bilan d'ouverture.
-  const [{ data: pnl }, { data: previousBudget }] = await Promise.all([
+  // Plan finance : trésorerie, capitaux propres et dette sont REPRIS du dernier
+  // budget connu, jamais saisis — une équipe ne décide pas de son bilan
+  // d'ouverture.
+  //
+  // `lte` et non `eq` : une ligne de budget n'existe que pour les tours où
+  // l'équipe a écrit quelque chose, plus celui de la dotation. Lire le seul
+  // tour précédent faisait donc retomber sur `?? 0` dès qu'une équipe sautait
+  // un exercice — et une équipe qui rouvrait l'écran au tour 3 après l'avoir
+  // ignoré au tour 2 voyait sa DETTE ET SES CAPITAUX PROPRES REMIS À ZÉRO.
+  // Effacer la dette au passage est un cadeau ; effacer les capitaux propres
+  // envoie le levier au plafond et fausse la marge de risque de la banque.
+  const [{ data: pnl }, { data: budgets }] = await Promise.all([
     admin.from('pnl_statements').select('treasury_end_mad')
       .eq('team_id', teamId).eq('round_number', round - 1).maybeSingle(),
-    admin.from('financial_budgets').select('equity_mad, debt_outstanding_mad')
-      .eq('team_id', teamId).eq('round_number', round - 1).maybeSingle(),
+    admin.from('financial_budgets').select('round_number, equity_mad, debt_outstanding_mad')
+      .eq('team_id', teamId).lt('round_number', round).order('round_number'),
   ]);
+
+  const previousBudget = (budgets ?? [])[(budgets ?? []).length - 1] ?? null;
 
   fail((await admin.from('financial_budgets').upsert({
     team_id: teamId, round_number: round,
