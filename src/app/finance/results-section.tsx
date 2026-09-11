@@ -130,11 +130,15 @@ export function ResultsSection({ results }: { results: ResultsContext }) {
 
       {/* ── Par domaine d'activité ─────────────────────────────────────── */}
       {results.das.length > 0 ? (
-        <>
-          <h3 className="mt-8 text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
+        // Replié : au niveau Groupe, la comparaison domaine par domaine est une
+        // lecture de second rang — un tableau de huit colonnes sous les quatre
+        // chiffres qui, eux, commandent la décision du tour.
+        <details className="mt-8">
+          <summary className="cursor-pointer list-none text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
             Domaine par domaine
-          </h3>
-          <p className="mt-1 mb-3 max-w-3xl text-sm text-(--foreground-muted)">
+            <span className="ml-2 normal-case">({results.das.length})</span>
+          </summary>
+          <p className="mt-3 mb-3 max-w-3xl text-sm text-(--foreground-muted)">
             Ces marges sont calculées <strong>avant</strong> les charges de siège, l’impôt et les
             intérêts — qui ne se répartissent qu’au niveau du Groupe. Elles servent à comparer vos
             domaines entre eux, pas à mesurer votre bénéfice.
@@ -193,7 +197,7 @@ export function ResultsSection({ results }: { results: ResultsContext }) {
               </tbody>
             </table>
           </div>
-        </>
+        </details>
       ) : null}
     </section>
   );

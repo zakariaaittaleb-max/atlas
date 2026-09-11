@@ -134,10 +134,19 @@ export function FinanceView({
         {/* Les résultats AVANT les décisions. */}
         <ResultsSection results={results} />
 
-        {/* ── Consolidation RH — un RELEVÉ, pas une saisie ──────────────── */}
-        <section className="mt-8 rounded-xl border border-(--border) bg-(--surface) p-6">
-          <h2 className="text-xl font-medium">Masse salariale consolidée</h2>
-          <p className="mt-1 text-sm text-(--foreground-muted)">
+        {/* ── Consolidation RH — un RELEVÉ, pas une saisie ──────────────────
+            Repliée : elle occupait le tiers d'un écran dont l'objet est de
+            DÉCIDER, pour n'y montrer que des chiffres déjà arrêtés ailleurs.
+            Le résumé porte les deux seuls qui engagent la trésorerie du tour ;
+            le détail reste à un clic. */}
+        <details className="mt-8 rounded-xl border border-(--border) bg-(--surface) p-6">
+          <summary className="cursor-pointer list-none">
+            <span className="text-xl font-medium">Masse salariale consolidée</span>
+            <span className="tabular ml-3 text-(--foreground-muted)">
+              {formatMadCompact(hr.payrollMad)} · {hr.headcountEnd.toLocaleString('fr-FR')} personnes
+            </span>
+          </summary>
+          <p className="mt-3 text-sm text-(--foreground-muted)">
             Somme de ce que vous avez décidé sur chaque domaine. Le recrutement se saisit
             là où il a un sens — dans le domaine concerné, avec son climat social et sa
             charge de travail sous les yeux.
@@ -197,7 +206,7 @@ export function FinanceView({
               ✓ Tous vos domaines ont reçu une décision RH ce tour.
             </p>
           )}
-        </section>
+        </details>
 
         {/* ── Plan 7 : finance ──────────────────────────────────────────── */}
         {screenIsOpen(modules, 'finance') ? (
@@ -226,8 +235,18 @@ export function FinanceView({
 
           {isOn(modules, 'finance.tax_regime') ? (
           <fieldset disabled={locked} className="mt-6">
-            <legend className="mb-2 text-sm font-medium">Votre régime d’imposition</legend>
-            <div className="grid gap-2 sm:grid-cols-3">
+            {/* Replié : le régime se choisit une fois pour la partie, et trois
+                pavés de texte fiscal à chaque tour noyaient les décisions qui,
+                elles, se reprennent à chaque exercice. */}
+            <details>
+              <summary className="cursor-pointer list-none text-sm font-medium">
+                Votre régime d’imposition
+                <span className="ml-2 font-normal text-(--foreground-muted)">
+                  {REGIMES.find(([v]) => v === finance.taxRegime)?.[1] ?? 'Droit commun'}
+                  {' · '}modifier
+                </span>
+              </summary>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
               {REGIMES.map(([value, label, hint]) => (
                 <button
                   key={value} type="button"
@@ -244,6 +263,7 @@ export function FinanceView({
                 </button>
               ))}
             </div>
+            </details>
           </fieldset>
           ) : null}
 
