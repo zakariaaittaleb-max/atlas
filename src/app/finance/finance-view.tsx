@@ -36,7 +36,9 @@ import { formatMadCompact } from '@/lib/format';
 import type { DecisionContext, FinanceValues } from '@/lib/decision-types';
 import { deepEqual } from '@/lib/deep-equal';
 import type { MoneyBar, ResultsContext } from '@/lib/results-types';
+import { CashPooling } from './cash-pooling';
 import { CreditSlider } from './credit-slider';
+import { LeversSection, type FinancialLever } from './levers-section';
 import { IndicatorsSection } from './indicators-section';
 import { ResultsSection } from './results-section';
 import { isOn, screenIsOpen, type EnabledModules } from '@/lib/modules-state';
@@ -66,7 +68,7 @@ const MONEY_FIELDS = [
 ] as const satisfies readonly (readonly [string, 'capitalRaisedMad' | 'dividendMad', string, string])[];
 
 export function FinanceView({
-  context, missing, modules, scales, results, money,
+  context, missing, modules, scales, results, money, levers,
 }: {
   context: DecisionContext;
   missing: MissingDecision[];
@@ -75,6 +77,8 @@ export function FinanceView({
   results: ResultsContext;
   /** La MÊME définition que la barre du haut : un seul « engagé ce tour ». */
   money: MoneyBar | null;
+  /** Le référentiel des six leviers, tel qu'il vit en base. */
+  levers: FinancialLever[];
 }) {
   const router = useRouter();
   const autosave = useAutosave();
@@ -108,6 +112,9 @@ export function FinanceView({
     hr.payrollMad + hr.trainingBudgetMad + finance.opexMad + repaidMad + finance.dividendMad;
   const available =
     context.treasuryMad + drawnMad + finance.capitalRaisedMad * 0.98;
+  // Les transferts entre domaines n'entrent PAS dans la jauge : ils déplacent
+  // la trésorerie du groupe sans en créer ni en consommer. Leur coût est une
+  // perte de compétitivité sur le domaine ponctionné, pas une sortie de cash.
 
   return (
     <>
@@ -142,6 +149,8 @@ export function FinanceView({
         {results.group ? (
           <IndicatorsSection group={results.group} limits={context.financeLimits} />
         ) : null}
+
+        <LeversSection levers={levers} />
 
         {/* ── Consolidation RH — un RELEVÉ, pas une saisie ──────────────────
             Repliée : elle occupait le tiers d'un écran dont l'objet est de
@@ -250,6 +259,15 @@ export function FinanceView({
               />
             ) : null}
           </fieldset>
+
+          {isOn(modules, 'finance.cash_pooling') && context.das.length > 1 ? (
+            <CashPooling
+              das={context.das}
+              transfers={finance.cashTransfers}
+              disabled={locked}
+              onChange={(next) => pushFinance({ ...finance, cashTransfers: next })}
+            />
+          ) : null}
 
           {MONEY_FIELDS.some(([key]) => isOn(modules, key)) ? (
             <fieldset disabled={locked} className="mt-6 grid gap-6 sm:grid-cols-2">

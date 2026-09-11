@@ -1051,6 +1051,32 @@ export function resolveRound(
             ? param(params, 'treasury.restructuring_malus')
             : 0;
 
+      // ── Ce que coûte d'assécher un domaine ───────────────────────────
+      //
+      // Le cash pooling prend l'argent là où il dort pour le mettre là où il
+      // pousse. Le domaine qu'on ponctionne paie ses fournisseurs plus tard,
+      // sert ses clients moins bien, et le perd en compétitivité : c'est le
+      // risque que le référentiel financier associe au levier.
+      //
+      // L'assiette est le BESOIN EN FONDS DE ROULEMENT du domaine, seule
+      // grandeur qui dise ce qu'il faut de trésorerie pour tourner. Retirer
+      // l'équivalent de ce besoin coûte le malus plein ; en retirer le
+      // dixième n'en coûte que le dixième.
+      //
+      // Ce qu'un domaine REÇOIT ne lui donne rien par lui-même : de l'argent
+      // ne produit pas de la part de marché. Il donne les moyens d'investir,
+      // et c'est l'investissement — capex, marketing, R&D — qui produit. Un
+      // bonus symétrique aurait payé deux fois la même décision.
+      const workingCapitalNeedMad =
+        Math.max(w.unit.previous.revenueMad, 0) *
+        (das.parameters.workingCapitalDays / 360);
+      const drainedMad = Math.max(-w.unit.cashTransferMad, 0);
+      const drainMalus =
+        workingCapitalNeedMad > 0
+          ? clamp01(drainedMad / workingCapitalNeedMad) *
+            param(params, 'finance.cash_drain_max_penalty')
+          : 0;
+
       w.competitiveness = competitivenessScore(
         {
           perceivedQuality: w.perceived,
@@ -1062,7 +1088,9 @@ export function resolveRound(
           // seule la persistance des acquisitions alimentait.
           ansoffRiskCoefficient: ansoffRisk(w.unit.ansoffMovement, params),
           roundsSinceLaunch: input.roundNumber - w.unit.launchedRound,
-          treasuryMalus,
+          // Les deux malus se cumulent sans se composer : une équipe sous
+          // surveillance qui assèche en plus ce domaine paie les deux.
+          treasuryMalus: clamp01(treasuryMalus + drainMalus),
         },
         params,
       );

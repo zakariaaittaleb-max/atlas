@@ -96,6 +96,13 @@ export interface AcquisitionTarget {
    * d'afficher un blanc.
    */
   segments?: string[];
+  /**
+   * Vrai quand la cible est dans un domaine que l'équipe exploite déjà.
+   *
+   * Ce n'est plus une entrée mais une CONSOLIDATION : les positions
+   * s'additionnent, et c'est le pouvoir de fixation des prix qu'on achète.
+   */
+  consolidation?: boolean;
 }
 
 interface MyOffer {
@@ -541,6 +548,14 @@ function AcquisitionCard({
             </span>
           ) : null}
           {target.targetName}
+          {target.consolidation ? (
+            <span
+              className="rounded border px-1.5 py-0.5 text-xs font-semibold tracking-wide uppercase"
+              style={{ borderColor: 'var(--positive)', color: 'var(--positive)' }}
+            >
+              Consolidation
+            </span>
+          ) : null}
         </h3>
         <p className="text-sm text-(--foreground-muted)">
           {target.dasName}
@@ -576,6 +591,15 @@ function AcquisitionCard({
               : 'Moins de 2 % du marché de son domaine : une porte d’entrée, pas une position.'}
         </span>
       </p>
+      ) : null}
+
+      {target.consolidation ? (
+        <p className="mt-2 text-sm text-(--foreground-muted)">
+          <span className="font-medium text-(--foreground)">Vous exploitez déjà ce domaine. </span>
+          Sa part de marché s’ajoutera à la vôtre, ce qui renforce votre pouvoir de fixation
+          des prix — au prix du choc d’intégration : vous absorbez une position commerciale,
+          pas une marque ni un savoir-faire.
+        </p>
       ) : null}
 
       {target.segments && target.segments.length > 0 ? (

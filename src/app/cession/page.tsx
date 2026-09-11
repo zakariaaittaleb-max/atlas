@@ -108,11 +108,13 @@ export default async function CessionPage() {
         offerMad: Number(b.offer_mad),
         integrationBudgetMad: Number(b.integration_budget_mad),
       }))}
-      // On n'entre pas par acquisition dans un domaine qu'on exploite déjà :
-      // ce serait une consolidation, et le mécanisme prévu pour cela est le
-      // rachat d'un DAS mis en vente par une concurrente.
+      // Une cible située dans un domaine DÉJÀ exploité n'est plus écartée :
+      // c'est une CONSOLIDATION, et le référentiel financier la demande
+      // explicitement — « acquisition d'un concurrent pour consolider un DAS
+      // existant », pour le pouvoir de fixation des prix qu'elle procure.
+      // Les positions s'additionnent alors au lieu de se remplacer
+      // (migration 0037).
       targets={(targets ?? [])
-        .filter((t) => !sellable.some((d) => d.dasId === String(t.das_id)))
         .map((t) => ({
           targetActorId: String(t.target_actor_id),
           targetName: String(t.target_name),
@@ -124,6 +126,9 @@ export default async function CessionPage() {
           segments: (segments ?? [])
             .filter((s) => String(s.das_id) === String(t.das_id))
             .map((s) => String(s.name)),
+          // L'équipe doit savoir ce qu'elle fait : entrer dans un métier neuf,
+          // ou renforcer une position qu'elle tient déjà.
+          consolidation: sellable.some((d) => d.dasId === String(t.das_id)),
         }))}
       myOffers={(myOffers ?? [])
         .filter((o) => String(o.status) === 'sealed')

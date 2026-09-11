@@ -66,6 +66,14 @@ export interface FinanceValues {
   netCreditMad: number;
   capitalRaisedMad: number;
   dividendMad: number;
+  /**
+   * Cash pooling : un montant SIGNÉ par domaine, de somme nulle.
+   *
+   * Dans la forme de décision et non à part, parce que c'est l'écran de finance
+   * qui l'arbitre et que la neutralisation d'un module doit pouvoir le vider
+   * comme n'importe quel autre champ.
+   */
+  cashTransfers: { dasId: string; transferMad: number }[];
 }
 
 /**
@@ -236,6 +244,7 @@ export const FINANCE_DEFAULTS: FinanceValues = {
   netCreditMad: 0,
   capitalRaisedMad: 0,
   dividendMad: 0,
+  cashTransfers: [],
 };
 
 export function dasDecisionDefaults(segments: { key: string }[]): DasDecisionValues {

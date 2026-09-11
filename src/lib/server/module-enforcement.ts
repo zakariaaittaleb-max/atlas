@@ -171,6 +171,11 @@ export const FINANCE_FIELDS: Readonly<Record<string, string>> = {
   'finance.credit': 'netCreditMad',
   'finance.capital_raise': 'capitalRaisedMad',
   'finance.dividend': 'dividendMad',
+  // Le pooling est une LISTE et non un montant. Fermé, `keepClosed` la
+  // remplace par celle de la référence — qui n'en a pas — donc par `undefined` :
+  // aucun transfert n'est écrit, ce qui est exactement la neutralisation
+  // attendue. Le clamp d'échelle, lui, l'ignore : il ne borne que des nombres.
+  'finance.cash_pooling': 'cashTransfers',
 };
 
 export async function enforceFinance<T extends object>(
@@ -199,6 +204,7 @@ export async function enforceFinance<T extends object>(
         netCreditMad: 0,
         capitalRaisedMad: 0,
         dividendMad: 0,
+        cashTransfers: [],
       }
     : FINANCE_DEFAULTS;
 

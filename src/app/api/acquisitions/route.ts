@@ -131,18 +131,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // On ne rachète pas une entreprise d'un domaine qu'on exploite déjà : ce
-    // serait une consolidation, pas une entrée.
-    if (existing) {
-      return NextResponse.json(
-        {
-          error: 'Vous exploitez déjà ce domaine. Pour vous y renforcer, rachetez un de ses '
-            + 'fournisseurs ou distributeurs, ou visez un DAS mis en vente par une équipe '
-            + 'concurrente.',
-        },
-        { status: 409 },
-      );
-    }
+    // Racheter dans un domaine qu'on exploite déjà est une CONSOLIDATION, et
+    // c'est désormais permis : le référentiel financier le demande — « acquérir
+    // un concurrent pour consolider un DAS existant », pour le pouvoir de
+    // fixation des prix que procure une position renforcée.
+    //
+    // Le refus qui se trouvait ici renvoyait vers l'intégration de filière ou
+    // le rachat d'un DAS mis en vente, qui sont deux autres opérations. Les
+    // positions s'additionnent en persistance (migration 0037) au lieu de se
+    // remplacer — sans quoi une équipe à 30 % qui rachetait un concurrent à
+    // 8 % se serait retrouvée avec 8 %.
   } else {
     if (!existing) {
       return NextResponse.json(

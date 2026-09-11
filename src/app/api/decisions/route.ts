@@ -140,6 +140,18 @@ const Payload = z.discriminatedUnion('plan', [
     netCreditMad: z.number().finite(),
     capitalRaisedMad: money,
     dividendMad: money,
+    /**
+     * Cash pooling : un montant SIGNÉ par domaine, de somme nulle.
+     *
+     * C'est un transfert, pas une création de monnaie. Le serveur ne corrige
+     * pas un déséquilibre en silence — il refuse, parce qu'une équipe qui
+     * croit avoir déplacé un milliard et n'en a déplacé que la moitié prendra
+     * ses décisions suivantes sur une trésorerie qu'elle n'a pas.
+     */
+    cashTransfers: z
+      .array(z.object({ dasId: z.string().uuid(), transferMad: z.number().finite() }))
+      .max(8)
+      .optional(),
   }),
 ]);
 
@@ -214,6 +226,11 @@ export async function POST(request: Request) {
   try {
     await write(admin, team.teamId, roundNumber, body);
   } catch (error) {
+    // Un transfert déséquilibré est un refus métier, pas une panne : l'équipe
+    // doit lire ce qui manque, et non « erreur serveur ».
+    if (error instanceof RefusMetier) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Écriture refusée.' },
       { status: 500 },
@@ -428,6 +445,8 @@ async function write(admin: Admin, teamId: string, round: number, body: Body): P
     dividend_mad: dividendMad,
   };
 
+  await writeCashPooling(admin, teamId, round, body.cashTransfers ?? []);
+
   if (existing) {
     fail((await admin.from('financial_budgets').update(decisions)
       .eq('team_id', teamId).eq('round_number', round)).error);
@@ -443,4 +462,61 @@ async function write(admin: Admin, teamId: string, round: number, body: Body): P
     equity_mad: equityMad,
     debt_outstanding_mad: debtMad,
   })).error);
+}
+
+/** Un refus MÉTIER, à distinguer d'une panne : il porte son propre code. */
+class RefusMetier extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
+/**
+ * Le cash pooling : un transfert entre domaines, donc de somme nulle.
+ *
+ * Le déséquilibre est refusé et non rattrapé : c'est la seule façon que
+ * l'équipe sache ce qu'elle a réellement déplacé. Une tolérance d'un dirham
+ * absorbe les arrondis de l'interface, rien de plus.
+ */
+async function writeCashPooling(
+  admin: Admin,
+  teamId: string,
+  round: number,
+  transfers: { dasId: string; transferMad: number }[],
+): Promise<void> {
+  if (transfers.length === 0) return;
+
+  const total = transfers.reduce((acc, t) => acc + t.transferMad, 0);
+  if (Math.abs(total) > 1) {
+    throw new RefusMetier(
+      `Les transferts entre domaines doivent s’équilibrer : il manque ${Math.round(-total)} DH.`,
+      409,
+    );
+  }
+
+  // Les domaines doivent appartenir au portefeuille ACTIF de l'équipe : sans
+  // ce contrôle, un identifiant emprunté ferait créditer le domaine d'une autre.
+  const { data: units } = await admin
+    .from('team_units')
+    .select('das_id')
+    .eq('team_id', teamId)
+    .in('status', ['active', 'listed_for_sale']);
+
+  const mine = new Set((units ?? []).map((u) => String(u.das_id)));
+  const rows = transfers
+    .filter((t) => mine.has(t.dasId))
+    .map((t) => ({
+      team_id: teamId,
+      das_id: t.dasId,
+      round_number: round,
+      transfer_mad: t.transferMad,
+    }));
+
+  if (rows.length === 0) return;
+
+  const { error } = await admin
+    .from('das_cash_allocation')
+    .upsert(rows, { onConflict: 'team_id,das_id,round_number' });
+
+  if (error) throw new Error(`Transferts refusés : ${error.message}`);
 }

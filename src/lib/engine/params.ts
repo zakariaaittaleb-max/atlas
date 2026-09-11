@@ -208,6 +208,16 @@ export const DEFAULT_PARAMS = {
   // Frais d'émission d'une augmentation de capital : la levée n'est pas
   // gratuite, et c'est ce qui interdit d'en faire un robinet sans coût.
   'finance.equity_issue_cost_pct': 0.02,
+  // ── Cash pooling ──────────────────────────────────────────────────────────
+  // Ce qu'un domaine asséché perd en compétitivité, au maximum. Le malus est
+  // proportionnel à la part de son besoin en fonds de roulement qu'on lui a
+  // retirée : retirer l'équivalent d'un exercice de BFR coûte le plein.
+  //
+  // Un quart de la compétitivité est un coup dur sans être une exécution : le
+  // levier doit rester jouable, sinon personne ne financera jamais son étoile
+  // avec la trésorerie de sa vache à lait — et c'est pourtant l'arbitrage que
+  // le référentiel financier demande de faire travailler.
+  'finance.cash_drain_max_penalty': 0.25,
 
   // --- Frais de siège -------------------------------------------------------
   //

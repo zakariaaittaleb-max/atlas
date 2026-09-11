@@ -108,6 +108,7 @@ function unit(over: Partial<TeamDasSnapshot> = {}): TeamDasSnapshot {
   const defaults = unitDefaults();
   return {
     dasId: 'das-agro',
+    cashTransferMad: 0,
     supplierAlternatives: 3,
     launchedRound: 0,
     ansoffMovement: null,
@@ -1370,6 +1371,52 @@ describe('stocks dans la résolution complète', () => {
     // Rien en magasin, et la capacité redevient la seule limite.
     expect(metric.inputStockUnits).toBe(0);
     expect(metric.volumeSold).toBeGreaterThan(0);
+  });
+});
+
+describe('cash pooling entre domaines', () => {
+  /**
+   * « Transfert de trésorerie du DAS vache à lait vers le DAS étoile », avec
+   * pour risque « l'assèchement du BFR du DAS historique, entraînant une perte
+   * de compétitivité ». Le levier n'avait aucune existence : la trésorerie
+   * était une grandeur de groupe, et la déplacer ne coûtait rien.
+   */
+  function partOf(cashTransferMad: number) {
+    const alpha = team('alpha', { units: [unit({ cashTransferMad })] });
+    const result = resolveRound(
+      baseInput({ teams: [alpha, team('beta'), team('gamma')] }),
+      params,
+    );
+    return shareOf(result.dasMetrics, 'alpha');
+  }
+
+  it('ne coûte rien à qui ne transfère rien', () => {
+    expect(partOf(0)).toBeCloseTo(partOf(0), 9);
+  });
+
+  it('fait perdre des parts au domaine qu’on assèche', () => {
+    // 340 M de chiffre d'affaires, 75 jours de BFR : le besoin vaut environ
+    // 71 M. En prélever la moitié coûte la moitié du malus maximal.
+    expect(partOf(-35_000_000)).toBeLessThan(partOf(0));
+  });
+
+  it('fait payer plus cher un assèchement plus profond', () => {
+    expect(partOf(-70_000_000)).toBeLessThan(partOf(-20_000_000));
+  });
+
+  it('ne donne AUCUN bonus au domaine qui reçoit', () => {
+    // De l'argent ne produit pas de la part de marché : il donne les moyens
+    // d'investir, et c'est l'investissement qui produit. Un bonus symétrique
+    // aurait payé deux fois la même décision.
+    expect(partOf(50_000_000)).toBeCloseTo(partOf(0), 9);
+  });
+
+  it('plafonne le malus, même en vidant tout', () => {
+    // Sans plafond, un assèchement total sortirait l'équipe du jeu sans
+    // qu'aucune décision commerciale ne l'explique.
+    const vide = partOf(-10_000_000_000);
+    expect(vide).toBeGreaterThan(0);
+    expect(vide).toBeCloseTo(partOf(-1_000_000_000), 6);
   });
 });
 

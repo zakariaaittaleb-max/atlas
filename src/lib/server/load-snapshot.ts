@@ -214,7 +214,7 @@ export async function loadResolutionSnapshot(
     { data: capexHistoryRows },
     { data: actorRows },
     { data: shockRows },
-    { data: shockResponseRows },
+    { data: shockResponseRows }, { data: cashRows },
     { data: listingRows },
     { data: bidRows },
     { data: kpiCatalogRows },
@@ -277,6 +277,10 @@ export async function loadResolutionSnapshot(
     admin.from('ecosystem_actors').select('id, actor_type, das_id, owner_team_id, integration_quality, ecosystem_actor_rounds(*)').eq('session_id', sessionId),
     admin.from('market_shocks').select('*').eq('session_id', sessionId).gte('rounds_remaining', 1),
     admin.from('shock_responses').select('shock_id, team_id, cost_mad, impact_pct')
+      .in('team_id', teamIds).eq('round_number', roundNumber),
+    // Cash pooling : un GESTE du tour, jamais reconduit. Le reconduire ferait
+    // vider le même domaine chaque tour sans que personne ne l'ait redemandé.
+    admin.from('das_cash_allocation').select('team_id, das_id, transfer_mad')
       .in('team_id', teamIds).eq('round_number', roundNumber),
     admin.from('das_listings').select('*').eq('session_id', sessionId).eq('round_number', roundNumber).eq('status', 'open'),
     admin.from('das_bids').select('*').eq('round_number', roundNumber).eq('status', 'sealed'),
@@ -659,6 +663,13 @@ export async function loadResolutionSnapshot(
 
       return {
         dasId,
+        // Cash pooling : ce que le groupe injecte dans ce domaine, ou y
+        // prélève, CE TOUR. Un geste, jamais reconduit.
+        cashTransferMad: num(
+          ((cashRows ?? []) as Row[])
+            .find((c) => str(c.team_id) === teamId && str(c.das_id) === dasId)
+            ?.transfer_mad,
+        ),
         decision: {
           genericStrategy: (str(decision?.generic_strategy, 'domination_couts') as GenericStrategy),
           pricePosition: num(decision?.price_position, 50),

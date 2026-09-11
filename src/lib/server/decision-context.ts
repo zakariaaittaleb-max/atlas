@@ -332,6 +332,7 @@ function toFinance(row: Row | null): FinanceValues {
     netCreditMad: 0,
     capitalRaisedMad: 0,
     dividendMad: 0,
+    cashTransfers: [],
   };
 }
 

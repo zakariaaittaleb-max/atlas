@@ -195,6 +195,11 @@ export interface PreviousDasHr {
 }
 
 export interface TeamDasSnapshot {
+  /**
+   * Cash pooling : ce que le groupe injecte dans ce domaine (positif) ou y
+   * prélève (négatif), ce tour. La somme sur les domaines vaut zéro.
+   */
+  cashTransferMad: number;
   dasId: string;
   decision: DasDecisionSnapshot;
   previous: PreviousDasState;
