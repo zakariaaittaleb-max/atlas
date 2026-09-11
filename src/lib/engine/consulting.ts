@@ -317,7 +317,9 @@ export function discloseField(
 export const STUDY_FIELDS: Record<string, NumericFieldSpec[]> = {
   pestel_sectoriel: [
     { key: 'market_size_mad', label: 'Taille du marché', errorMode: 'relative', unit: 'DH' },
-    { key: 'growth_rate', label: 'Taux de croissance', errorMode: 'absolute', range: 0.25, unit: '%' },
+    // En POINTS de pourcentage, pas en fraction : une croissance de 2 %
+    // s'affichait « 0,0 % ». L'amplitude du bruit suit la même échelle.
+    { key: 'growth_rate', label: 'Taux de croissance', errorMode: 'absolute', range: 25, unit: '%' },
     { key: 'price_elasticity', label: 'Élasticité prix', errorMode: 'relative' },
     { key: 'reference_unit_price_mad', label: 'Prix moyen du marché', errorMode: 'relative', unit: 'DH' },
     // Le choc à venir : réservé au palier approfondi. C'est ce qui distingue
@@ -399,7 +401,7 @@ export const STUDY_FIELDS: Record<string, NumericFieldSpec[]> = {
     { key: 'aided_awareness', label: 'Notoriété assistée', errorMode: 'absolute', range: 100 },
     { key: 'price_sensitivity', label: 'Sensibilité prix du segment', errorMode: 'relative' },
     { key: 'quality_requirement', label: 'Exigence de qualité du segment', errorMode: 'absolute', range: 100 },
-    { key: 'segment_growth', label: 'Croissance du segment', errorMode: 'absolute', range: 0.25, unit: '%', weakSignal: true },
+    { key: 'segment_growth', label: 'Croissance du segment', errorMode: 'absolute', range: 25, unit: '%', weakSignal: true },
   ],
 
   benchmark_fourn: [
@@ -415,8 +417,8 @@ export const STUDY_FIELDS: Record<string, NumericFieldSpec[]> = {
   ],
 
   benchmark_distri: [
-    { key: 'coverage_pct', label: 'Couverture régionale', errorMode: 'relative', unit: '%' },
-    { key: 'required_margin_pct', label: 'Marge exigée', errorMode: 'relative', unit: '%' },
+    { min: 0, max: 100, key: 'coverage_pct', label: 'Couverture régionale', errorMode: 'relative', unit: '%' },
+    { min: 0, max: 100, key: 'required_margin_pct', label: 'Marge exigée', errorMode: 'relative', unit: '%' },
     { key: 'negotiating_strength', label: 'Force de négociation', errorMode: 'absolute', range: 100, bandable: true },
     { key: 'service_level', label: 'Niveau de service', errorMode: 'absolute', range: 100, bandable: true },
     { key: 'minimum_volume', label: 'Volume minimal exigé', errorMode: 'relative' },

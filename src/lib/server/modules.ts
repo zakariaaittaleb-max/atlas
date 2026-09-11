@@ -44,8 +44,15 @@ export const loadEnabledModules = cache(
 
     const state: Record<string, boolean> = {};
     for (const field of ALL_MODULE_FIELDS) {
+      // Les deux étages ne disent pas la même chose, et les confondre fermait
+      // définitivement les capacités à ouvrir : le PLAFOND est une permission —
+      // absent, le super-admin n'a rien restreint, donc c'est autorisé. Le
+      // CHOIX DE SESSION est une activation — et c'est lui seul que
+      // `defaultOpen: false` laisse fermé tant qu'un facilitateur ne l'a pas
+      // demandé. Appliquer le défaut au plafond rendait le réglage de session
+      // inopérant : le facilitateur cochait la case et rien ne se passait.
       const allowedByAdmin = ceiling.get(field.key) ?? true;
-      const openedBySession = perSession.get(field.key) ?? true;
+      const openedBySession = perSession.get(field.key) ?? (field.defaultOpen ?? true);
       state[field.key] = allowedByAdmin && openedBySession;
     }
     return state;

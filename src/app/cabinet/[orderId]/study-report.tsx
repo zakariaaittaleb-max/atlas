@@ -32,7 +32,7 @@ interface ReportSubject extends ChartSubject {
 
 export function StudyReport({
   studyName, studyDescription, scopeLabel, tier, errorMargin, roundNumber,
-  priceMad, orderId, subjects, notes, auditVerdict,
+  priceMad, orderId, subjects, notes, auditVerdict, canPrint, canExport,
 }: {
   studyName: string;
   studyDescription: string;
@@ -43,6 +43,13 @@ export function StudyReport({
   priceMad: number;
   catalogPriceMad: number;
   orderId: string;
+  /**
+   * Sortir le rapport du jeu — l'imprimer, l'analyser ailleurs — n'est pas
+   * neutre : tous les formateurs ne le veulent pas. Ce sont des capacités que
+   * le facilitateur OUVRE, fermées tant qu'il n'a rien dit.
+   */
+  canPrint: boolean;
+  canExport: boolean;
   subjects: ReportSubject[];
   notes: string[];
   auditVerdict: string | null;
@@ -132,13 +139,32 @@ export function StudyReport({
         </section>
       ) : null}
 
-      <div className="mt-8 print:hidden">
+      <div className="mt-8 flex flex-wrap gap-3 print:hidden">
         <a
           href={`/api/consulting/${orderId}/download`}
           className="rounded-lg border border-(--border) px-4 py-2 text-sm font-medium"
         >
           Télécharger le classeur
         </a>
+
+        {canPrint ? (
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="rounded-lg border border-(--border) px-4 py-2 text-sm font-medium"
+          >
+            Imprimer le rapport
+          </button>
+        ) : null}
+
+        {canExport ? (
+          <a
+            href={`/api/consulting/${orderId}/table`}
+            className="rounded-lg border border-(--border) px-4 py-2 text-sm font-medium"
+          >
+            Export analytique (table à plat)
+          </a>
+        ) : null}
       </div>
     </main>
   );

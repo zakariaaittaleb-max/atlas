@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation';
 
 import { STUDY_BASE_PRICES } from '@/lib/engine/consulting';
 import { requireTeam } from '@/lib/dal';
+import { isOn } from '@/lib/modules-state';
+import { loadEnabledModules } from '@/lib/server/modules';
 import { createServerClient } from '@/lib/supabase/server';
 
 import { StudyReport } from './study-report';
@@ -18,6 +20,8 @@ export default async function StudyReportPage({
   // Lecture par le client ANONYME, donc soumise à la RLS : une équipe ne peut
   // pas ouvrir le rapport d'une autre, même en devinant l'identifiant.
   const supabase = await createServerClient();
+
+  const modules = await loadEnabledModules(team.sessionId);
 
   const { data: order } = await supabase
     .from('consulting_orders')
@@ -62,6 +66,8 @@ export default async function StudyReportPage({
       priceMad={Number(order.price_paid_mad)}
       catalogPriceMad={STUDY_BASE_PRICES[String(order.study_key)] ?? 0}
       orderId={String(order.id)}
+      canPrint={isOn(modules, 'cabinet.rapport_imprimable')}
+      canExport={isOn(modules, 'cabinet.export_analytique')}
       subjects={(payload?.subjects ?? []) as never[]}
       notes={payload?.notes ?? []}
       auditVerdict={payload?.auditVerdict ?? null}

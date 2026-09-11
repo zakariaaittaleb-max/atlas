@@ -46,6 +46,7 @@ import {
 } from 'recharts';
 import { useState } from 'react';
 
+import type { FieldDisclosure } from '@/lib/consulting-types';
 import type {
   CabinetOverlay, DasSeries, DashboardContext, GroupPoint,
 } from '@/lib/dashboard-types';
@@ -111,7 +112,7 @@ export function DashboardView({
 
       {das ? (
         <Section title={`Domaine : ${das.name}`} hint="Tout ce qui se décide sur ce métier." open>
-          <DasTrajectory das={das} />
+          <DasTrajectory das={das} cabinet={context.cabinet} />
         </Section>
       ) : null}
 
@@ -120,7 +121,12 @@ export function DashboardView({
           title="Matrices stratégiques"
           hint="Les grilles classiques, calculées sur vos chiffres — pas sur un exemple de manuel."
         >
-          <Matrices das={das} group={context.group} allDas={context.das} />
+          <Matrices
+            das={das}
+            group={context.group}
+            allDas={context.das}
+            cabinet={context.cabinet}
+          />
         </Section>
       ) : null}
 
@@ -280,6 +286,10 @@ function Portfolio({ das }: { das: DasSeries[] }) {
 
 function Alignment({ context }: { context: DashboardContext }) {
   const { alignment, group } = context;
+  // L'audit est le seul livrable SANS bruit : le cabinet analyse les données
+  // que l'équipe lui a elle-même transmises. Son verdict complète donc la
+  // phrase du moteur au lieu de la concurrencer.
+  const audit = studyFor(context.cabinet, 'audit_alignement', null);
 
   return (
     <div>
@@ -298,6 +308,31 @@ function Alignment({ context }: { context: DashboardContext }) {
         unit="score"
         series={[{ dataKey: 'valeur', name: 'Indice d’alignement', colour: SERIES_COLOURS[0] }]}
       />
+
+      {audit ? (
+        <div className="mt-4 rounded-lg border border-(--accent) p-4">
+          <p className="mb-2 text-xs font-medium tracking-wide text-(--foreground-muted) uppercase">
+            Audit d’alignement · tour {audit.roundNumber} · sans marge d’erreur
+          </p>
+          <dl className="tabular grid gap-4 sm:grid-cols-3">
+            <CabinetFact
+              label="Alignement business"
+              field={disclosed(audit, 'sab_global')}
+              errorMargin={0}
+            />
+            <CabinetFact
+              label="Alignement corporate"
+              field={disclosed(audit, 'sac_score')}
+              errorMargin={0}
+            />
+            <CabinetFact
+              label="Indice d’alignement"
+              field={disclosed(audit, 'ia_final')}
+              errorMargin={0}
+            />
+          </dl>
+        </div>
+      ) : null}
 
       {alignment.worstAxes.length > 0 ? (
         <div className="mt-4">
@@ -341,12 +376,63 @@ const DAS_METRICS = [
   { key: 'utilisationRate', label: 'Taux d’utilisation', unit: '%' },
 ] as const;
 
-function DasTrajectory({ das }: { das: DasSeries }) {
+function DasTrajectory({
+  das, cabinet,
+}: {
+  das: DasSeries;
+  cabinet: CabinetOverlay[];
+}) {
   const [metric, setMetric] = useState<string>('marketSharePct');
   const spec = DAS_METRICS.find((m) => m.key === metric) ?? DAS_METRICS[0];
 
+  // Le marché et la demande ne se déduisent pas de vos chiffres : ils
+  // s'achètent. Quand ils l'ont été, ils s'affichent ici — là où l'on décide
+  // d'un prix et d'un volume — plutôt que dans un rapport qu'il faut aller
+  // rouvrir.
+  const pestel = studyFor(cabinet, 'pestel_sectoriel', das.dasId);
+  const panel = studyFor(cabinet, 'panel_conso', das.dasId);
+
   return (
     <div>
+      {pestel || panel ? (
+        <dl className="tabular mb-5 grid gap-4 rounded-lg border border-(--border) bg-(--surface-muted) p-4 sm:grid-cols-3">
+          {pestel ? (
+            <>
+              <CabinetFact
+                label="Taille du marché"
+                field={disclosed(pestel, 'market_size_mad')}
+                errorMargin={pestel.errorMargin}
+              />
+              <CabinetFact
+                label="Croissance"
+                field={disclosed(pestel, 'growth_rate')}
+                errorMargin={pestel.errorMargin}
+                hint="L’ordonnée de la BCG"
+              />
+              <CabinetFact
+                label="Prix moyen du marché"
+                field={disclosed(pestel, 'reference_unit_price_mad')}
+                errorMargin={pestel.errorMargin}
+              />
+            </>
+          ) : null}
+          {panel ? (
+            <>
+              <CabinetFact
+                label="Exigence de qualité du segment"
+                field={disclosed(panel, 'quality_requirement')}
+                errorMargin={panel.errorMargin}
+              />
+              <CabinetFact
+                label="Sensibilité au prix"
+                field={disclosed(panel, 'price_sensitivity')}
+                errorMargin={panel.errorMargin}
+                hint="Plus elle est haute, moins le premium passe"
+              />
+            </>
+          ) : null}
+        </dl>
+      ) : null}
       <Picker
         options={DAS_METRICS.map((m) => ({ key: m.key, label: m.label }))}
         value={metric}
@@ -369,11 +455,12 @@ function DasTrajectory({ das }: { das: DasSeries }) {
    ══════════════════════════════════════════════════════════════════════════ */
 
 function Matrices({
-  das, group, allDas,
+  das, group, allDas, cabinet,
 }: {
   das: DasSeries;
   group: GroupPoint[];
   allDas: DasSeries[];
+  cabinet: CabinetOverlay[];
 }) {
   const last = group[group.length - 1];
   const lastDas = das.history[das.history.length - 1];
@@ -381,6 +468,7 @@ function Matrices({
   // premier tour résolu, les tracer donnerait un radar plat à zéro qu'une
   // équipe lirait comme un diagnostic.
   const resolved = Boolean(lastDas && lastDas.competitivenessScore > 0);
+  const measured = measuredForces(cabinet, das);
 
   return (
     <div className="space-y-8">
@@ -431,18 +519,24 @@ function Matrices({
         {resolved ? (
           <>
             <p className="mb-3 text-sm text-(--foreground-muted)">
-              Plus une force est haute, moins la filière est profitable de ce côté-là. Le
-              pouvoir des fournisseurs et des distributeurs se déduit du nombre d’acteurs
-              indépendants qu’il vous reste : en racheter un le fait baisser.
+              Plus une force est haute, moins la filière est profitable de ce côté-là. À
+              défaut de benchmark, le pouvoir des fournisseurs et des distributeurs se
+              DÉDUIT du nombre d’acteurs indépendants qu’il vous reste ; le benchmark le
+              remplace par leur force de négociation réelle.
             </p>
+            {measured.note ? (
+              <p className="mb-3 text-xs" style={{ color: 'var(--accent)' }}>
+                {measured.note}
+              </p>
+            ) : null}
             <div className="h-72 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart
                   data={[
                     { axe: 'Entrants', valeur: 100 - das.forces.entryBarrier },
                     { axe: 'Substituts', valeur: das.forces.substitution },
-                    { axe: 'Fournisseurs', valeur: das.forces.supplierPower },
-                    { axe: 'Distributeurs', valeur: das.forces.distributorPower },
+                    { axe: 'Fournisseurs', valeur: measured.supplier },
+                    { axe: 'Distributeurs', valeur: measured.distributor },
                     { axe: 'Rivalité', valeur: das.forces.rivalry },
                   ]}
                 >
@@ -491,6 +585,51 @@ function Matrices({
       )}
     </div>
   );
+}
+
+/**
+ * Le pouvoir de l'amont et de l'aval, mesuré plutôt que déduit.
+ *
+ * Sans benchmark, ces deux forces s'estiment au nombre d'acteurs indépendants
+ * restants — une approximation honnête mais grossière : cinq fournisseurs dont
+ * un seul est fiable ne valent pas cinq fournisseurs solides.
+ *
+ * Le benchmark donne leur force de négociation réelle. On prend la PLUS FORTE
+ * du panel, pas la moyenne : c'est celui qui peut vous tordre le bras qui fixe
+ * votre rapport de force, pas la moyenne de ceux qui ne le peuvent pas.
+ */
+export function measuredForces(
+  cabinet: CabinetOverlay[],
+  das: DasSeries,
+): { supplier: number; distributor: number; note: string | null } {
+  const amont = studyFor(cabinet, 'benchmark_fourn', das.dasId);
+  const aval = studyFor(cabinet, 'benchmark_distri', das.dasId);
+
+  const strongest = (study: CabinetOverlay | undefined, key: string): number | null => {
+    if (!study) return null;
+    const values = study.subjects
+      .map((_, index) => disclosed(study, key, index))
+      .filter((f): f is FieldDisclosure => Boolean(f) && f!.mode !== 'withheld')
+      .map((f) => (f.mode === 'band' ? (f.lower + f.upper) / 2 : f.mode === 'withheld' ? 0 : f.value));
+    return values.length > 0 ? Math.max(...values) : null;
+  };
+
+  // Le fournisseur se mesure par son coût de changement : celui dont on ne peut
+  // pas sortir tient le rapport de force, quelle que soit son amabilité.
+  const supplier = strongest(amont, 'switching_cost');
+  const distributor = strongest(aval, 'negotiating_strength');
+
+  const sources: string[] = [];
+  if (supplier !== null) sources.push('amont');
+  if (distributor !== null) sources.push('aval');
+
+  return {
+    supplier: supplier ?? das.forces.supplierPower,
+    distributor: distributor ?? das.forces.distributorPower,
+    note: sources.length > 0
+      ? `Pouvoir ${sources.join(' et ')} mesuré par benchmark, et non déduit du nombre d’acteurs.`
+      : null,
+  };
 }
 
 /**
@@ -771,6 +910,77 @@ function Unavailable({
           </Link>
         </>
       ) : null}
+    </div>
+  );
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Ce que le cabinet a vendu, rendu la où la décision se prend
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * L'étude achetée qui couvre ce périmètre.
+ *
+ * Une étude concurrentielle sur l'agro-industrie ne dit rien du textile : le
+ * domaine fait partie de l'identité de la mission, pas seulement de son titre.
+ * On prend la plus récente, une équipe pouvant racheter la même étude à un
+ * palier supérieur.
+ */
+function studyFor(
+  cabinet: CabinetOverlay[],
+  studyKey: string,
+  dasId: string | null,
+): CabinetOverlay | undefined {
+  return cabinet.find(
+    (o) => o.studyKey === studyKey && (dasId === null || o.dasId === dasId),
+  );
+}
+
+/** Un champ divulgué, sur le premier sujet de l'étude. */
+function disclosed(
+  study: CabinetOverlay | undefined,
+  key: string,
+  subjectIndex = 0,
+): FieldDisclosure | undefined {
+  return study?.subjects[subjectIndex]?.fields.find((f) => f.key === key);
+}
+
+/**
+ * Un indicateur venu du cabinet, affiché comme tel.
+ *
+ * Le badge n'est pas décoratif : il sépare ce que l'équipe SAIT de ce qu'elle a
+ * ACHETÉ, et rappelle avec quelle précision. Sans lui, une estimation à ±10 %
+ * se lirait comme une mesure.
+ */
+function CabinetFact({
+  label, field, errorMargin, hint,
+}: {
+  label: string;
+  field: FieldDisclosure | undefined;
+  errorMargin: number;
+  hint?: string;
+}) {
+  if (!field || field.mode === 'withheld') return null;
+
+  const value =
+    field.mode === 'band'
+      ? field.band
+      : show(field.value, field.unit === 'DH' ? 'DH' : field.unit === '%' ? '%' : 'score');
+
+  return (
+    <div>
+      <dt className="text-xs text-(--foreground-muted)">
+        {label}
+        <span
+          className="ml-1.5 rounded px-1 py-0.5 text-[10px]"
+          style={{ background: 'var(--surface-muted)' }}
+        >
+          cabinet {errorMargin > 0 ? `±${Math.round(errorMargin * 100)} %` : 'exact'}
+        </span>
+      </dt>
+      <dd className="text-lg font-semibold">{value}</dd>
+      {hint ? <dd className="text-xs text-(--foreground-muted)">{hint}</dd> : null}
     </div>
   );
 }

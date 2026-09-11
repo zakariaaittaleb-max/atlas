@@ -40,6 +40,16 @@ export interface ModuleField {
   tier: ModuleTier;
   /** Ce que le moteur retient si le champ n'a jamais été ouvert. */
   neutral: string;
+  /**
+   * Ouvert tant que personne n'a réglé quoi que ce soit. Vrai par défaut.
+   *
+   * L'absence de ligne vaut OUVERT partout ailleurs, et c'est ce qui rend un
+   * champ nouvellement déployé jouable sans créer une ligne par facilitateur et
+   * par session. Quelques capacités doivent pourtant s'OPTER : sortir les
+   * données du jeu en est une. Un formateur décide de le permettre ; il ne le
+   * découvre pas parce que personne ne l'a fermé.
+   */
+  defaultOpen?: boolean;
 }
 
 export interface ModuleCategory {
@@ -353,6 +363,26 @@ export const MODULE_SCREENS: readonly ModuleScreen[] = [
           { key: 'cabinet.benchmark_distri', label: 'Benchmark distributeurs', tier: 'avance', neutral: 'Hors catalogue' },
           { key: 'cabinet.audit_alignement', label: 'Audit d’alignement', tier: 'standard', neutral: 'Hors catalogue' },
           { key: 'cabinet.due_diligence', label: 'Due diligence', tier: 'avance', neutral: 'Hors catalogue' },
+        ],
+      },
+      {
+        key: 'sorties',
+        label: 'Sorties de rapport',
+        fields: [
+          {
+            key: 'cabinet.rapport_imprimable',
+            label: 'Impression des rapports d’étude',
+            tier: 'avance',
+            neutral: 'Rapports consultables à l’écran seulement',
+            defaultOpen: false,
+          },
+          {
+            key: 'cabinet.export_analytique',
+            label: 'Export analytique (table à plat, Power BI)',
+            tier: 'avance',
+            neutral: 'Rapports consultables à l’écran seulement',
+            defaultOpen: false,
+          },
         ],
       },
     ],

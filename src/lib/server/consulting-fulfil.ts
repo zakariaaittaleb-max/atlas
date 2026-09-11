@@ -203,7 +203,8 @@ async function pestel(
 
   const valuesAt = (r: number) => ({
     market_size_mad: sizeAt.get(r) ?? num(summary?.market_size_mad, num(das?.base_market_size_mad)),
-    growth_rate: growth,
+    // Le moteur stocke une fraction ; le livrable annonce des points.
+    growth_rate: growth * 100,
     price_elasticity: num(das?.price_elasticity, 1.5),
     reference_unit_price_mad: num(das?.reference_unit_price_mad),
     next_round_shock_risk: shockRisk,
@@ -501,7 +502,7 @@ async function panel(
         aided_awareness: num(mine?.notoriety, 50),
         price_sensitivity: num(s.price_sensitivity, 1),
         quality_requirement: num(s.quality_requirement),
-        segment_growth: num(s.relative_growth, 1) - 1,
+        segment_growth: (num(s.relative_growth, 1) - 1) * 100,
       };
     };
 
@@ -558,8 +559,8 @@ async function ecosystem(
             financial_health: num(state.financial_health, 70),
           }
         : {
-            coverage_pct: num(state.coverage_pct, 0.3),
-            required_margin_pct: num(state.required_margin_pct, 0.2),
+            coverage_pct: num(state.coverage_pct, 0.3) * 100,
+            required_margin_pct: num(state.required_margin_pct, 0.2) * 100,
             negotiating_strength: num(state.negotiating_strength, 50),
             service_level: num(state.service_level, 60),
             minimum_volume: num(state.minimum_volume),

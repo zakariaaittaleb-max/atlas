@@ -88,3 +88,49 @@ body[data-anti-select="on"] svg {
   -webkit-user-drag: none;
   user-drag: none;
 }
+
+/* ── Impression d'un rapport d'étude ────────────────────────────────────────
+   Un rapport se projette et se distribue au débriefing. Sans ces règles, le
+   bouton « Imprimer » produisait une page inutilisable : navigation en travers
+   du papier, fond sombre avalant l'encre, et graphiques coupés en deux entre
+   deux feuilles.
+
+   `print-color-adjust` est indispensable : les navigateurs suppriment par
+   défaut les aplats de couleur à l'impression, ce qui effacerait précisément
+   les courbes et les remplissages des radars — l'information du rapport. */
+@media print {
+  nav,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  main {
+    max-width: none;
+    padding: 0;
+  }
+
+  /* Une section ne se coupe pas au milieu d'un graphique. */
+  section,
+  .recharts-wrapper {
+    break-inside: avoid;
+  }
+
+  /* Les rapports se lisent dépliés : un accordéon fermé perdrait son contenu. */
+  details {
+    display: block !important;
+  }
+
+  details > div {
+    display: block !important;
+  }
+
+  svg {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
