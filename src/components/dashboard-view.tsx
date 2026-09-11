@@ -375,76 +375,134 @@ function Matrices({
   allDas: DasSeries[];
 }) {
   const last = group[group.length - 1];
+  const lastDas = das.history[das.history.length - 1];
+  // La rivalité et la force compétitive sortent d'une résolution : avant le
+  // premier tour résolu, les tracer donnerait un radar plat à zéro qu'une
+  // équipe lirait comme un diagnostic.
+  const resolved = Boolean(lastDas && lastDas.competitivenessScore > 0);
 
   return (
     <div className="space-y-8">
       <Bcg allDas={allDas} />
 
-      {last?.bsc ? (
-        <div>
-          <h3 className="mb-1 font-medium">Balanced Scorecard</h3>
-          <p className="mb-3 text-sm text-(--foreground-muted)">
-            Les quatre perspectives de Kaplan et Norton, calculées par le moteur sur vos
-            résultats. Un profil déséquilibré tient rarement dans la durée.
-          </p>
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart
-                data={[
-                  { axe: 'Financier', valeur: last.bsc.financial },
-                  { axe: 'Client', valeur: last.bsc.client },
-                  { axe: 'Processus', valeur: last.bsc.process },
-                  { axe: 'Apprentissage', valeur: last.bsc.learning },
-                ]}
-              >
-                <PolarGrid stroke="var(--border)" />
-                <PolarAngleAxis dataKey="axe" tick={{ fontSize: 12 }} />
-                <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
-                <Radar
-                  name="Votre profil" dataKey="valeur"
-                  stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.3}
-                />
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      ) : null}
+      <div>
+        <h3 className="mb-1 font-medium">Balanced Scorecard</h3>
+        {last?.bsc ? (
+          <>
+            <p className="mb-3 text-sm text-(--foreground-muted)">
+              Les quatre perspectives de Kaplan et Norton, calculées par le moteur sur vos
+              résultats. Un profil déséquilibré tient rarement dans la durée.
+            </p>
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart
+                  data={[
+                    { axe: 'Financier', valeur: last.bsc.financial },
+                    { axe: 'Client', valeur: last.bsc.client },
+                    { axe: 'Processus', valeur: last.bsc.process },
+                    { axe: 'Apprentissage', valeur: last.bsc.learning },
+                  ]}
+                >
+                  <PolarGrid stroke="var(--border)" />
+                  <PolarAngleAxis dataKey="axe" tick={{ fontSize: 12 }} />
+                  <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                  <Radar
+                    name="Votre profil" dataKey="valeur"
+                    stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.3}
+                  />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        ) : (
+          <Unavailable
+            what="La Balanced Scorecard"
+            reasons={[
+              'Ses quatre perspectives se calculent sur des résultats. Elle apparaîtra après la résolution du premier tour — elle ne s’achète pas.',
+            ]}
+          />
+        )}
+      </div>
 
       <div>
         <h3 className="mb-1 font-medium">Les cinq forces de Porter — {das.name}</h3>
-        <p className="mb-3 text-sm text-(--foreground-muted)">
-          Plus une force est haute, moins la filière est profitable de ce côté-là. Le pouvoir
-          des fournisseurs et des distributeurs se déduit du nombre d’acteurs indépendants
-          qu’il vous reste : en racheter un le fait baisser.
-        </p>
-        <div className="h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <RadarChart
-              data={[
-                { axe: 'Entrants', valeur: 100 - das.forces.entryBarrier },
-                { axe: 'Substituts', valeur: das.forces.substitution },
-                { axe: 'Fournisseurs', valeur: das.forces.supplierPower },
-                { axe: 'Distributeurs', valeur: das.forces.distributorPower },
-                { axe: 'Rivalité', valeur: das.forces.rivalry },
-              ]}
-            >
-              <PolarGrid stroke="var(--border)" />
-              <PolarAngleAxis dataKey="axe" tick={{ fontSize: 12 }} />
-              <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
-              <Radar
-                name="Intensité" dataKey="valeur"
-                stroke="#c2410c" fill="#c2410c" fillOpacity={0.25}
-              />
-              <Tooltip contentStyle={TOOLTIP_STYLE} />
-            </RadarChart>
-          </ResponsiveContainer>
-        </div>
+        {resolved ? (
+          <>
+            <p className="mb-3 text-sm text-(--foreground-muted)">
+              Plus une force est haute, moins la filière est profitable de ce côté-là. Le
+              pouvoir des fournisseurs et des distributeurs se déduit du nombre d’acteurs
+              indépendants qu’il vous reste : en racheter un le fait baisser.
+            </p>
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart
+                  data={[
+                    { axe: 'Entrants', valeur: 100 - das.forces.entryBarrier },
+                    { axe: 'Substituts', valeur: das.forces.substitution },
+                    { axe: 'Fournisseurs', valeur: das.forces.supplierPower },
+                    { axe: 'Distributeurs', valeur: das.forces.distributorPower },
+                    { axe: 'Rivalité', valeur: das.forces.rivalry },
+                  ]}
+                >
+                  <PolarGrid stroke="var(--border)" />
+                  <PolarAngleAxis dataKey="axe" tick={{ fontSize: 12 }} />
+                  <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                  <Radar
+                    name="Intensité" dataKey="valeur"
+                    stroke="#c2410c" fill="#c2410c" fillOpacity={0.25}
+                  />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        ) : (
+          <Unavailable
+            what="La grille des cinq forces"
+            reasons={[
+              <>
+                <strong>Intensité de la rivalité</strong> — elle se mesure à la pression que
+                vos concurrents exercent réellement sur le marché, donc après une résolution.
+              </>,
+              'Les quatre autres forces sont déjà connues : barrière à l’entrée, substituts, et le pouvoir de vos fournisseurs et distributeurs.',
+            ]}
+          />
+        )}
       </div>
 
-      <McKinsey allDas={allDas} />
+      {resolved ? (
+        <McKinsey allDas={allDas} />
+      ) : (
+        <div>
+          <h3 className="mb-1 font-medium">Matrice McKinsey / GE</h3>
+          <Unavailable
+            what="La matrice McKinsey / GE"
+            reasons={[
+              <>
+                <strong>Force compétitive</strong> — c’est le score que le moteur vous
+                attribue face au marché. Il n’existe qu’après une résolution.
+              </>,
+              'Contrairement à la BCG, elle ne demande rien au cabinet : elle se calcule sur vos propres chiffres.',
+            ]}
+          />
+        </div>
+      )}
     </div>
   );
+}
+
+/**
+ * Les études qu'il manque pour placer la BCG, nommées une à une.
+ *
+ * Dire « il vous manque deux études » à une équipe qui en a déjà payé une la
+ * ferait racheter la mauvaise. On ne réclame que ce qui manque vraiment.
+ */
+function missingBcgStudies(allDas: DasSeries[]): string[] {
+  const studies: string[] = [];
+  if (allDas.every((d) => d.relativeShare === null)) studies.push('l’étude concurrentielle');
+  if (allDas.every((d) => d.marketGrowth === null)) studies.push('le PESTEL sectoriel');
+  return studies;
 }
 
 /**
@@ -470,24 +528,21 @@ function Bcg({ allDas }: { allDas: DasSeries[] }) {
       </p>
 
       {placeable.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-(--border) p-6">
-          <p className="text-sm">
-            Vos domaines ne peuvent pas être placés : il vous manque leurs deux coordonnées.
-          </p>
-          <ul className="mt-3 space-y-1 text-sm text-(--foreground-muted)">
-            <li>
-              — <strong>Part relative au leader</strong> : étude concurrentielle. Votre part
-              seule ne suffit pas — 20 % fait un poids mort face à un leader à 60 %, et une
-              vache à lait face à un second à 8 %.
-            </li>
-            <li>
-              — <strong>Croissance du marché</strong> : étude PESTEL sectorielle.
-            </li>
-          </ul>
-          <a href="/cabinet" className="mt-3 inline-block text-sm underline">
-            Commander ces études au cabinet
-          </a>
-        </div>
+        <Unavailable
+          what="La matrice BCG"
+          studies={missingBcgStudies(allDas)}
+          reasons={[
+            <>
+              <strong>Part relative au leader</strong> — votre part seule ne suffit pas :
+              20 % fait un poids mort face à un leader à 60 %, et une vache à lait face à un
+              second à 8 %.
+            </>,
+            <>
+              <strong>Croissance du marché</strong> — elle situe le domaine entre une étoile
+              et une vache à lait.
+            </>,
+          ]}
+        />
       ) : (
         <div className="h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
@@ -600,15 +655,17 @@ function Competition({
 
   if (!study) {
     return (
-      <div className="rounded-lg border border-dashed border-(--border) p-6">
-        <p className="text-sm">
-          Vous ne voyez que vos propres chiffres. Sans étude concurrentielle, une part de
-          marché de 18 % ne vous dit pas si elle fait de vous le premier ou le dernier.
-        </p>
-        <a href="/cabinet" className="mt-3 inline-block text-sm underline">
-          Commander une étude concurrentielle
-        </a>
-      </div>
+      <Unavailable
+        what="La comparaison au marché"
+        studies={['l’étude concurrentielle']}
+        reasons={[
+          'Vous ne voyez que vos propres chiffres. Une part de marché de 18 % ne vous dit pas si elle fait de vous le premier ou le dernier.',
+          <>
+            L’étude couvre <strong>toutes les équipes de votre ligue</strong>, sur tous les
+            tours joués : parts, volumes, chiffre d’affaires, marge et fournisseurs.
+          </>,
+        ]}
+      />
     );
   }
 
@@ -665,6 +722,54 @@ function Competition({
           </LineChart>
         </ResponsiveContainer>
       </div>
+    </div>
+  );
+}
+
+
+/**
+ * Ce qu'on ne peut pas montrer, et comment l'obtenir.
+ *
+ * Un graphique absent est indistinguable d'un graphique vide : dans les deux
+ * cas l'équipe voit du blanc et n'apprend rien. Le Balanced Scorecard
+ * disparaissait ainsi purement et simplement tant qu'aucun tour n'était résolu.
+ *
+ * On masque donc le graphe et on le remplace par ce qui le débloquerait — en
+ * distinguant les deux causes, qui n'appellent pas la même action : une étude
+ * qui n'a pas été payée se commande, un tour qui n'a pas été résolu s'attend.
+ */
+function Unavailable({
+  what,
+  reasons,
+  studies,
+}: {
+  what: string;
+  reasons: React.ReactNode[];
+  /** Études à commander. Vide quand il s'agit seulement d'attendre un tour. */
+  studies?: string[];
+}) {
+  return (
+    <div className="rounded-lg border border-dashed border-(--border) p-6">
+      <p className="text-sm font-medium">{what} ne peut pas être affichée.</p>
+      <ul className="mt-2 space-y-1 text-sm text-(--foreground-muted)">
+        {reasons.map((reason, index) => (
+          <li key={index}>— {reason}</li>
+        ))}
+      </ul>
+
+      {studies && studies.length > 0 ? (
+        <>
+          <p className="mt-3 text-sm">
+            À commander au cabinet : <strong>{studies.join(' et ')}</strong>.
+          </p>
+          <a
+            href="/cabinet"
+            className="mt-3 inline-block rounded-lg bg-(--accent) px-4 py-2 text-sm font-medium text-white"
+          >
+            Aller au cabinet
+          </a>
+        </>
+      ) : null}
     </div>
   );
 }
