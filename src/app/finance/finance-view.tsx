@@ -36,6 +36,8 @@ import { formatMadCompact } from '@/lib/format';
 import type { DecisionContext, FinanceValues } from '@/lib/decision-types';
 import { deepEqual } from '@/lib/deep-equal';
 import type { MoneyBar, ResultsContext } from '@/lib/results-types';
+import { CreditSlider } from './credit-slider';
+import { IndicatorsSection } from './indicators-section';
 import { ResultsSection } from './results-section';
 import { isOn, screenIsOpen, type EnabledModules } from '@/lib/modules-state';
 import { VariationField } from '@/components/variation-field';
@@ -51,17 +53,17 @@ const FINANCE_FIELDS = [
   ['finance.opex', 'opexMad', 'siege', 'Frais de fonctionnement du siège',
     'Loyers, systèmes, direction générale. Mutualiser des métiers proches les allège. '
     + 'Un siège se dégraisse, il ne se supprime pas : sous un plancher, la charge revient.'],
-  ['finance.debt_drawn', 'debtDrawnMad', 'credit', 'Crédit que vous prenez',
-    'Plus vous devez, plus la banque exige : le taux monte avec ce que vous avez déjà emprunté.'],
-  ['finance.debt_repaid', 'debtRepaidMad', 'credit', 'Crédit que vous remboursez',
-    'Allège les intérêts que vous paierez les années suivantes.'],
-] as const satisfies readonly (readonly [string, 'opexMad' | 'debtDrawnMad' | 'debtRepaidMad', string, string, string])[];
+] as const satisfies readonly (readonly [string, 'opexMad', string, string, string])[];
 
-const REGIMES = [
-  ['droit_commun', 'Droit commun', 'IS 20 % jusqu’à 100 M DH de bénéfice, 35 % au-delà.'],
-  ['cfc_zai', 'CFC / zone d’accélération industrielle', 'Régime dérogatoire.'],
-  ['banque_assurance', 'Banque & assurance', 'IS 40 % au-delà du seuil.'],
-] as const;
+/** Les montants qui se saisissent en valeur, bornés par un fait et non par un écart. */
+const MONEY_FIELDS = [
+  ['finance.capital_raise', 'capitalRaisedMad', 'Levée de fonds propres',
+    'Vos actionnaires remettent au pot. Élargit directement votre capacité d’endettement — '
+    + 'et se paie 2 % de frais d’émission.'],
+  ['finance.dividend', 'dividendMad', 'Dividende',
+    'Se vote sur l’exercice clos, et ne peut pas dépasser son résultat net. '
+    + 'Rémunérer l’actionnaire, c’est autant de moins pour financer la croissance.'],
+] as const satisfies readonly (readonly [string, 'capitalRaisedMad' | 'dividendMad', string, string])[];
 
 export function FinanceView({
   context, missing, modules, scales, results, money,
@@ -99,10 +101,13 @@ export function FinanceView({
   // Une seule définition de « engagé ce tour », partagée avec la barre du haut.
   // La part des DAS et la masse salariale viennent du serveur — elles se
   // décident ailleurs ; les champs de CET écran restent vivants sous la frappe.
+  const drawnMad = Math.max(finance.netCreditMad, 0);
+  const repaidMad = Math.max(-finance.netCreditMad, 0);
   const engaged =
     (money?.dasEngagedMad ?? 0) +
-    hr.payrollMad + hr.trainingBudgetMad + finance.opexMad + finance.debtRepaidMad;
-  const available = context.treasuryMad + finance.debtDrawnMad;
+    hr.payrollMad + hr.trainingBudgetMad + finance.opexMad + repaidMad + finance.dividendMad;
+  const available =
+    context.treasuryMad + drawnMad + finance.capitalRaisedMad * 0.98;
 
   return (
     <>
@@ -133,6 +138,10 @@ export function FinanceView({
 
         {/* Les résultats AVANT les décisions. */}
         <ResultsSection results={results} />
+
+        {results.group ? (
+          <IndicatorsSection group={results.group} limits={context.financeLimits} />
+        ) : null}
 
         {/* ── Consolidation RH — un RELEVÉ, pas une saisie ──────────────────
             Repliée : elle occupait le tiers d'un écran dont l'objet est de
@@ -213,7 +222,7 @@ export function FinanceView({
         <section className="mt-8 rounded-xl border border-(--border) bg-(--surface) p-6">
           <h2 className="text-xl font-medium">Vos décisions financières</h2>
 
-          <fieldset disabled={locked} className="mt-5 grid gap-6 sm:grid-cols-3">
+          <fieldset disabled={locked} className="mt-5 grid gap-6 sm:grid-cols-2">
             {FINANCE_FIELDS.filter(([key]) => isOn(modules, key)).map(
               ([key, field, family, label, hint]) => (
                 <VariationField
@@ -231,40 +240,67 @@ export function FinanceView({
                 />
               ),
             )}
+
+            {isOn(modules, 'finance.credit') ? (
+              <CreditSlider
+                value={finance.netCreditMad}
+                limits={context.financeLimits}
+                disabled={locked}
+                onChange={(v) => pushFinance({ ...finance, netCreditMad: v })}
+              />
+            ) : null}
           </fieldset>
 
-          {isOn(modules, 'finance.tax_regime') ? (
-          <fieldset disabled={locked} className="mt-6">
-            {/* Replié : le régime se choisit une fois pour la partie, et trois
-                pavés de texte fiscal à chaque tour noyaient les décisions qui,
-                elles, se reprennent à chaque exercice. */}
-            <details>
-              <summary className="cursor-pointer list-none text-sm font-medium">
-                Votre régime d’imposition
-                <span className="ml-2 font-normal text-(--foreground-muted)">
-                  {REGIMES.find(([v]) => v === finance.taxRegime)?.[1] ?? 'Droit commun'}
-                  {' · '}modifier
-                </span>
-              </summary>
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              {REGIMES.map(([value, label, hint]) => (
-                <button
-                  key={value} type="button"
-                  onClick={() => pushFinance({ ...finance, taxRegime: value })}
-                  aria-pressed={finance.taxRegime === value}
-                  className="rounded-lg border p-3 text-left"
-                  style={{
-                    borderColor: finance.taxRegime === value ? 'var(--accent)' : 'var(--border)',
-                    background: finance.taxRegime === value ? 'var(--surface-muted)' : undefined,
-                  }}
-                >
-                  <span className="block text-sm font-medium">{label}</span>
-                  <span className="mt-1 block text-xs text-(--foreground-muted)">{hint}</span>
-                </button>
-              ))}
-            </div>
-            </details>
-          </fieldset>
+          {MONEY_FIELDS.some(([key]) => isOn(modules, key)) ? (
+            <fieldset disabled={locked} className="mt-6 grid gap-6 sm:grid-cols-2">
+              {MONEY_FIELDS.filter(([key]) => isOn(modules, key)).map(
+                ([key, field, label, hint]) => {
+                  const ceiling =
+                    field === 'dividendMad' ? context.financeLimits.dividendCeilingMad : null;
+                  return (
+                    <div key={key}>
+                      <label className="text-sm font-medium" htmlFor={`money-${field}`}>
+                        {label}
+                      </label>
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <input
+                          id={`money-${field}`}
+                          type="text"
+                          inputMode="numeric"
+                          value={finance[field] === 0 ? '' : String(Math.round(finance[field]))}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value.replace(/[^0-9]/g, '')) || 0;
+                            pushFinance({
+                              ...finance,
+                              [field]: ceiling === null ? raw : Math.min(raw, ceiling),
+                            });
+                          }}
+                          placeholder="0"
+                          className="tabular w-48 rounded-lg border border-(--border) bg-(--background) px-3 py-2 text-sm"
+                        />
+                        <span className="text-sm text-(--foreground-muted)">DH</span>
+                      </div>
+                      {finance[field] > 0 ? (
+                        <p className="tabular mt-1.5 mb-0 text-xs text-(--foreground-muted)">
+                          {formatMadCompact(finance[field])}
+                          {field === 'capitalRaisedMad'
+                            ? ` · ${formatMadCompact(finance[field] * 0.02)} de frais`
+                            : ''}
+                        </p>
+                      ) : null}
+                      {ceiling !== null ? (
+                        <p className="tabular mt-1.5 mb-0 text-xs text-(--foreground-muted)">
+                          {ceiling > 0
+                            ? `plafond : ${formatMadCompact(ceiling)}, le résultat du dernier exercice`
+                            : 'aucun résultat distribuable sur le dernier exercice'}
+                        </p>
+                      ) : null}
+                      <p className="mt-1.5 mb-0 text-xs text-(--foreground-muted)">{hint}</p>
+                    </div>
+                  );
+                },
+              )}
+            </fieldset>
           ) : null}
 
           <p className="mt-5 border-t border-(--border) pt-4 text-sm text-(--foreground-muted)">

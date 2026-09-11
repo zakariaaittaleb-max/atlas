@@ -62,9 +62,33 @@ export interface DasDecisionValues {
 
 export interface FinanceValues {
   opexMad: number;
-  debtDrawnMad: number;
-  debtRepaidMad: number;
-  taxRegime: string;
+  /** Crédit NET : positif on tire, négatif on rembourse. Un seul curseur. */
+  netCreditMad: number;
+  capitalRaisedMad: number;
+  dividendMad: number;
+}
+
+/**
+ * Ce que la banque et l'exercice clos autorisent, pour borner les curseurs.
+ *
+ * Calculé côté serveur et non à l'écran : la même règle borne la saisie et
+ * l'écriture, sinon l'une des deux mentirait.
+ */
+export interface FinanceLimits {
+  equityMad: number;
+  debtOutstandingMad: number;
+  /** Encours maximal accepté, tous critères confondus. */
+  capacityTotalMad: number;
+  /** Ce qui reste à tirer. */
+  capacityAvailableMad: number;
+  /** Le critère qui bloque : c'est lui qu'il faut desserrer. */
+  capacityBinding: 'fonds_propres' | 'activite';
+  capacityByEquityMad: number;
+  capacityByRevenueMad: number;
+  /** Plafond du dividende : le résultat net du dernier exercice clos. */
+  dividendCeilingMad: number;
+  /** Chiffre d'affaires du dernier exercice clos : l'assiette du plafond. */
+  lastRevenueMad: number;
 }
 
 export interface ProcurementLine {
@@ -183,6 +207,8 @@ export interface DecisionContext {
   das: DasEntry[];
   smigMad: number;
   chargesPatronalesPct: number;
+  /** Bornes de la banque et de l'exercice clos. */
+  financeLimits: FinanceLimits;
 }
 
 export const CORPORATE_DEFAULTS: CorporateValues = {
@@ -203,9 +229,9 @@ export const CORPORATE_DEFAULTS: CorporateValues = {
 
 export const FINANCE_DEFAULTS: FinanceValues = {
   opexMad: 0,
-  debtDrawnMad: 0,
-  debtRepaidMad: 0,
-  taxRegime: 'droit_commun',
+  netCreditMad: 0,
+  capitalRaisedMad: 0,
+  dividendMad: 0,
 };
 
 export function dasDecisionDefaults(segments: { key: string }[]): DasDecisionValues {

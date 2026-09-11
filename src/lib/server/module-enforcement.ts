@@ -166,9 +166,11 @@ export async function enforceDas<T extends object>(
 
 export const FINANCE_FIELDS: Readonly<Record<string, string>> = {
   'finance.opex': 'opexMad',
-  'finance.debt_drawn': 'debtDrawnMad',
-  'finance.debt_repaid': 'debtRepaidMad',
-  'finance.tax_regime': 'taxRegime',
+  // Un seul champ pour le crédit : tirer et rembourser sont les deux sens du
+  // même geste, et les séparer laissait saisir les deux à la fois.
+  'finance.credit': 'netCreditMad',
+  'finance.capital_raise': 'capitalRaisedMad',
+  'finance.dividend': 'dividendMad',
 };
 
 export async function enforceFinance<T extends object>(
@@ -181,7 +183,7 @@ export async function enforceFinance<T extends object>(
 ): Promise<T> {
   const { data } = await admin
     .from('financial_budgets')
-    .select('opex_mad, debt_drawn_mad, debt_repaid_mad, tax_regime')
+    .select('opex_mad')
     .eq('team_id', teamId)
     .lt('round_number', roundNumber)
     .order('round_number', { ascending: false })
@@ -190,13 +192,13 @@ export async function enforceFinance<T extends object>(
 
   const reference: FinanceValues = data
     ? {
-        // Un crédit ne se reconduit PAS : reprendre le tirage du tour précédent
-        // ferait réemprunter l'équipe chaque tour sans qu'elle l'ait demandé.
-        // Seuls les postes récurrents se reconduisent.
+        // Seuls les postes RÉCURRENTS se reconduisent. Reprendre le tirage de
+        // crédit, la levée de fonds ou le dividende du tour précédent ferait
+        // rejouer chaque tour un geste que personne n'a redemandé.
         opexMad: Number(data.opex_mad ?? 0),
-        debtDrawnMad: 0,
-        debtRepaidMad: 0,
-        taxRegime: String(data.tax_regime ?? FINANCE_DEFAULTS.taxRegime),
+        netCreditMad: 0,
+        capitalRaisedMad: 0,
+        dividendMad: 0,
       }
     : FINANCE_DEFAULTS;
 

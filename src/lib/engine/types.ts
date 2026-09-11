@@ -304,6 +304,26 @@ export interface PnlStatement {
   effectiveTaxRate: number;
   leverageRatio: number;
   riskMargin: number;
+  /** Capacité d'autofinancement : résultat net + amortissements. */
+  selfFinancingMad: number;
+  /** Flux libre : la CAF, moins le besoin en fonds de roulement et le capex. */
+  freeCashFlowMad: number;
+  /** Levée de fonds propres du tour, brute. */
+  capitalRaisedMad: number;
+  /** Frais d'émission prélevés sur la levée. */
+  equityIssueCostMad: number;
+  /** Dividende versé sur l'exercice clos. */
+  dividendMad: number;
+  /**
+   * Bilan de CLÔTURE, calculé par le moteur et non plus dérivé à la saisie.
+   *
+   * Les capitaux propres ne bougeaient pas d'un tour à l'autre : le résultat ne
+   * s'y accumulait jamais. Un groupe qui gagnait trois milliards par tour
+   * gardait donc la même assise financière, et sa rentabilité des capitaux
+   * propres se mesurait contre un dénominateur gelé.
+   */
+  equityEndMad: number;
+  debtOutstandingEndMad: number;
 }
 
 export interface InvariantFailure {

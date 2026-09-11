@@ -9,6 +9,7 @@ import 'server-only';
  * Refaire ici une arithmétique parallèle ferait diverger l'écran de l'export.
  */
 
+import { interestCoverage } from '@/lib/engine/finance';
 import { computeIndicators, leverageView, readLeverage, readProfitMargin } from '@/lib/engine/indicators';
 import { requireTeam, getRoundState } from '@/lib/dal';
 import type { DasResult, GroupResult, ResultsContext } from '@/lib/results-types';
@@ -122,6 +123,32 @@ export async function loadResultsContext(): Promise<ResultsContext> {
       marginNote: readProfitMargin(indicators.profitMarginPct),
       taxPaidMad: num(pnl.corporate_tax_mad),
       treasuryEndMad: num(pnl.treasury_end_mad),
+
+      ebitdaMad: num(pnl.ebitda_mad),
+      ebitMad: num(pnl.ebit_mad),
+      interestMad,
+      depreciationMad: num(pnl.depreciation_mad),
+      capexMad: num(pnl.capex_mad),
+      workingCapitalMad: num(pnl.working_capital_mad),
+      workingCapitalChangeMad: num(pnl.working_capital_change_mad),
+      // Calculées par le moteur et persistées : l'écran ne refait pas le
+      // calcul, sinon les deux finiraient par ne plus dire la même chose.
+      selfFinancingMad: num(
+        pnl.self_financing_mad,
+        num(pnl.net_income_mad) + num(pnl.depreciation_mad),
+      ),
+      freeCashFlowMad: num(
+        pnl.free_cash_flow_mad,
+        num(pnl.net_income_mad) + num(pnl.depreciation_mad)
+          - num(pnl.working_capital_change_mad) - num(pnl.capex_mad),
+      ),
+      equityMad: num(pnl.equity_end_mad, equityMad),
+      interestCoverage: interestCoverage(num(pnl.ebit_mad), interestMad),
+      debtToEbitda: num(pnl.ebitda_mad) > 0 ? debtMad / num(pnl.ebitda_mad) : null,
+      workingCapitalDays:
+        num(pnl.revenue_mad) > 0
+          ? (num(pnl.working_capital_mad) / num(pnl.revenue_mad)) * 360
+          : 0,
     };
   }
 

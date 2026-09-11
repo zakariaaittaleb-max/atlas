@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { computeEndowment } from './endowment';
-import { buildParams } from './params';
+import { buildParams, param } from './params';
 import type { DasParameters } from './types';
 
 const params = buildParams();
@@ -74,7 +74,11 @@ describe('dotation initiale', () => {
   it('laisse une trésorerie de l’ordre de deux mois et demi de chiffre d’affaires', () => {
     const e = computeEndowment(agro, 1_000_000_000, 4, params);
     expect(e.treasuryMad / e.expectedRevenueMad).toBeCloseTo(2.5 / 12, 6);
-    expect(e.debtMad / e.equityMad).toBeCloseTo(0.25, 6);
+    // Le ratio suit le paramètre, et non une constante recopiée : c'est lui
+    // qu'on a dû desserrer le jour où la capacité d'endettement a montré que
+    // la dotation partait à sept années d'EBITDA de dette.
+    expect(e.debtMad / e.equityMad)
+      .toBeCloseTo(param(params, 'endowment.debt_ratio_of_equity'), 6);
   });
 
   it('dérive l’effectif de la productivité sur les DAS de service', () => {

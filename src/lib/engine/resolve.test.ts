@@ -195,6 +195,8 @@ function team(id: string, over: Partial<TeamSnapshot> = {}): TeamSnapshot {
       opexMad: 12_000_000,
       debtDrawnMad: 0,
       debtRepaidMad: 0,
+      capitalRaisedMad: 0,
+      dividendMad: 0,
       taxRegime: 'droit_commun',
       treasuryStartMad: 45_000_000,
       equityMad: 120_000_000,
@@ -1368,6 +1370,65 @@ describe('stocks dans la résolution complète', () => {
     // Rien en magasin, et la capacité redevient la seule limite.
     expect(metric.inputStockUnits).toBe(0);
     expect(metric.volumeSold).toBeGreaterThan(0);
+  });
+});
+
+describe('bilan de clôture', () => {
+  /**
+   * Les capitaux propres ne bougeaient jamais : le résultat ne s'y accumulait
+   * pas. Un groupe qui gagnait trois milliards par tour gardait la même assise
+   * financière toute la partie — et sa capacité d'endettement avec.
+   */
+  function bilanOf(over: Partial<TeamSnapshot['finance']> = {}) {
+    const alpha = team('alpha');
+    const result = resolveRound(
+      baseInput({ teams: [{ ...alpha, finance: { ...alpha.finance, ...over } }] }),
+      params,
+    );
+    return result.teams[0].pnl;
+  }
+
+  it('accumule le résultat de l’exercice dans les fonds propres', () => {
+    const pnl = bilanOf();
+    expect(pnl.equityEndMad).toBeCloseTo(120_000_000 + pnl.netIncomeMad, 0);
+  });
+
+  it('retire le dividende des fonds propres ET de la trésorerie', () => {
+    const sans = bilanOf();
+    const avec = bilanOf({ dividendMad: 10_000_000 });
+
+    expect(avec.equityEndMad).toBeCloseTo(sans.equityEndMad - 10_000_000, 0);
+    expect(avec.treasuryEndMad).toBeCloseTo(sans.treasuryEndMad - 10_000_000, 0);
+  });
+
+  it('capitalise une levée nette de ses frais d’émission', () => {
+    const sans = bilanOf();
+    const avec = bilanOf({ capitalRaisedMad: 50_000_000 });
+
+    // 2 % de frais : l'équipe encaisse et capitalise 49 M, pas 50.
+    expect(avec.equityIssueCostMad).toBeCloseTo(1_000_000, 0);
+    expect(avec.equityEndMad).toBeCloseTo(sans.equityEndMad + 49_000_000, 0);
+    expect(avec.treasuryEndMad).toBeCloseTo(sans.treasuryEndMad + 49_000_000, 0);
+  });
+
+  it('arrête l’encours de dette à la clôture', () => {
+    const pnl = bilanOf({ debtDrawnMad: 20_000_000, debtRepaidMad: 5_000_000 });
+    expect(pnl.debtOutstandingEndMad).toBeCloseTo(30_000_000 + 15_000_000, 0);
+  });
+
+  it('ne rend jamais une dette négative', () => {
+    // Rembourser plus qu'on ne doit ne crée pas une créance sur la banque.
+    const pnl = bilanOf({ debtRepaidMad: 90_000_000 });
+    expect(pnl.debtOutstandingEndMad).toBe(0);
+  });
+
+  it('publie la capacité d’autofinancement et le flux libre', () => {
+    const pnl = bilanOf();
+    expect(pnl.selfFinancingMad).toBeCloseTo(pnl.netIncomeMad + pnl.depreciationMad, 0);
+    expect(pnl.freeCashFlowMad).toBeCloseTo(
+      pnl.selfFinancingMad - pnl.workingCapitalChangeMad - pnl.capexMad,
+      0,
+    );
   });
 });
 

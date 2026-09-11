@@ -26,10 +26,13 @@ import { isOn, screenIsOpen, type EnabledModules } from '@/lib/modules-state';
 import {
   CORPORATE_DEFAULTS, FINANCE_DEFAULTS, dasDecisionDefaults,
   type ActorEntry, type CorporateValues, type DasDecisionValues, type DasEntry,
-  type DecisionContext, type DistributionLine, type FinanceValues, type HrRollup,
+  type DecisionContext, type DistributionLine, type FinanceLimits, type FinanceValues,
+  type HrRollup,
   type ProcurementLine,
 } from '@/lib/decision-types';
 import { createServerClient } from '@/lib/supabase/server';
+import { debtCapacity } from '@/lib/engine/finance';
+import { buildParams } from '@/lib/engine/params';
 import { latestAtMost, servedSegmentsOrDefault } from './reconduction';
 
 export type {
@@ -56,7 +59,7 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
   const [
     { data: units }, { data: segments }, { data: decisions },
     { data: strategies }, { data: budgets },
-    { data: pnl }, { data: state },
+    { data: pnls }, { data: state },
     { data: procurement }, { data: distribution }, { data: actors },
     { data: orgDesigns }, { data: dasHrDecisions }, { data: dasHrStates },
     { data: supplyMetrics },
@@ -82,7 +85,14 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
     // les reconduit. Une seule règle, celle de `reconduction.ts`.
     supabase.from('financial_budgets').select('*')
       .eq('team_id', team.teamId).lte('round_number', roundNumber),
-    supabase.from('pnl_statements').select('treasury_end_mad').eq('team_id', team.teamId).eq('round_number', previous).maybeSingle(),
+    // Tous les exercices clos, celui du tour courant compris : la capacité
+    // d'endettement et le plafond du dividende se lisent sur le DERNIER
+    // résultat connu. S'arrêter au tour précédent affichait, côte à côte, une
+    // capacité calculée sur un exercice et des résultats tirés du suivant —
+    // deux EBITDA différents sur le même écran, ce qui se lit comme une erreur.
+    supabase.from('pnl_statements')
+      .select('round_number, treasury_end_mad, revenue_mad, net_income_mad')
+      .eq('team_id', team.teamId).lte('round_number', roundNumber).order('round_number'),
     supabase.from('team_round_state').select('headcount').eq('team_id', team.teamId).eq('round_number', previous).maybeSingle(),
     // `lte` : les contrats sont RECONDUITS tant qu'on ne les renégocie pas.
     // L'équipe hérite d'un portefeuille amont et aval de l'exercice précédent ;
@@ -117,6 +127,41 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
   const budget =
     ((budgets ?? []) as Row[]).find((b) => num(b.round_number) === roundNumber) ?? null;
   const previousBudget = latestAtMost(budgets as Row[] | null, previous);
+
+  // ── Ce que la banque autorise, et ce que l'exercice clos permet ──────────
+  //
+  // Le bilan d'ouverture vient du moteur (clôture du tour précédent) ; la
+  // capacité d'endettement s'en déduit par la même fonction que celle qui borne
+  // l'écriture, pour que l'écran et la route ne puissent pas diverger.
+  const openingBudget = latestAtMost(budgets as Row[] | null, roundNumber);
+  const closedPnls = (pnls ?? []) as Row[];
+  /** Le dernier exercice connu : il sert de base à la banque et au dividende. */
+  const lastPnl = closedPnls.at(-1) ?? null;
+  /**
+   * La trésorerie d'OUVERTURE du tour, elle, est la clôture du tour d'avant —
+   * et non celle du tour courant, qui n'est pas encore arrêtée quand l'équipe
+   * décide. Les deux lectures sont distinctes et le restent.
+   */
+  const previousPnl = closedPnls.find((p) => num(p.round_number) === previous) ?? null;
+
+  const capacity = debtCapacity(
+    num(openingBudget?.equity_mad),
+    num(lastPnl?.revenue_mad),
+    num(openingBudget?.debt_outstanding_mad),
+    buildParams(),
+  );
+
+  const financeLimits: FinanceLimits = {
+    equityMad: num(openingBudget?.equity_mad),
+    debtOutstandingMad: num(openingBudget?.debt_outstanding_mad),
+    capacityTotalMad: capacity.totalMad,
+    capacityAvailableMad: capacity.availableMad,
+    capacityBinding: capacity.binding,
+    capacityByEquityMad: capacity.byEquityMad,
+    capacityByRevenueMad: capacity.byRevenueMad,
+    dividendCeilingMad: Math.max(num(lastPnl?.net_income_mad), 0),
+    lastRevenueMad: num(lastPnl?.revenue_mad),
+  };
 
   const strategyRow = latestAtMost(strategies as Row[] | null, roundNumber);
   const previousStrategyRow = latestAtMost(strategies as Row[] | null, previous);
@@ -202,7 +247,7 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
     roundNumber,
     status: str(round?.status, 'draft'),
     decisionsOpen: decisionsAreOpen(round?.status as string),
-    treasuryMad: num(pnl?.treasury_end_mad),
+    treasuryMad: num(previousPnl?.treasury_end_mad),
     headcount: num(state?.headcount),
     avgSalaryMad: averageSalary(dasHrDecisions as Row[] | null, dasHrStates as Row[] | null, roundNumber),
     debtOutstandingMad: num(previousBudget?.debt_outstanding_mad),
@@ -218,6 +263,7 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
     ),
     das,
     smigMad: SMIG_MAD,
+    financeLimits,
     chargesPatronalesPct: CHARGES_PATRONALES_PCT,
   };
 }
@@ -275,12 +321,14 @@ function toCorporate(row: Row | null): CorporateValues {
 function toFinance(row: Row | null): FinanceValues {
   if (!row) return FINANCE_DEFAULTS;
   return {
-    // L'emprunt et le remboursement sont des GESTES du tour : les reconduire
-    // ferait tirer deux fois le même crédit sans que personne le décide.
+    // Les frais de siège sont un ENGAGEMENT : ils se reconduisent.
     opexMad: num(row.opex_mad),
-    debtDrawnMad: 0,
-    debtRepaidMad: 0,
-    taxRegime: str(row.tax_regime, FINANCE_DEFAULTS.taxRegime),
+    // Le crédit, la levée et le dividende sont des GESTES du tour : les
+    // reconduire ferait tirer deux fois le même crédit, ou verser deux fois le
+    // même dividende, sans que personne ne l'ait décidé.
+    netCreditMad: 0,
+    capitalRaisedMad: 0,
+    dividendMad: 0,
   };
 }
 

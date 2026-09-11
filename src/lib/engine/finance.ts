@@ -140,6 +140,10 @@ export interface PnlInput {
   previousWorkingCapitalMad: number;
   debtDrawnMad: number;
   debtRepaidMad: number;
+  /** Levée de fonds propres décidée ce tour, brute de frais. */
+  capitalRaisedMad?: number;
+  /** Dividende voté sur l'exercice clos. */
+  dividendMad?: number;
   divestitureCashMad: number;
   /** Écart de taux imposé par un choc monétaire. Optionnel : 0 par défaut. */
   rateDelta?: number;
@@ -198,6 +202,19 @@ export function buildPnl(input: PnlInput, params: EngineParams): PnlStatement {
   const workingCapitalMad = input.revenueMad * (input.workingCapitalDays / 360);
   const workingCapitalChangeMad = workingCapitalMad - input.previousWorkingCapitalMad;
 
+  // ── Fonds propres : ce qui entre, ce qui sort ──────────────────────────
+  //
+  // Une levée n'est pas gratuite : les frais d'émission se prélèvent sur le
+  // produit, donc l'équipe encaisse et capitalise le NET. Sans ce coût, lever
+  // du capital serait un robinet sans contrepartie.
+  const capitalRaisedMad = Math.max(input.capitalRaisedMad ?? 0, 0);
+  const equityIssueCostMad = capitalRaisedMad * param(params, 'finance.equity_issue_cost_pct');
+  const capitalNetMad = capitalRaisedMad - equityIssueCostMad;
+  const dividendMad = Math.max(input.dividendMad ?? 0, 0);
+
+  const selfFinancingMad = selfFinancingCapacity(netIncomeMad, input.depreciationMad);
+  const freeCashFlowMad = freeCashFlow(selfFinancingMad, workingCapitalChangeMad, input.capexMad);
+
   const treasuryEndMad =
     input.treasuryStartMad +
     netIncomeMad +
@@ -206,7 +223,18 @@ export function buildPnl(input: PnlInput, params: EngineParams): PnlStatement {
     workingCapitalChangeMad +
     input.debtDrawnMad -
     input.debtRepaidMad +
+    capitalNetMad -
+    dividendMad +
     input.divestitureCashMad;
+
+  // Le résultat s'accumule enfin dans les fonds propres : c'est lui qui, tour
+  // après tour, élargit la capacité d'endettement d'une équipe rentable.
+  const equityEndMad =
+    input.equityMad + netIncomeMad - dividendMad + capitalNetMad;
+  const debtOutstandingEndMad = Math.max(
+    input.debtMad + input.debtDrawnMad - input.debtRepaidMad,
+    0,
+  );
 
   return {
     revenueMad: input.revenueMad,
@@ -235,6 +263,13 @@ export function buildPnl(input: PnlInput, params: EngineParams): PnlStatement {
     effectiveTaxRate: tax.effectiveRate,
     leverageRatio: input.equityMad > 0 ? input.debtMad / input.equityMad : 0,
     riskMargin: riskMargin(input.debtMad, input.equityMad, params),
+    selfFinancingMad,
+    freeCashFlowMad,
+    capitalRaisedMad,
+    equityIssueCostMad,
+    dividendMad,
+    equityEndMad,
+    debtOutstandingEndMad,
   };
 }
 
@@ -292,6 +327,106 @@ export function treasuryStatus(
     status: 'liquidation',
     nextRoundCompetitivenessMalus: param(params, 'treasury.restructuring_malus'),
   };
+}
+
+// ===========================================================================
+// Capacité d'endettement, capacité d'autofinancement, flux libre
+//
+// Ces trois grandeurs sont ce qu'un directeur financier regarde avant
+// d'arbitrer, et elles n'existaient pas : l'écran demandait un montant de
+// crédit sans jamais dire combien la banque accepterait d'en prêter.
+// ===========================================================================
+
+export interface DebtCapacity {
+  /** Encours maximal que la banque accepte, tous critères confondus. */
+  totalMad: number;
+  /** Ce qui reste à tirer, une fois la dette en cours déduite. */
+  availableMad: number;
+  /** Le critère qui BLOQUE — c'est lui qu'il faut desserrer. */
+  binding: 'fonds_propres' | 'activite';
+  /** Plafond adossé aux fonds propres, pour l'expliquer à l'écran. */
+  byEquityMad: number;
+  /** Plafond adossé au volume d'activité. */
+  byRevenueMad: number;
+}
+
+/**
+ * Ce que la banque accepte de prêter, et pourquoi.
+ *
+ * Deux critères, et c'est le plus contraignant qui l'emporte — comme un comité
+ * de crédit procède :
+ *
+ *   • le GEARING : on ne prête pas plus de deux fois les fonds propres. Un
+ *     actionnaire qui ne met rien ne trouve pas de banquier ;
+ *   • le VOLUME D'ACTIVITÉ : l'encours total reste dans une fraction du chiffre
+ *     d'affaires. C'est le critère qui punit la perte de parts de marché — un
+ *     groupe qui rétrécit voit sa ligne de crédit rétrécir avec lui.
+ *
+ * ── POURQUOI PAS UN MULTIPLE D'EBITDA ──────────────────────────────────────
+ * C'était le premier essai, et c'est le critère du métier : dette ≤ 3,5 × EBITDA.
+ * Branché sur Atlas, il rendait ZÉRO pour toutes les équipes, à tous les tours.
+ * La raison est structurelle : dans ce jeu la masse salariale absorbe près des
+ * trois quarts de la marge brute, si bien que l'EBITDA vaut environ 1 % du
+ * chiffre d'affaires. Aucun encours d'intérêt pédagogique ne passe un multiple
+ * de trois et demi sur une telle base — le curseur de crédit n'aurait jamais pu
+ * bouger vers la droite.
+ *
+ * Le rapport dette/EBITDA reste affiché comme INDICATEUR, avec son seuil de
+ * 3,5 : il dit quelque chose de vrai sur la soutenabilité, il ne peut
+ * simplement pas servir de plafond ici.
+ */
+export function debtCapacity(
+  equityMad: number,
+  revenueMad: number,
+  debtOutstandingMad: number,
+  params: EngineParams,
+): DebtCapacity {
+  const gearing = param(params, 'finance.debt_capacity_gearing_max');
+  const share = param(params, 'finance.debt_capacity_revenue_share');
+
+  const byEquityMad = Math.max(equityMad, 0) * gearing;
+  const byRevenueMad = Math.max(revenueMad, 0) * share;
+  const totalMad = Math.min(byEquityMad, byRevenueMad);
+
+  return {
+    totalMad,
+    availableMad: Math.max(totalMad - Math.max(debtOutstandingMad, 0), 0),
+    binding: byRevenueMad <= byEquityMad ? 'activite' : 'fonds_propres',
+    byEquityMad,
+    byRevenueMad,
+  };
+}
+
+/**
+ * Capacité d'autofinancement : ce que l'exploitation dégage réellement.
+ *
+ * Résultat net plus les charges qui n'ont pas été décaissées. Les
+ * amortissements en sont la seule ici — Atlas ne modélise ni provisions ni
+ * résultat de cession comptable, et la formule ne fait donc pas semblant.
+ */
+export function selfFinancingCapacity(netIncomeMad: number, depreciationMad: number): number {
+  return netIncomeMad + depreciationMad;
+}
+
+/**
+ * Flux de trésorerie libre : la CAF, moins ce que la croissance immobilise.
+ *
+ * C'est le seul chiffre qui répond à « pouvons-nous nous payer ce plan ? ».
+ * Négatif, il dit que le tour se finance par la dette ou par le matelas, pas
+ * par l'activité.
+ */
+export function freeCashFlow(
+  selfFinancingMad: number,
+  workingCapitalChangeMad: number,
+  capexMad: number,
+): number {
+  return selfFinancingMad - workingCapitalChangeMad - capexMad;
+}
+
+/** Couverture des intérêts : combien de fois l'EBIT paie la charge financière. */
+export function interestCoverage(ebitMad: number, interestMad: number): number | null {
+  if (interestMad <= 0) return null;
+  return ebitMad / interestMad;
 }
 
 // ===========================================================================

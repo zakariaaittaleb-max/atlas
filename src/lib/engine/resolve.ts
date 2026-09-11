@@ -1557,6 +1557,8 @@ export function resolveRound(
         previousWorkingCapitalMad: team.finance.previousWorkingCapitalMad,
         debtDrawnMad: team.finance.debtDrawnMad,
         debtRepaidMad: team.finance.debtRepaidMad,
+        capitalRaisedMad: team.finance.capitalRaisedMad,
+        dividendMad: team.finance.dividendMad,
         // Répondre à une crise se paie, y compris quand la carte s'avère
         // bénigne : c'est le prix de l'assurance, et c'est l'arbitrage que
         // la war room propose. Le coût était calculé puis jamais débité.

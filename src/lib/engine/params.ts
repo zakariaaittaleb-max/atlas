@@ -194,6 +194,21 @@ export const DEFAULT_PARAMS = {
   'finance.amortization_rounds': 5,
   'finance.bam_key_rate': 0.0225,
 
+  // --- Capacité d'endettement -----------------------------------------------
+  //
+  // Deux critères de comité de crédit, le plus contraignant l'emportant : un
+  // gearing au-delà de 2 ferme les portes, et l'encours total reste dans une
+  // fraction du volume d'activité.
+  'finance.debt_capacity_gearing_max': 2,
+  // Part du chiffre d'affaires que l'encours total ne dépasse pas. Un multiple
+  // d'EBITDA serait la convention du métier, mais l'EBITDA d'Atlas vaut environ
+  // 1 % du chiffre d'affaires — la masse salariale absorbe les trois quarts de
+  // la marge brute — et le plafond rendait alors zéro pour tout le monde.
+  'finance.debt_capacity_revenue_share': 0.4,
+  // Frais d'émission d'une augmentation de capital : la levée n'est pas
+  // gratuite, et c'est ce qui interdit d'en faire un robinet sans coût.
+  'finance.equity_issue_cost_pct': 0.02,
+
   // --- Frais de siège -------------------------------------------------------
   //
   // Un siège, c'est d'abord des gens : direction générale, finance, juridique,
@@ -298,7 +313,23 @@ export const DEFAULT_PARAMS = {
   // lui-même égal à capacité × prix de référence.
   'endowment.treasury_months_of_revenue': 2.5,
   'endowment.equity_ratio_of_revenue': 0.45,
-  'endowment.debt_ratio_of_equity': 0.25,
+  // ── Pourquoi 7 % et non 25 % ──────────────────────────────────────────────
+  //
+  // La dotation adossait la dette aux capitaux propres, eux-mêmes adossés au
+  // chiffre d'affaires ATTENDU — lequel est deux fois et demie supérieur à
+  // celui que les équipes réalisent réellement. Résultat : un encours de
+  // 10,15 Md pour un EBITDA de 1,38 Md, soit SEPT ANNÉES de remboursement.
+  //
+  // Aucune banque ne prête à un groupe dans cet état, et le constat s'est
+  // imposé en branchant la capacité d'endettement : elle valait zéro dès le
+  // premier tour, pour toutes les équipes, définitivement. Le curseur de crédit
+  // n'aurait jamais pu bouger vers la droite.
+  //
+  // À 7 %, l'encours de départ vaut environ deux années d'EBITDA : le groupe
+  // hérite d'une dette réelle, qui coûte des intérêts et pèse sur le levier,
+  // mais il lui reste de la marge pour emprunter — et il peut la perdre en
+  // laissant filer sa marge.
+  'endowment.debt_ratio_of_equity': 0.07,
   // Effectif : nombre d'unités produites par personne et par tour.
   'endowment.units_per_head': 14_000,
   'endowment.avg_salary_mad': 5_800,

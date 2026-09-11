@@ -303,15 +303,14 @@ export const MODULE_SCREENS: readonly ModuleScreen[] = [
         key: 'credit',
         label: 'Financement',
         fields: [
-          { key: 'finance.debt_drawn', label: 'Crédit pris', tier: 'standard', neutral: 'Aucun recours à la dette' },
-          { key: 'finance.debt_repaid', label: 'Crédit remboursé', tier: 'standard', neutral: 'Aucun remboursement anticipé' },
-        ],
-      },
-      {
-        key: 'fiscalite',
-        label: 'Fiscalité',
-        fields: [
-          { key: 'finance.tax_regime', label: 'Régime d’imposition', tier: 'avance', neutral: 'Droit commun' },
+          // Un seul champ là où il y en avait deux : tirer et rembourser sont
+          // les deux sens du même geste, bornés par la capacité d'endettement.
+          { key: 'finance.credit', label: 'Crédit net du tour', tier: 'standard',
+            neutral: 'Aucun mouvement de dette' },
+          { key: 'finance.capital_raise', label: 'Levée de fonds propres', tier: 'avance',
+            neutral: 'Pas d’appel aux actionnaires', defaultOpen: false },
+          { key: 'finance.dividend', label: 'Dividende', tier: 'avance',
+            neutral: 'Aucune distribution', defaultOpen: false },
         ],
       },
     ],
@@ -454,8 +453,7 @@ const DECOUVERTE_EXTRA = [
   'marches.distribution',
   'org.training_budget',
   'org.training_focus',
-  'finance.debt_drawn',
-  'finance.debt_repaid',
+  'finance.credit',
   'cabinet.pestel_sectoriel',
   'cabinet.concurrentielle',
   'warroom.events',

@@ -287,6 +287,10 @@ export interface FinanceSnapshot {
   opexMad: number;
   debtDrawnMad: number;
   debtRepaidMad: number;
+  /** Levée de fonds propres décidée ce tour. */
+  capitalRaisedMad: number;
+  /** Dividende voté sur l'exercice clos. */
+  dividendMad: number;
   taxRegime: TaxRegime;
   treasuryStartMad: number;
   equityMad: number;

@@ -47,6 +47,28 @@ export interface GroupResult {
   marginNote: string;
   taxPaidMad: number;
   treasuryEndMad: number;
+
+  // ── Ce qu'un directeur financier regarde avant d'arbitrer ────────────────
+  /** Excédent brut d'exploitation : la performance avant financement et impôt. */
+  ebitdaMad: number;
+  ebitMad: number;
+  interestMad: number;
+  depreciationMad: number;
+  capexMad: number;
+  workingCapitalMad: number;
+  workingCapitalChangeMad: number;
+  /** Capacité d'autofinancement : résultat net + amortissements. */
+  selfFinancingMad: number;
+  /** Flux libre : la CAF, moins le BFR et le capex. */
+  freeCashFlowMad: number;
+  /** Capitaux propres à la clôture de l'exercice. */
+  equityMad: number;
+  /** Combien de fois l'EBIT couvre la charge d'intérêt. `null` sans dette. */
+  interestCoverage: number | null;
+  /** Encours rapporté à l'EBITDA : la capacité de remboursement. */
+  debtToEbitda: number | null;
+  /** Besoin en fonds de roulement, en jours de chiffre d'affaires. */
+  workingCapitalDays: number;
 }
 
 export interface ResultsContext {

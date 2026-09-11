@@ -821,6 +821,8 @@ export async function loadResolutionSnapshot(
         // Gestes du tour : jamais reportés.
         debtDrawnMad: num(current?.debt_drawn_mad),
         debtRepaidMad: num(current?.debt_repaid_mad),
+        capitalRaisedMad: num(current?.capital_raised_mad),
+        dividendMad: num(current?.dividend_mad),
         taxRegime: (str(
           current?.tax_regime ?? budget?.tax_regime,
           'droit_commun',

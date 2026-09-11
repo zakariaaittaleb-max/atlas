@@ -58,8 +58,12 @@ const SPECS: Readonly<Record<string, VariationFieldSpec>> = {
   // de session. C'est un REPLI : la vraie valeur vient du provisionnement, puis
   // du tour précédent.
   'finance.opex': { family: 'siege', endowment: (b) => b.payrollMad * 0.1 },
-  'finance.debt_drawn': { family: 'credit', endowment: (b) => b.treasuryMad * 0.1 },
-  'finance.debt_repaid': { family: 'credit', endowment: (b) => b.treasuryMad * 0.1 },
+  // Le crédit net ne se pilote PAS en écart : ses bornes sont posées par la
+  // banque — tout rembourser d'un côté, la capacité d'endettement de l'autre —
+  // et non par un pourcentage du tour précédent. Il n'a donc pas de référence
+  // de dotation, et l'écran lui donne son propre curseur.
+  'finance.capital_raise': { family: 'credit', endowment: (b) => b.treasuryMad * 0.15 },
+  'finance.dividend': { family: 'credit', endowment: (b) => b.treasuryMad * 0.05 },
 
   // ── Organisation & RH ─────────────────────────────────────────────────────
   // Le droit de tirage OFPPT est de 1,6 % de la masse salariale : c'est le

@@ -18,6 +18,9 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { debtCapacity } from '@/lib/engine/finance';
+import { buildParams } from '@/lib/engine/params';
+
 import { decisionsAreOpen, getRoundState, getTeamContext } from '@/lib/dal';
 import type { EnabledModules } from '@/lib/modules-state';
 import {
@@ -126,9 +129,17 @@ const Payload = z.discriminatedUnion('plan', [
   z.object({
     plan: z.literal('finance'),
     opexMad: money,
-    debtDrawnMad: money,
-    debtRepaidMad: money,
-    taxRegime: z.enum(['droit_commun', 'cfc_zai', 'banque_assurance']),
+    /**
+     * Crédit NET du tour : positif on tire, négatif on rembourse.
+     *
+     * Un seul curseur, parce qu'il n'y a qu'une seule décision — on ne tire
+     * pas et ne rembourse pas le même tour. Les deux champs séparés laissaient
+     * saisir les deux, et il fallait alors deviner ce que l'équipe voulait
+     * dire. Les bornes sont posées plus bas, contre la capacité d'endettement.
+     */
+    netCreditMad: z.number().finite(),
+    capitalRaisedMad: money,
+    dividendMad: money,
   }),
 ]);
 
@@ -360,35 +371,76 @@ async function write(admin: Admin, teamId: string, round: number, body: Body): P
   }
 
 
-  // Plan finance : trésorerie, capitaux propres et dette sont REPRIS du dernier
-  // budget connu, jamais saisis — une équipe ne décide pas de son bilan
-  // d'ouverture.
+  // ── Le bilan d'ouverture ne se saisit pas : il se lit ────────────────────
   //
-  // `lte` et non `eq` : une ligne de budget n'existe que pour les tours où
-  // l'équipe a écrit quelque chose, plus celui de la dotation. Lire le seul
-  // tour précédent faisait donc retomber sur `?? 0` dès qu'une équipe sautait
-  // un exercice — et une équipe qui rouvrait l'écran au tour 3 après l'avoir
-  // ignoré au tour 2 voyait sa DETTE ET SES CAPITAUX PROPRES REMIS À ZÉRO.
-  // Effacer la dette au passage est un cadeau ; effacer les capitaux propres
-  // envoie le levier au plafond et fausse la marge de risque de la banque.
-  const [{ data: pnl }, { data: budgets }] = await Promise.all([
-    admin.from('pnl_statements').select('treasury_end_mad')
-      .eq('team_id', teamId).eq('round_number', round - 1).maybeSingle(),
-    admin.from('financial_budgets').select('round_number, equity_mad, debt_outstanding_mad')
-      .eq('team_id', teamId).lt('round_number', round).order('round_number'),
-  ]);
+  // Le moteur l'arrête à la clôture du tour précédent et l'écrit lui-même. Ici
+  // on ne fait que le recopier lors de la CRÉATION de la ligne, pour satisfaire
+  // les colonnes obligatoires — jamais lors d'une mise à jour, sans quoi une
+  // deuxième saisie écraserait le bilan calculé par une valeur périmée.
+  const { data: budgets } = await admin
+    .from('financial_budgets')
+    .select('round_number, treasury_start_mad, equity_mad, debt_outstanding_mad')
+    .eq('team_id', teamId)
+    .lte('round_number', round)
+    .order('round_number');
 
-  const previousBudget = (budgets ?? [])[(budgets ?? []).length - 1] ?? null;
+  const rows = budgets ?? [];
+  const existing = rows.find((b) => Number(b.round_number) === round) ?? null;
+  const opening = rows[rows.length - 1] ?? null;
 
-  fail((await admin.from('financial_budgets').upsert({
-    team_id: teamId, round_number: round,
+  const equityMad = Number(opening?.equity_mad ?? 0);
+  const debtMad = Number(opening?.debt_outstanding_mad ?? 0);
+
+  // ── Bornes du crédit ────────────────────────────────────────────────────
+  //
+  // On peut tout rembourser — mais pas plus que ce qu'on doit — et tirer
+  // jusqu'à la capacité d'endettement restante, telle que la banque la voit :
+  // le plus contraignant du gearing et de la capacité de remboursement.
+  const { data: lastPnl } = await admin
+    .from('pnl_statements')
+    .select('revenue_mad, net_income_mad, treasury_end_mad')
+    .eq('team_id', teamId)
+    .lt('round_number', round)
+    .order('round_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const capacity = debtCapacity(
+    equityMad,
+    Number(lastPnl?.revenue_mad ?? 0),
+    debtMad,
+    buildParams(),
+  );
+
+  const netCredit = Math.min(Math.max(body.netCreditMad, -debtMad), capacity.availableMad);
+  const drawnMad = Math.max(netCredit, 0);
+  const repaidMad = Math.max(-netCredit, 0);
+
+  // Un dividende se vote sur l'exercice CLOS : on ne distribue pas un résultat
+  // qui n'est pas encore calculé, et on ne distribue pas une perte.
+  const dividendMad = Math.min(body.dividendMad, Math.max(Number(lastPnl?.net_income_mad ?? 0), 0));
+
+  const decisions = {
     opex_mad: body.opexMad,
-    debt_drawn_mad: body.debtDrawnMad,
-    debt_repaid_mad: body.debtRepaidMad,
-    tax_regime: body.taxRegime,
-    treasury_start_mad: Number(pnl?.treasury_end_mad ?? 0),
-    equity_mad: Number(previousBudget?.equity_mad ?? 0),
-    debt_outstanding_mad:
-      Number(previousBudget?.debt_outstanding_mad ?? 0) + body.debtDrawnMad - body.debtRepaidMad,
-  }, { onConflict: 'team_id,round_number' })).error);
+    debt_drawn_mad: drawnMad,
+    debt_repaid_mad: repaidMad,
+    capital_raised_mad: body.capitalRaisedMad,
+    dividend_mad: dividendMad,
+  };
+
+  if (existing) {
+    fail((await admin.from('financial_budgets').update(decisions)
+      .eq('team_id', teamId).eq('round_number', round)).error);
+    return;
+  }
+
+  fail((await admin.from('financial_budgets').insert({
+    team_id: teamId, round_number: round,
+    ...decisions,
+    treasury_start_mad: Number(
+      lastPnl?.treasury_end_mad ?? opening?.treasury_start_mad ?? 0,
+    ),
+    equity_mad: equityMad,
+    debt_outstanding_mad: debtMad,
+  })).error);
 }
