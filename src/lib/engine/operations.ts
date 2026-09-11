@@ -123,6 +123,35 @@ export interface CostStructure {
 }
 
 /**
+ * Ce que l'écart de compétence retire — ou ajoute — au coût variable unitaire.
+ *
+ * Des gens formés font moins de rebut, cassent moins d'outillage et perdent
+ * moins de temps en réglages. C'est l'un des deux chemins par lesquels la
+ * formation cesse d'être une dépense sans retour : l'autre est la qualité.
+ *
+ * Le plancher à 0,5 interdit à la compétence de rendre la production gratuite,
+ * comme la courbe d'expérience a le sien.
+ */
+export function skillCostFactor(skillEdge: number, params: EngineParams): number {
+  return Math.max(1 - param(params, 'skill.unit_cost_leverage') * skillEdge, 0.5);
+}
+
+/**
+ * Ce que le manque de climat social ajoute au coût variable unitaire.
+ *
+ * Le plafond de capacité ne suffisait pas à faire coûter un climat effondré :
+ * sur une session réelle, l'outil valait deux fois et demie la demande, et
+ * retirer 12 % de la capacité ne changeait rien. La sanction n'existait donc
+ * que pour une équipe déjà saturée — l'inverse exact de ce qu'on veut
+ * enseigner. Ce facteur-là se paie toujours : heures supplémentaires pour
+ * couvrir les absences, reprises, rebuts, malfaçons.
+ */
+export function socialCostFactor(socialShortfall: number, params: EngineParams): number {
+  const penalty = param(params, 'climate.unit_cost_penalty');
+  return 1 + penalty * Math.min(Math.max(socialShortfall, 0), 1);
+}
+
+/**
  * L'automatisation troque du coût variable contre du coût fixe.
  * Automatiser à fond avec de faibles volumes est ruineux ; automatiser en
  * position de leader est décisif. **Le même investissement est bon ou mauvais
@@ -178,6 +207,22 @@ export function nextQuality(
   revenueBaseMad: number,
   technologyPartnerBonus: number,
   params: EngineParams,
+  /**
+   * Ce que la RH du tour précédent fait à la qualité de ce tour.
+   *
+   * `skillEdge` : un budget de recherche confié à des gens qui ne savent pas
+   * l'exécuter produit moins que le même budget entre des mains formées. C'est
+   * la deuxième sortie de la boucle RH, et elle porte sur le GAIN, non sur le
+   * niveau — laisser filer la compétence ne détruit pas le produit existant,
+   * cela empêche de l'améliorer.
+   *
+   * `qualityLossPts` : les points perdus par les coupes d'effectif au-delà de
+   * ce que la standardisation autorisait. `hr.ts` les calculait déjà, personne
+   * ne les appliquait : licencier au-delà du seuil sûr était réputé coûter de
+   * la qualité et n'en coûtait aucune. Ils frappent ICI, au tour suivant —
+   * l'atelier ne perd pas son tour de main le jour de la notification.
+   */
+  hrCarryOver: { skillEdge?: number; qualityLossPts?: number } = {},
 ): number {
   const obsolescence = param(params, 'quality.obsolescence_per_round');
   const coefficient = param(params, 'quality.rd_coefficient');
@@ -186,10 +231,16 @@ export function nextQuality(
   const decayed = previousQuality * (1 - obsolescence);
   const intensity = revenueBaseMad > 0 ? rdBudgetPreviousRoundMad / revenueBaseMad : 0;
   const effort = reference > 0 ? Math.min(intensity / reference, 2) : 0;
+  const skillFactor = Math.max(
+    1 + param(params, 'quality.skill_leverage') * (hrCarryOver.skillEdge ?? 0),
+    0,
+  );
   // Rendement décroissant : plus on est haut, plus il est cher de monter.
-  const gain = coefficient * effort * (1 - decayed / 100);
+  const gain = coefficient * effort * (1 - decayed / 100) * skillFactor;
 
-  return clamp100(decayed + gain + technologyPartnerBonus);
+  return clamp100(
+    decayed + gain + technologyPartnerBonus - Math.max(hrCarryOver.qualityLossPts ?? 0, 0),
+  );
 }
 
 /**

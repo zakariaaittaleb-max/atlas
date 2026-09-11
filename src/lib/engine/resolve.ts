@@ -50,7 +50,8 @@ import { computeIndicators } from './indicators';
 import {
   giacSupport, nextClimatSocial, nextSkillIndex, ofpptReimbursement,
   qualityLossFromCuts, safeHeadcountReduction, severancePerHead,
-  consolidateClimate, consolidateHeadcount,
+  consolidateClimate, consolidateHeadcount, skillEdge, socialAvailability,
+  socialShortfall,
   standardisationLevel, trainingFocusEffects, turnoverRate, workloadIndex,
 } from './hr';
 import { coverageCappedShare, resolveDistribution, resolveProcurement } from './channels';
@@ -89,6 +90,8 @@ import {
   nextNotoriety,
   nextQuality,
   perceivedQuality,
+  skillCostFactor,
+  socialCostFactor,
   utilisationEffects,
 } from './operations';
 import { organisationalAxes } from './organisation';
@@ -318,6 +321,14 @@ export interface DasHrOutput {
   subsidiesMad: number;
   safeReduction: number;
   qualityLossPts: number;
+  /**
+   * Départs SUBIS ce tour, conséquence de la rotation du tour précédent.
+   *
+   * Sortie à part des licenciements : l'équipe doit pouvoir distinguer ce
+   * qu'elle a décidé de ce que son climat social lui impose. Sans ce chiffre,
+   * un effectif qui fond sans licenciement passerait pour une erreur de calcul.
+   */
+  departuresCount: number;
 }
 
 export interface ResolutionOutput {
@@ -551,9 +562,17 @@ export function resolveRound(
       );
 
       // Étape 3 — Capacité. Le CAPEX du tour précédent entre en service ici.
+      //
+      // ── L'EFFECTIF EST CELUI DU DOMAINE, PAS DU GROUPE ─────────────────
+      // Sur un métier de service, la capacité vient des personnes — et
+      // l'effectif lu était `team.hr.headcountStart`, la CONSOLIDATION du
+      // groupe. Un groupe de trois domaines dont un seul est un service dotait
+      // donc ce service de la totalité de l'effectif du groupe, ouvriers de
+      // conserverie compris. Il produisait à trois fois ce qu'il payait, et
+      // recruter dans l'agro-industrie augmentait la capacité du numérique.
       const rawCapacity = das.parameters.capacityFromHeadcount
         ? capacityFromHeadcount(
-            team.hr.headcountStart,
+            unit.previousHr.headcount,
             das.parameters.headcountProductivity ?? 1,
           )
         : nextCapacity(
@@ -566,7 +585,26 @@ export function resolveRound(
           );
 
       const capacityUnits = Math.max(rawCapacity * (1 + shock.capacityPct), 0);
-      const effectiveCapacity = capacityUnits * (1 - clamp01(procurement.disruption));
+
+      // ── PREMIÈRE SORTIE DE LA BOUCLE RH ────────────────────────────────
+      //
+      // Le climat social de la CLÔTURE PRÉCÉDENTE décide de la part de l'outil
+      // que l'organisation est en état de faire tourner. C'est le chemin par
+      // lequel un plan social, un salaire au rabais ou une surcharge chronique
+      // coûtent enfin des unités produites — donc du chiffre d'affaires, de la
+      // part de marché et du résultat.
+      //
+      // Il s'applique APRÈS la rupture d'approvisionnement et se compose avec
+      // elle : un atelier privé de matière ET privé de bras ne produit pas le
+      // maximum des deux manques, il subit les deux.
+      const socialGap = socialShortfall(unit.previousHr.climatSocial);
+      const availability = socialAvailability(unit.previousHr.climatSocial, params);
+      const effectiveCapacity =
+        capacityUnits * (1 - clamp01(procurement.disruption)) * availability;
+
+      // L'écart de compétence hérité du tour précédent : il pèse sur le coût
+      // variable (moins de rebut) et sur le rendement de la R&D.
+      const edge = skillEdge(unit.previousHr.skillIndex, params);
 
       // Étape 4 — Coût unitaire : apprentissage, puis automatisation.
       const automation = automationLevel(
@@ -608,6 +646,10 @@ export function resolveRound(
         effortBaseMad,
         unit.technologyPartnerBonus,
         params,
+        // Ce que la RH du tour précédent laisse en héritage : des gens formés
+        // font rendre la recherche, des coupes trop profondes emportent le
+        // tour de main.
+        { skillEdge: edge, qualityLossPts: unit.previousHr.qualityLossPts },
       );
       const notoriety = nextNotoriety(
         unit.previous.notoriety,
@@ -657,7 +699,13 @@ export function resolveRound(
         capacityUnits,
         effectiveCapacity,
         automation,
-        unitVariableCostMad: costs.unitVariableCostMad,
+        // Deux facteurs humains sur le même coût : QUI travaille — la
+        // compétence — et DANS QUEL ÉTAT — le climat. Ils se composent :
+        // une équipe démotivée ET déqualifiée paie les deux.
+        unitVariableCostMad:
+          costs.unitVariableCostMad *
+          skillCostFactor(edge, params) *
+          socialCostFactor(socialGap, params),
         fixedProductionCostMad: costs.fixedProductionCostMad,
         quality,
         notoriety: shockedNotoriety,
@@ -759,12 +807,38 @@ export function resolveRound(
       team.hr.hireCadres;
     const talentMix = headcount > 0 ? clamp100((expertHeadcount / headcount) * 100) : 0;
 
-    const salaryTerm = clamp((team.hr.avgSalaryBrutMad / smig - 1) / 2, 0, 1);
-    const trainingTerm =
-      headcount > 0 ? clamp(team.hr.trainingBudgetMad / headcount / trainingReference, 0, 1) : 0;
-    const skillIntensity = clamp100(
-      100 * (0.4 * salaryTerm + 0.3 * trainingTerm + 0.3 * (talentMix / 100)),
-    );
+    /**
+     * Intensité de compétence, DOMAINE PAR DOMAINE.
+     *
+     * ── LE DÉFAUT CORRIGÉ ──────────────────────────────────────────────────
+     * Elle était calculée UNE FOIS pour l'équipe, sur la consolidation du
+     * groupe, puis appliquée identiquement à tous ses domaines. Or le salaire
+     * et la formation se décident PAR DOMAINE, avec sa pyramide sous les yeux.
+     * Conséquence : un domaine qui payait bien et formait beaucoup, et son
+     * voisin qui payait au minimum et ne formait personne, obtenaient la même
+     * note sur cet axe. L'une des deux décisions était donc gratuite, l'autre
+     * inutile, et aucun débriefing ne pouvait le voir.
+     *
+     * La différenciation exige des gens ; la domination par les coûts s'en
+     * passe. Faire porter l'axe par le domaine, c'est rendre à cette phrase la
+     * conséquence qu'elle annonce : le SAB du domaine, donc son alignement,
+     * donc sa compétitivité, donc sa part de marché.
+     *
+     * Le troisième terme est l'indice de compétence PROPRE au domaine — ce
+     * qu'il a réellement accumulé — là où le talent_mix du groupe ne disait
+     * que la proportion de cadres au niveau consolidé.
+     */
+    const skillIntensityOf = (w: UnitWorkspace): number => {
+      const d = w.unit.hr;
+      const staff = Math.max(w.unit.previousHr.headcount, 1);
+      const salary = d?.avgSalaryBrutMad ?? w.unit.previousHr.avgSalaryBrutMad;
+      const salaryTerm = clamp((salary / smig - 1) / 2, 0, 1);
+      const trainingTerm = clamp(
+        (d?.trainingBudgetMad ?? 0) / staff / trainingReference, 0, 1,
+      );
+      const skillTerm = clamp100(w.unit.previousHr.skillIndex) / 100;
+      return clamp100(100 * (0.4 * salaryTerm + 0.3 * trainingTerm + 0.3 * skillTerm));
+    };
 
     // Vecteur observé, DAS par DAS.
     for (const w of teamUnits) {
@@ -792,7 +866,7 @@ export function resolveRound(
         cost_efficiency: clamp100(100 * (1.5 - costRatio)),
         scale_index: clamp100(50 * volumeRatio),
         automation_level: w.automation,
-        skill_intensity: skillIntensity,
+        skill_intensity: skillIntensityOf(w),
         segment_breadth: clamp100(((w.unit.decision.servedSegments.length - 1) / 4) * 100),
         channel_control: w.channelControl,
 
@@ -1319,7 +1393,24 @@ export function resolveRound(
     const layoffs = d?.layoffs ?? 0;
     // Ce que les autres domaines de l'équipe sont venus chercher ici.
     const transfersOut = transfersOutByUnit.get(`${w.teamId}::${w.unit.dasId}`) ?? 0;
-    const headcount = Math.max(prev.headcount + hires - layoffs - transfersOut, 1);
+
+    // ── LES DÉPARTS ONT ENFIN LIEU ─────────────────────────────────────────
+    //
+    // La rotation était calculée, bornée par la base entre 0 et 1, persistée,
+    // et affichée à l'équipe avec la phrase « ce sont les plus qualifiés qui
+    // partent ». Personne ne partait. Un climat à 10 sur 100 laissait
+    // l'effectif intact tour après tour.
+    //
+    // C'est le taux du tour PRÉCÉDENT qui s'applique : on subit au tour t+1 la
+    // démission qu'on a provoquée au tour t. Le plancher de rotation est inclus
+    // — une entreprise irréprochable perd elle aussi des salariés, et doit donc
+    // recruter pour tenir la même charge. C'est ce qui fait du recrutement une
+    // décision récurrente et non un geste de croissance.
+    const departures = Math.round(prev.headcount * clamp01(prev.turnoverRate));
+    const headcount = Math.max(
+      prev.headcount + hires - layoffs - transfersOut - departures,
+      1,
+    );
 
     const salary = d?.avgSalaryBrutMad ?? prev.avgSalaryBrutMad;
     const payrollMad =
@@ -1432,6 +1523,7 @@ export function resolveRound(
         safeHeadcountReduction(prev.headcount, standardisation, w.automation, params),
         prev.headcount,
       ),
+      departuresCount: departures,
     };
   });
 
@@ -1507,12 +1599,27 @@ export function resolveRound(
         param(params, 'structure.transition_cost_pct_of_payroll')
       : 0;
 
+    // La masse salariale de base sert TROIS fois : la ligne de personnel, le
+    // plancher des frais de siège et la référence de dimensionnement du siège.
+    // Un seul calcul, pour qu'elles ne puissent pas diverger.
+    const basePayrollMad = payrollCost(headcount, team.hr.avgSalaryBrutMad, params);
+
+    // Ce que le siège DEVRAIT peser pour tenir les fonctions que l'équipe lui
+    // a confiées, et ce qu'elle lui accorde vraiment. Le rapport des deux
+    // décide de ce que la centralisation rapporte — ou coûte.
+    const hqReferenceMad = basePayrollMad * param(params, 'finance.hq_opex_share_of_payroll');
+    const hqBudgetMad = Math.max(
+      team.finance.opexMad,
+      basePayrollMad * param(params, 'finance.hq_opex_floor_share_of_payroll'),
+    );
+
     const synergy = synergyEffect(
       corporate.shared,
       corporate.relatedness,
       corporate.centralisation,
       teamUnits.length,
       params,
+      hqReferenceMad > 0 ? hqBudgetMad / hqReferenceMad : 1,
     );
 
     // Le BFR moyen est pondéré par le CA de chaque DAS : le BTP immobilise
@@ -1539,11 +1646,6 @@ export function resolveRound(
           )
         : 60) + weightedShock((s) => s.workingCapitalDaysDelta);
 
-    // La masse salariale de base sert deux fois : la ligne de personnel et le
-    // plancher des frais de siège. Un seul calcul, pour qu'elles ne puissent
-    // pas diverger.
-    const basePayrollMad = payrollCost(headcount, team.hr.avgSalaryBrutMad, params);
-
     const pnl = buildPnl(
       {
         revenueMad,
@@ -1568,10 +1670,7 @@ export function resolveRound(
         // pas l'écran finance dirigeait un groupe sans direction générale, sans
         // finance et sans systèmes. Le plancher rend la charge inévitable, sans
         // rien imposer au-delà : au-dessus de lui, c'est l'équipe qui décide.
-        overheadMad: Math.max(
-          team.finance.opexMad,
-          basePayrollMad * param(params, 'finance.hq_opex_floor_share_of_payroll'),
-        ),
+        overheadMad: hqBudgetMad,
         overheadMultiplier: synergy.opexMultiplier,
         fixedProductionMad,
         consultingMad: team.finance.consultingSpendMad,

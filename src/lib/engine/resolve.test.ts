@@ -124,8 +124,12 @@ function unit(over: Partial<TeamDasSnapshot> = {}): TeamDasSnapshot {
     groupStance: null,
     hr: null,
     previousHr: {
-      headcount: 400, climatSocial: 70, skillIndex: 50,
+      // Compétence au niveau de la DOTATION : l'écart de compétence vaut alors
+      // zéro, et ces cas d'intégration mesurent l'économie sans qu'un bonus
+      // de formation implicite ne déplace les coûts.
+      headcount: 400, climatSocial: 70, skillIndex: 20,
       avgSalaryBrutMad: 5800, seniorityYears: 8,
+      turnoverRate: 0, qualityLossPts: 0,
     },
     procurement: [
       {
@@ -1605,5 +1609,265 @@ describe('concurrents non joueurs', () => {
     expect(seul.unservedShare).toBeGreaterThan(0.01);
     // Même reliquat de répartition, mais sur trois quarts de marché seulement.
     expect(avec.unservedShare).toBeCloseTo(seul.unservedShare * 0.75, 4);
+  });
+});
+
+// ===========================================================================
+// LA BOUCLE RH SORT ENFIN VERS L'ÉCONOMIE
+//
+// ── LE DÉFAUT CORRIGÉ ──────────────────────────────────────────────────────
+// La chaîne RH se refermait sur elle-même : les décisions faisaient le climat,
+// le climat faisait la rotation et la compétence, la compétence faisait la
+// charge de travail, la charge de travail refaisait le climat. Rien n'en
+// sortait vers la production. Une équipe pouvait payer au minimum, ne jamais
+// former et licencier à chaque tour sans produire une unité de moins.
+//
+// Ces cas mesurent la chaîne COMPLÈTE : décision RH → capacité, coût, qualité
+// → compétitivité → part de marché → résultat.
+// ===========================================================================
+
+/** Une équipe seule dans son pool : sa production ne dépend que d'elle. */
+const soloWith = (over: Partial<TeamDasSnapshot['previousHr']>) =>
+  baseInput({
+    teams: [team('solo', { units: [unit({ previousHr: { ...unit().previousHr, ...over } })] })],
+  });
+
+describe('climat social et capacité de production', () => {
+  it('retire de la capacité effective à un climat effondré', () => {
+    const sain = resolveRound(soloWith({ climatSocial: 80 }), params).dasMetrics[0];
+    const brise = resolveRound(soloWith({ climatSocial: 10 }), params).dasMetrics[0];
+
+    // L'outil est le MÊME : c'est l'organisation qui ne le fait plus tourner.
+    expect(brise.capacityUnits).toBeCloseTo(sain.capacityUnits, 6);
+    expect(brise.effectiveCapacityUnits).toBeLessThan(sain.effectiveCapacityUnits);
+  });
+
+  it('ne retire rien au-dessus du pivot : un climat correct ne coûte pas', () => {
+    const pivot = resolveRound(soloWith({ climatSocial: 60 }), params).dasMetrics[0];
+    const excellent = resolveRound(soloWith({ climatSocial: 95 }), params).dasMetrics[0];
+    expect(excellent.effectiveCapacityUnits).toBeCloseTo(pivot.effectiveCapacityUnits, 6);
+  });
+
+  it('fait payer le climat en ruptures, donc en volume vendu', () => {
+    const sain = resolveRound(soloWith({ climatSocial: 80 }), params).dasMetrics[0];
+    const brise = resolveRound(soloWith({ climatSocial: 0 }), params).dasMetrics[0];
+    expect(brise.stockoutRate).toBeGreaterThan(sain.stockoutRate);
+    expect(brise.volumeSold).toBeLessThan(sain.volumeSold);
+  });
+
+  it('n’invente jamais de vente au-delà de la capacité disponible', () => {
+    const r = resolveRound(soloWith({ climatSocial: 5 }), params);
+    expect(
+      checkInvariants(r.dasMetrics, r.teams, r.poolSummaries, r.transfers),
+    ).toEqual([]);
+  });
+});
+
+describe('compétence et économie du domaine', () => {
+  it('abaisse le coût unitaire quand l’équipe a formé au-delà de la dotation', () => {
+    const dotation = resolveRound(soloWith({ skillIndex: 20 }), params).dasMetrics[0];
+    const formee = resolveRound(soloWith({ skillIndex: 95 }), params).dasMetrics[0];
+    expect(formee.unitVariableCostMad).toBeLessThan(dotation.unitVariableCostMad);
+  });
+
+  it('le renchérit quand elle a laissé la compétence s’éroder', () => {
+    const dotation = resolveRound(soloWith({ skillIndex: 20 }), params).dasMetrics[0];
+    const erodee = resolveRound(soloWith({ skillIndex: 2 }), params).dasMetrics[0];
+    expect(erodee.unitVariableCostMad).toBeGreaterThan(dotation.unitVariableCostMad);
+  });
+
+  it('fait mieux rendre le même budget de recherche', () => {
+    const dotation = resolveRound(soloWith({ skillIndex: 20 }), params).dasMetrics[0];
+    const formee = resolveRound(soloWith({ skillIndex: 95 }), params).dasMetrics[0];
+    expect(formee.quality).toBeGreaterThan(dotation.quality);
+  });
+
+  it('ne déplace rien au niveau exactement hérité', () => {
+    const a = resolveRound(soloWith({}), params).dasMetrics[0];
+    const b = resolveRound(soloWith({ skillIndex: 20 }), params).dasMetrics[0];
+    expect(b.unitVariableCostMad).toBeCloseTo(a.unitVariableCostMad, 6);
+    expect(b.quality).toBeCloseTo(a.quality, 6);
+  });
+});
+
+describe('rotation subie', () => {
+  it('fait réellement partir des gens', () => {
+    const stable = resolveRound(soloWith({ turnoverRate: 0 }), params).dasHr[0];
+    const fuite = resolveRound(soloWith({ turnoverRate: 0.25 }), params).dasHr[0];
+
+    expect(fuite.departuresCount).toBe(Math.round(400 * 0.25));
+    expect(fuite.headcount).toBeLessThan(stable.headcount);
+  });
+
+  it('allège la masse salariale des partants, sans indemnité', () => {
+    const stable = resolveRound(soloWith({ turnoverRate: 0 }), params).dasHr[0];
+    const fuite = resolveRound(soloWith({ turnoverRate: 0.25 }), params).dasHr[0];
+    expect(fuite.payrollMad).toBeLessThan(stable.payrollMad);
+    // Une démission ne se paie pas : c'est bien ce qui la rend plus insidieuse
+    // qu'un licenciement, dont le coût se voit tout de suite.
+    expect(fuite.severancePaidMad).toBe(0);
+  });
+
+  it('n’assèche jamais un domaine jusqu’à zéro', () => {
+    const total = resolveRound(soloWith({ turnoverRate: 1 }), params).dasHr[0];
+    expect(total.headcount).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('coupes d’effectif et qualité produit', () => {
+  it('applique au tour suivant les points perdus par des coupes trop profondes', () => {
+    const sain = resolveRound(soloWith({ qualityLossPts: 0 }), params).dasMetrics[0];
+    const coupe = resolveRound(soloWith({ qualityLossPts: 8 }), params).dasMetrics[0];
+    expect(sain.quality - coupe.quality).toBeCloseTo(8, 4);
+    // Et la sanction remonte jusqu'à la qualité PERÇUE, celle qui décide.
+    expect(coupe.perceivedQuality).toBeLessThan(sain.perceivedQuality);
+  });
+
+  it('calcule une perte non nulle quand on licencie au-delà du seuil sûr', () => {
+    const result = resolveRound(
+      baseInput({
+        teams: [
+          team('t1', { units: [unit({ hr: hrDecision({ layoffs: 200 }) })] }),
+          team('t2'), team('t3'),
+        ],
+      }),
+      params,
+    );
+    expect(result.dasHr[0].qualityLossPts).toBeGreaterThan(0);
+  });
+});
+
+describe('intensité de compétence, domaine par domaine', () => {
+  /**
+   * Elle était calculée UNE FOIS pour l'équipe, sur la consolidation du groupe,
+   * puis appliquée identiquement à tous ses domaines : un domaine qui payait
+   * bien et formait beaucoup et son voisin qui ne faisait ni l'un ni l'autre
+   * obtenaient la même note. L'une des deux décisions était donc gratuite.
+   */
+  it('distingue deux domaines de la même équipe aux politiques opposées', () => {
+    const genereux = unit({
+      dasId: 'das-agro',
+      hr: hrDecision({ avgSalaryBrutMad: 14_000, trainingBudgetMad: 8_000_000 }),
+    });
+    const avare = unit({
+      dasId: 'das-retail',
+      hr: hrDecision({ avgSalaryBrutMad: 3_500, trainingBudgetMad: 0 }),
+    });
+
+    const result = resolveRound(
+      baseInput({
+        das: [das(), das({ parameters: dasParameters({ dasId: 'das-retail', sectorKey: 'retail' }) })],
+        teams: [team('solo', { units: [genereux, avare] })],
+      }),
+      params,
+    );
+
+    const axisOf = (dasId: string) =>
+      result.teams[0].alignment.perDas[dasId].details
+        .find((d) => d.axis === 'skill_intensity')!.observed;
+
+    expect(axisOf('das-agro')).toBeGreaterThan(axisOf('das-retail'));
+  });
+});
+
+describe('frais de siège et synergies', () => {
+  const stance = () => ({
+    portfolioRole: 'moteur' as const,
+    hqPurchasing: true, hqIt: true, hqRd: true, hqHr: true, hqFinance: true,
+    sharedResources: [
+      { resourceKey: 'plateforme_si', proximity: 85, adoptionLevel: 95, standardised: true },
+      { resourceKey: 'centrale_achats', proximity: 85, adoptionLevel: 90, standardised: true },
+    ],
+  });
+
+  /**
+   * Couper le siège était une économie SANS contrepartie : une équipe pouvait
+   * centraliser cinq fonctions groupe, ne payer personne pour les tenir, et
+   * encaisser quand même les économies d'échelle.
+   */
+  const centralise = (opexMad: number) =>
+    baseInput({
+      das: [das(), das({ parameters: dasParameters({ dasId: 'das-retail', sectorKey: 'retail' }) })],
+      teams: [
+        team('solo', {
+          corporate: {
+            corporateStrategy: 'diversification_liee',
+            structureType: 'divisionnelle',
+            centralPurchasing: true, centralIt: true, centralRd: true,
+            centralHr: true, centralFinance: true,
+            sharedProduction: true, sharedRd: true,
+            values: ['efficience_operationnelle', 'fiabilite_service'],
+            sharedSupplierRatio: 1, sharedDistributorRatio: 1,
+          },
+          finance: { ...team('x').finance, opexMad },
+          // La synergie se mesure sur ce qui est RÉELLEMENT mutualisé : sans
+          // plateforme adoptée, l'assiette est nulle et le siège n'a rien à
+          // amputer. C'est le cas qui nous intéresse — un groupe qui mutualise
+          // pour de vrai et ne dote pas la fonction qui le fait tenir.
+          units: [
+            unit({ groupStance: stance() }),
+            unit({ dasId: 'das-retail', groupStance: stance() }),
+          ],
+        }),
+      ],
+    });
+
+  it('ampute la synergie du groupe qui affame son siège', () => {
+    const dote = resolveRound(centralise(400_000_000), params).teams[0];
+    const affame = resolveRound(centralise(0), params).teams[0];
+    expect(affame.synergySavingPct).toBeLessThan(dote.synergySavingPct);
+    expect(affame.coordinationCostPct).toBeGreaterThan(dote.coordinationCostPct);
+  });
+
+  it('laisse l’économie de charges réelle : couper reste tentant', () => {
+    // La contrepartie doit se discuter, pas interdire le geste. Le siège coupé
+    // reste moins cher en charges de structure — c'est en synergie qu'il perd.
+    const dote = resolveRound(centralise(400_000_000), params).teams[0];
+    const affame = resolveRound(centralise(0), params).teams[0];
+    expect(affame.pnl.overheadMad).toBeLessThan(dote.pnl.overheadMad);
+  });
+});
+
+describe('climat social et coût de production, bout en bout', () => {
+  /**
+   * Le plafond de capacité ne suffit pas : sur une session réelle, l'outil
+   * valait deux fois et demie la demande, et retirer 12 % de la capacité ne
+   * changeait rien du tout. Le coût, lui, se paie toujours.
+   */
+  it('renchérit la production d’un domaine au climat dégradé', () => {
+    const sain = resolveRound(soloWith({ climatSocial: 75 }), params).dasMetrics[0];
+    const brise = resolveRound(soloWith({ climatSocial: 10 }), params).dasMetrics[0];
+    expect(brise.unitVariableCostMad).toBeGreaterThan(sain.unitVariableCostMad);
+  });
+
+  it('fait payer le climat même quand la capacité est largement excédentaire', () => {
+    // Capacité massive : aucune rupture possible, donc le canal « capacité »
+    // est muet. C'est exactement le cas où la sanction manquait.
+    const large = (climat: number) =>
+      baseInput({
+        teams: [
+          team('solo', {
+            units: [unit({
+              previous: { ...unit().previous, capacityUnits: 40_000_000 },
+              previousHr: { ...unit().previousHr, climatSocial: climat },
+            })],
+          }),
+        ],
+      });
+
+    const sain = resolveRound(large(75), params).dasMetrics[0];
+    const brise = resolveRound(large(10), params).dasMetrics[0];
+
+    expect(brise.stockoutRate).toBeCloseTo(sain.stockoutRate, 6);
+    expect(brise.unitVariableCostMad).toBeGreaterThan(sain.unitVariableCostMad);
+    expect(brise.ebitdaMad).toBeLessThan(sain.ebitdaMad);
+  });
+
+  it('compose les deux facteurs humains : démotivé ET déqualifié paie double', () => {
+    const bon = resolveRound(soloWith({ climatSocial: 75, skillIndex: 90 }), params).dasMetrics[0];
+    const unSeul = resolveRound(soloWith({ climatSocial: 10, skillIndex: 90 }), params).dasMetrics[0];
+    const lesDeux = resolveRound(soloWith({ climatSocial: 10, skillIndex: 5 }), params).dasMetrics[0];
+    expect(unSeul.unitVariableCostMad).toBeGreaterThan(bon.unitVariableCostMad);
+    expect(lesDeux.unitVariableCostMad).toBeGreaterThan(unSeul.unitVariableCostMad);
   });
 });

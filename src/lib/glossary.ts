@@ -290,8 +290,14 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   },
   'Taux de rotation': {
     definition:
-      'La part de l’effectif qui quitte l’entreprise sur le tour. Elle emporte d’abord les plus qualifiés.',
+      'La part de l’effectif qui quitte l’entreprise sur le tour. Elle emporte d’abord les plus qualifiés, et s’applique à l’effectif du tour suivant.',
     example: 'Un taux de 18 % sur 24 000 personnes fait partir 4 300 salariés, dont les mieux formés.',
+  },
+  'Départs subis': {
+    definition:
+      'Les salariés partis d’eux-mêmes, sous l’effet du taux de rotation du tour précédent. Ils ne coûtent aucune indemnité — et c’est ce qui les rend plus insidieux qu’un licenciement, dont le coût se voit tout de suite. Il faut les remplacer pour tenir la même charge.',
+    example:
+      'Un climat social à 35 fait un taux de rotation de 12 % : sur 24 000 personnes, 2 900 partent au tour suivant, et la capacité suit.',
   },
   'Productivité par tête': {
     definition: 'Le nombre d’unités qu’une personne produit sur le tour, standardisation et automatisation comprises.',

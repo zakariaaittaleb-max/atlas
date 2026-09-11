@@ -35,6 +35,8 @@ import {
   experienceCurveUnitCost,
   nextNotoriety,
   nextQuality,
+  skillCostFactor,
+  socialCostFactor,
   perceivedQuality,
   utilisationEffects,
 } from './operations';
@@ -769,5 +771,78 @@ describe('risque d’entrée d’Ansoff', () => {
 
   it('borne un mouvement inconnu plutôt que de propager un NaN', () => {
     expect(ansoffRisk('mouvement_fantaisiste', params)).toBe(0);
+  });
+});
+
+// ===========================================================================
+// COMPÉTENCE ET ÉCONOMIE
+//
+// Former coûtait de la trésorerie et ne rapportait qu'un chiffre sur un écran.
+// Ces deux liaisons sont les chemins par lesquels la compétence devient un
+// avantage économique — et son érosion un handicap.
+// ===========================================================================
+
+describe('compétence et coût de production', () => {
+  it('ne change rien au niveau de compétence HÉRITÉ', () => {
+    expect(skillCostFactor(0, params)).toBeCloseTo(1, 10);
+  });
+
+  it('abaisse le coût variable quand l’équipe a formé au-delà de la dotation', () => {
+    expect(skillCostFactor(0.6, params)).toBeLessThan(1);
+  });
+
+  it('le renchérit quand elle a laissé la compétence s’éroder', () => {
+    expect(skillCostFactor(-0.2, params)).toBeGreaterThan(1);
+  });
+
+  it('ne rend jamais la production gratuite', () => {
+    expect(skillCostFactor(50, params)).toBeGreaterThanOrEqual(0.5);
+  });
+});
+
+describe('compétence et qualité', () => {
+  const CA = 40_000_000_000;
+  const RD = 0.08 * CA;
+
+  it('fait mieux rendre le même budget de recherche entre des mains formées', () => {
+    const forme = nextQuality(50, RD, CA, 0, params, { skillEdge: 0.6 });
+    const neutre = nextQuality(50, RD, CA, 0, params);
+    const erode = nextQuality(50, RD, CA, 0, params, { skillEdge: -0.2 });
+    expect(forme).toBeGreaterThan(neutre);
+    expect(neutre).toBeGreaterThan(erode);
+  });
+
+  it('ne détruit pas le produit existant : l’écart porte sur le GAIN', () => {
+    // Sans budget de recherche, il n'y a pas de gain à moduler : la compétence
+    // ne peut alors ni ajouter ni retirer un point.
+    expect(nextQuality(70, 0, CA, 0, params, { skillEdge: -1 }))
+      .toBeCloseTo(nextQuality(70, 0, CA, 0, params), 10);
+  });
+
+  it('retire les points de qualité que les coupes du tour précédent ont emportés', () => {
+    const sain = nextQuality(70, RD, CA, 0, params);
+    const coupe = nextQuality(70, RD, CA, 0, params, { qualityLossPts: 6 });
+    expect(sain - coupe).toBeCloseTo(6, 6);
+  });
+
+  it('ne transforme jamais une perte annoncée en gain', () => {
+    expect(nextQuality(70, RD, CA, 0, params, { qualityLossPts: -20 }))
+      .toBeCloseTo(nextQuality(70, RD, CA, 0, params), 10);
+  });
+});
+
+describe('climat social et coût de production', () => {
+  it('ne renchérit rien au-dessus du pivot', () => {
+    expect(socialCostFactor(0, params)).toBeCloseTo(1, 10);
+  });
+
+  it('fait payer les absences et les reprises d’un climat dégradé', () => {
+    expect(socialCostFactor(0.5, params)).toBeGreaterThan(1);
+    expect(socialCostFactor(1, params)).toBeGreaterThan(socialCostFactor(0.5, params));
+  });
+
+  it('reste borné : un climat effondré ne double pas les coûts', () => {
+    expect(socialCostFactor(5, params)).toBeCloseTo(socialCostFactor(1, params), 10);
+    expect(socialCostFactor(1, params)).toBeLessThan(1.5);
   });
 });

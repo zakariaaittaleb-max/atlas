@@ -986,12 +986,32 @@ export function synergyEffect(
   centralisationIdx: number,
   dasCount: number,
   params: EngineParams,
+  /**
+   * Part du siège de RÉFÉRENCE que l'équipe finance réellement, 0–1 et au-delà.
+   *
+   * ── CE QUE LE CURSEUR DU SIÈGE NE COÛTAIT PAS ────────────────────────────
+   * Les frais de siège n'entraient que dans les charges : les couper jusqu'au
+   * plancher était une économie SANS contrepartie, alors qu'une équipe peut
+   * simultanément centraliser ses achats, son informatique, sa R&D, ses RH et
+   * sa finance. Elle déclarait donc cinq fonctions groupe et ne payait personne
+   * pour les tenir, tout en encaissant les économies d'échelle correspondantes.
+   *
+   * Un service partagé qu'on ne dote pas ne produit pas d'économie : il produit
+   * un goulot. Le manque de financement ampute donc la synergie captée et
+   * ajoute du coût de coordination, à proportion de ce que l'équipe a
+   * effectivement centralisé. Une équipe qui laisse le siège à sa valeur de
+   * référence ne perd rien.
+   */
+  hqFundingRatio = 1,
 ): SynergyEffect {
   const m = sharedResourcesIdx / 100;
   const p = relatedness / 100;
+  const shortfall = Math.min(Math.max(1 - hqFundingRatio, 0), 1);
 
-  const savingPct = m * p * param(params, 'alignment.synergy_saving_max');
-  const coordinationCostPct = m * (1 - p) * param(params, 'alignment.coordination_cost_max');
+  const savingPct = m * p * param(params, 'alignment.synergy_saving_max') * (1 - shortfall);
+  const coordinationCostPct =
+    m * (1 - p) * param(params, 'alignment.coordination_cost_max') +
+    shortfall * (centralisationIdx / 100) * param(params, 'alignment.coordination_cost_max');
   const hqOverheadPct =
     (centralisationIdx / 100) * dasCount * param(params, 'alignment.hq_overhead_per_das');
 

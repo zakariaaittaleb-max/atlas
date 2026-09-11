@@ -179,13 +179,29 @@ export interface ClimateInput {
   restructuring: 'aucune' | 'reorganisation' | 'externalisation' | 'fermeture_site';
 }
 
-/** Coût en points de climat d'une restructuration, par nature. */
-export const RESTRUCTURING_CLIMATE_COST = {
+/**
+ * Part de l'échelle `climate.restructuring_malus` que prend chaque nature.
+ *
+ * Les points absolus vivaient ici, en dur, pendant que le facilitateur croyait
+ * régler `climate.restructuring_malus` en base — paramètre que personne ne
+ * lisait. Ce sont désormais des PARTS : la hiérarchie des brutalités reste
+ * écrite dans le code, où elle relève du modèle, et son amplitude devient
+ * réglable, où elle relève du calibrage d'une promotion.
+ */
+export const RESTRUCTURING_CLIMATE_SHARE = {
   aucune: 0,
-  reorganisation: 6,
-  externalisation: 18,
-  fermeture_site: 30,
+  reorganisation: 0.25,
+  externalisation: 0.7,
+  fermeture_site: 1.2,
 } as const;
+
+/** Coût en points de climat d'une restructuration, à l'échelle de la session. */
+export function restructuringClimateCost(
+  nature: keyof typeof RESTRUCTURING_CLIMATE_SHARE,
+  params: EngineParams,
+): number {
+  return RESTRUCTURING_CLIMATE_SHARE[nature] * param(params, 'climate.restructuring_malus');
+}
 
 /**
  * Climat social du tour, entre 0 et 100.
@@ -206,20 +222,26 @@ export function nextClimatSocial(input: ClimateInput, params: EngineParams): num
     climat -= (80 - input.workloadIndex) * 0.18;
   }
 
-  // Recruter vite désorganise : au-delà de 20 % de l'effectif en un tour,
-  // l'intégration ne suit plus.
-  if (input.hiringRatio > 0.20) climat -= (input.hiringRatio - 0.20) * 60;
+  // Recruter vite désorganise : au-delà du seuil de choc, l'intégration ne
+  // suit plus. Le malus est PLAFONNÉ, et ne l'était pas : la pente linéaire
+  // faisait coûter 48 points un recrutement égal à l'effectif, soit plus
+  // qu'une fermeture de site. Le plein est atteint au double du seuil.
+  const shockThreshold = param(params, 'social.recruitment_shock_threshold_pct');
+  if (input.hiringRatio > shockThreshold && shockThreshold > 0) {
+    const overshoot = Math.min((input.hiringRatio - shockThreshold) / shockThreshold, 1);
+    climat -= overshoot * param(params, 'climate.recruitment_shock_malus');
+  }
 
   // Licencier casse le climat de ceux qui restent, pas seulement de ceux qui
   // partent. Le premier départ coûte déjà, indépendamment du volume.
   if (input.layoffRatio > 0) climat -= 8 + input.layoffRatio * 90;
 
-  climat -= RESTRUCTURING_CLIMATE_COST[input.restructuring];
+  climat -= restructuringClimateCost(input.restructuring, params);
 
   // Former et payer améliorent, avec des rendements décroissants.
   climat += Math.min(
     input.trainingIntensity * 220 * (input.trainingFocusClimat ?? 1),
-    12,
+    param(params, 'climate.training_bonus'),
   );
   climat += Math.max(Math.min((input.salaryRatio - 1) * 45, 10), -18);
 
@@ -232,6 +254,59 @@ export function nextClimatSocial(input: ClimateInput, params: EngineParams): num
   }
 
   return clamp100(climat);
+}
+
+// ---------------------------------------------------------------------------
+// LES DEUX SORTIES DE LA BOUCLE RH
+//
+// Jusqu'ici, la chaîne RH se refermait sur elle-même : les décisions faisaient
+// le climat, le climat faisait la rotation et la compétence, la compétence
+// faisait la charge de travail, la charge de travail refaisait le climat. Rien
+// n'en sortait vers l'économie. Une équipe pouvait donc payer au SMIG, ne
+// jamais former et licencier à chaque tour sans produire une unité de moins.
+//
+// Ces deux fonctions sont les portes de sortie. Elles lisent l'état RH du tour
+// PRÉCÉDENT — la boucle doit rester lente pour rester enseignable : on subit au
+// tour t+1 ce qu'on a décidé au tour t, quand il est trop tard pour l'annuler.
+// ---------------------------------------------------------------------------
+
+/**
+ * Manque social : de combien le climat est en deçà du seuil où il coûte, 0–1.
+ *
+ * Le pivot est 60 — le même que celui vers lequel le climat revient
+ * spontanément et celui à partir duquel la rotation s'aggrave. Au-dessus,
+ * aucun manque. Une seule grandeur pour les DEUX conséquences, de sorte
+ * qu'elles ne puissent pas raconter deux histoires différentes.
+ */
+export function socialShortfall(climatSocial: number): number {
+  return Math.max(60 - clamp100(climatSocial), 0) / 60;
+}
+
+/**
+ * Part de la capacité installée que l'organisation est réellement en état de
+ * faire tourner, 0–1.
+ *
+ * Un climat dégradé ne se venge pas en comptabilité : il se venge en
+ * absentéisme, en arrêts de ligne, en gestes de mauvaise volonté et en rebuts.
+ * L'outil est là, il ne produit pas. Au-dessus du pivot, rien ne se perd.
+ */
+export function socialAvailability(climatSocial: number, params: EngineParams): number {
+  const weight = param(params, 'climate.capacity_impact_weight');
+  return Math.max(1 - weight * socialShortfall(climatSocial), 0);
+}
+
+/**
+ * Écart de compétence par rapport au niveau HÉRITÉ, en fraction (−1 à +0,8).
+ *
+ * Positif : l'équipe a formé au-delà de ce qu'on lui a confié. Négatif : elle a
+ * laissé la compétence s'éroder. Nul quand elle n'a rien fait — et c'est le
+ * point important : mesurer un niveau plutôt qu'un écart aurait puni ou
+ * récompensé toutes les équipes dès le premier tour, pour une décision
+ * qu'aucune n'avait encore prise.
+ */
+export function skillEdge(skillIndex: number, params: EngineParams): number {
+  const inherited = param(params, 'endowment.expert_share');
+  return (clamp100(skillIndex) - clamp100(inherited)) / 100;
 }
 
 // ---------------------------------------------------------------------------

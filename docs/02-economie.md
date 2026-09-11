@@ -79,6 +79,31 @@ capacité(t) = capacité(t−1) × (1 − dépréciation_annuelle)
 il oblige à anticiper la demande plutôt qu'à réagir. Une équipe qui gagne des parts sans avoir
 investi un tour plus tôt ne peut pas les servir.
 
+Le délai est **structurel** : l'instantané transporte le CAPEX du tour précédent. Il n'existe
+donc aucun paramètre pour le régler, et celui qui prétendait le faire a été retiré.
+
+### 3.1 bis Disponibilité sociale — la première sortie de la boucle RH
+
+```
+manque_social       = max(60 − climat_social(t−1), 0) / 60
+disponibilité       = 1 − poids_capacité × manque_social
+capacité_effective  = capacité × (1 − rupture_approvisionnement) × disponibilité
+```
+
+Le climat social de la **clôture précédente** décide de la part de l'outil que l'organisation
+est en état de faire tourner : absentéisme, arrêts de ligne, gestes de mauvaise volonté. La
+machine est là, elle ne produit pas.
+
+Le pivot est 60 — le même vers lequel le climat revient spontanément et à partir duquel la
+rotation s'aggrave. Au-dessus, rien ne se perd : une équipe qui gère correctement ses gens ne
+paie aucune taxe.
+
+**Ce que cette formule corrige.** La chaîne RH se refermait sur elle-même : les décisions
+faisaient le climat, le climat faisait la rotation et la compétence, la compétence faisait la
+charge de travail, la charge de travail refaisait le climat. Rien n'en sortait vers la
+production. Une équipe pouvait payer au minimum, ne jamais former et licencier à chaque tour
+sans produire une unité de moins ni perdre un point de part de marché.
+
 ### 3.2 Contrainte de service
 
 ```
@@ -113,6 +138,31 @@ Surcapacité et surchauffe coûtent toutes les deux. L'optimum se situe entre 70
 ## 4. Coût unitaire — la courbe d'expérience
 
 **C'est la mécanique qui rend la domination par les coûts réellement jouable.**
+
+### 4.0 Les deux facteurs humains
+
+```
+coût_variable_unitaire = coût_après_automatisation
+                       × (1 − levier_compétence × écart_compétence)   // QUI travaille
+                       × (1 + pénalité_climat   × manque_social)      // DANS QUEL ÉTAT
+écart_compétence = (indice_compétence(t−1) − compétence_de_dotation) / 100
+```
+
+Deux grandeurs humaines pèsent sur le même coût, et elles se composent : une équipe démotivée
+**et** déqualifiée paie les deux. La compétence enlève ou ajoute du rebut, de la casse et du
+temps de réglage ; le climat se paie en heures supplémentaires pour couvrir les absences, en
+reprises et en malfaçons.
+
+**Pourquoi un écart et non un niveau pour la compétence.** Le levier s'applique à l'écart par
+rapport au niveau **hérité** de la dotation. Une équipe qui n'a rien décidé n'est donc ni
+récompensée ni punie : elle produit au coût de référence. Un pivot arbitraire à 50 aurait taxé
+tout le monde dès le premier tour pour une décision que personne n'avait prise.
+
+**Pourquoi un second canal pour le climat, et pas seulement le plafond de capacité.** Vérifié
+sur une session réelle : la capacité installée y valait deux fois et demie la demande. Un
+climat effondré retirait bien 12 % de l'outil, et cela ne changeait rien — il restait de la
+marge. La sanction n'existait que pour une équipe déjà saturée, soit l'inverse de la pédagogie
+visée. Le coût, lui, est toujours payé.
 
 ### 4.1 Effet d'apprentissage
 
@@ -264,6 +314,25 @@ qualité(t) = clamp(
   + bonus_partenariat_technologique
 , 0 , 100 )
 ```
+Le gain de R&D est **multiplié par la compétence** et le résultat est **diminué des points
+perdus par les coupes d'effectif** du tour précédent :
+
+```
+gain_rd  = k_rd × normalise(budget_rd) × (1 − qualité(t−1)/100)
+         × (1 + levier_compétence_qualité × écart_compétence)
+qualité  = … + gain_rd + bonus_partenariat − perte_qualité_des_coupes(t−1)
+```
+
+Un budget de recherche confié à des gens qui ne savent pas l'exécuter produit moins que le même
+budget entre des mains formées. L'écart porte sur le **gain** et non sur le niveau : laisser
+filer la compétence n'abîme pas le produit existant, cela empêche de l'améliorer.
+
+La perte de qualité des coupes, elle, frappe le produit. Elle est calculée au tour où l'on
+licencie au-delà de ce que la standardisation autorisait, et appliquée au tour **suivant** : un
+atelier ne perd pas son tour de main le jour de la notification. Elle était calculée et jetée,
+faute de colonne pour la porter — licencier au-delà du seuil sûr était réputé coûter de la
+qualité et n'en coûtait aucune.
+
 **L'effet de la R&D est différé d'un tour** : le budget du tour *t* produit son effet en *t+1*.
 Une équipe qui coupe sa R&D pour sauver sa trésorerie ne le paie qu'au tour suivant — quand
 il est trop tard pour corriger. Leçon classique, mécanique implacable.
@@ -470,7 +539,9 @@ jusqu'à 45 % de ce qu'on vient de payer.**
 
 ## 12. Chocs PESTEL — opportunités et menaces
 
-Déclenchés **par le facilitateur** (ou automatiquement selon une probabilité paramétrable).
+Déclenchés **par le facilitateur**, depuis son écran. Il n'y a pas de tirage automatique : les
+deux paramètres qui le prétendaient (`pestel.shock_probability`, `pestel.shock_max_points`) ont
+été retirés, faute d'être lus par quoi que ce soit.
 Catalogue complet dans [`03-referentiel-das.md`](03-referentiel-das.md) §5.
 
 Un choc porte un vecteur d'effets, appliqué sur un ou plusieurs DAS, pour une durée en tours :
@@ -486,8 +557,14 @@ Un choc porte un vecteur d'effets, appliqué sur un ou plusieurs DAS, pour une d
 | Fenêtre d'opportunité | `opportunity_window` | marché public : volume additionnel à capter |
 
 **Réponse de l'équipe (War Room) :** chaque choc ouvre une fenêtre de réponse budgétée.
-Répondre coûte de la trésorerie et atténue l'effet ; ignorer laisse l'effet plein. Le choix de
-*ne pas* répondre est légitime — c'est aussi un arbitrage.
+L'équipe ÉCRIT son plan et engage un budget ; le facilitateur le lit et arbitre l'ampleur avec
+un curseur — 0 l'événement a été évité, 1 il s'applique tel quel, 3 il frappe trois fois plus
+fort. Le budget se paie dans tous les cas, y compris si la carte s'avère bénigne : c'est le prix
+de l'assurance, et c'est l'arbitrage. Le choix de *ne pas* répondre est légitime.
+
+Il n'existe donc plus de barème d'atténuation à trois options : les six paramètres
+`pestel.response_*` ont été retirés, aucun n'étant lu depuis que le jugement du facilitateur a
+remplacé le menu.
 
 ---
 
@@ -497,7 +574,6 @@ Répondre coûte de la trésorerie et atténue l'effet ; ignorer laisse l'effet 
 market.price_position_floor_factor      0.60
 market.price_position_span              0.008
 capacity.depreciation_per_round         0.06
-capacity.commissioning_delay_rounds     1
 capacity.underuse_threshold             0.70
 capacity.overuse_threshold              0.95
 capacity.subcontracting_multiplier      1.60
@@ -513,7 +589,14 @@ quality.obsolescence_per_round          0.04
 quality.rd_effect_delay_rounds          1
 notoriety.decay_per_round               0.08
 stockout.notoriety_penalty              12
-stockout.quality_penalty                10
+climate.capacity_impact_weight          0.30
+climate.unit_cost_penalty               0.12
+climate.recruitment_shock_malus         15
+climate.restructuring_malus             25
+climate.training_bonus                  12
+social.recruitment_shock_threshold_pct  0.20
+skill.unit_cost_leverage                0.15
+quality.skill_leverage                  0.50
 finance.risk_margin_base                0.015
 finance.risk_margin_per_leverage        0.020
 finance.amortization_rounds             5
@@ -539,3 +622,53 @@ et signalée au facilitateur. Jamais d'écriture partielle.
 6. Chaque DAS cédé a exactement un acquéreur et un vendeur, et disparaît du portefeuille du
    vendeur au même tour où il apparaît dans celui de l'acheteur.
 7. Aucune équipe liquidée ne détient de DAS actif.
+
+---
+
+## 15. Boucle sociale — ce que chaque décision RH finit par coûter
+
+La chaîne, en une phrase : la demande crée une **charge de travail** ; l'effectif, la
+productivité, la standardisation et l'automatisation l'absorbent ; ce qui reste — surcharge ou
+sous-charge — pèse sur le **climat social** ; le climat fait la **rotation** et la
+**compétence** ; et c'est par là que l'on retourne à l'économie, au tour suivant.
+
+| Décision | Effet direct | Effet indirect, au tour suivant |
+|---|---|---|
+| Salaire proposé | Masse salariale | Climat → capacité effective et coût unitaire |
+| Budget de formation | Trésorerie, remboursement OFPPT/GIAC | Compétence → coût unitaire, rendement de la R&D, axe d'intensité de compétence du domaine |
+| Recrutement | Masse salariale, charge de travail | Climat (choc d'intégration au-delà du seuil), compétence (dilution si externe) |
+| Licenciements | Indemnités en trésorerie, masse salariale | Climat, et **perte de qualité** au-delà du seuil sûr |
+| Restructuration | — | Climat, à l'échelle de sa brutalité |
+| Bilan de compétences | Trésorerie, concours GIAC | Rendement de la formation |
+| Transferts internes | Effectif déplacé, à somme nulle | Compétence sans dilution |
+
+```
+départs_subis(t) = effectif(t−1) × taux_de_rotation(t−1)
+effectif(t)      = effectif(t−1) + recrutements − licenciements
+                 − transferts_sortants − départs_subis(t)
+```
+
+**Les départs ont lieu.** La rotation était calculée, bornée entre 0 et 1 par la base,
+persistée, et affichée à l'équipe avec la phrase « ce sont les plus qualifiés qui partent ».
+Personne ne partait jamais : un climat à 10 sur 100 laissait l'effectif intact tour après tour.
+C'est le taux du tour **précédent** qui s'applique — on subit en *t+1* la démission qu'on a
+provoquée en *t*. Le plancher de rotation est inclus : une entreprise irréprochable perd elle
+aussi des salariés, et doit donc recruter pour tenir la même charge. C'est ce qui fait du
+recrutement une décision récurrente et non un geste de croissance.
+
+Une démission ne coûte **aucune indemnité**, et c'est précisément ce qui la rend plus insidieuse
+qu'un licenciement, dont le prix se voit tout de suite.
+
+### 15.1 Le siège doit tenir ce qu'il centralise
+
+```
+manque_de_siège       = clamp(1 − budget_siège / (masse_salariale × part_de_référence), 0, 1)
+économie_de_synergie  = … × (1 − manque_de_siège)
+coût_de_coordination  = … + manque_de_siège × indice_de_centralisation × coût_max
+```
+
+Couper les frais de siège était une économie **sans contrepartie**, alors qu'une équipe peut
+centraliser simultanément ses achats, son informatique, sa R&D, ses RH et sa finance. Elle
+déclarait cinq fonctions groupe, ne payait personne pour les tenir, et encaissait quand même
+les économies d'échelle. Un service partagé qu'on ne dote pas ne produit pas d'économie : il
+produit un goulot. Une équipe qui laisse le siège à sa valeur de référence ne perd rien.

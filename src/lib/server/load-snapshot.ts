@@ -139,7 +139,10 @@ export async function loadResolutionSnapshot(
       referenceUnitCostMad: num(row.reference_unit_cost_mad, 1),
       fixedCostBaseMad: num(row.fixed_cost_base_mad),
       priceElasticity: num(row.price_elasticity, 1.5),
-      learningRate: num(row.learning_rate, 0.88),
+      // Repli sur le paramètre de session, et non sur une constante muette :
+      // `learning.rate_default` existait depuis l'origine et personne ne le
+      // lisait, si bien que le facilitateur pouvait le régler sans effet.
+      learningRate: num(row.learning_rate, num(params['learning.rate_default'], 0.88)),
       valuationMultiple: num(row.valuation_multiple, 5),
       workingCapitalDays: num(row.working_capital_days, 60),
       vrioEntryBarrier: num(row.vrio_entry_barrier, 0.2),
@@ -769,8 +772,17 @@ export async function loadResolutionSnapshot(
           return {
             headcount: num(prev?.headcount, fromPositions || num(state?.headcount, 1)),
             climatSocial: num(prev?.climat_social, num(state?.climat_social, 70)),
-            skillIndex: num(prev?.skill_index, 50),
+            // Repli sur le niveau de compétence de la DOTATION, et non sur 50.
+            // Le moteur mesure désormais l'ÉCART à ce niveau hérité : un repli
+            // arbitraire aurait offert trente points d'avance — donc du coût
+            // variable en moins et de la qualité en plus — à toute équipe dont
+            // l'état RH manque, pour une décision qu'elle n'a pas prise.
+            skillIndex: num(prev?.skill_index, num(params['endowment.expert_share'], 20)),
             avgSalaryBrutMad: num(hr?.avg_salary_brut_mad, 5800),
+            // Rotation et perte de qualité du dernier exercice clos : c'est ce
+            // tour-ci qu'elles se paient, en départs subis et en qualité.
+            turnoverRate: num(prev?.turnover_rate),
+            qualityLossPts: num(prev?.quality_loss_pts),
             // Deux exercices sont clos avant le tour 1 : l'entreprise est
             // héritée, pas créée. Une ancienneté de huit ans est le cas
             // courant d'une PME industrielle marocaine, et c'est elle qui

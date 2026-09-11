@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  HOURS_PER_MONTH, RESTRUCTURING_CLIMATE_COST, consolidateClimate, consolidateHeadcount, giacSupport, nextClimatSocial, nextSkillIndex, ofpptReimbursement, qualityLossFromCuts, safeHeadcountReduction, severancePerHead, standardisationLevel, trainingFocusEffects, turnoverRate, workloadIndex,
+  HOURS_PER_MONTH, RESTRUCTURING_CLIMATE_SHARE, consolidateClimate, restructuringClimateCost, skillEdge, socialAvailability, socialShortfall, consolidateHeadcount, giacSupport, nextClimatSocial, nextSkillIndex, ofpptReimbursement, qualityLossFromCuts, safeHeadcountReduction, severancePerHead, standardisationLevel, trainingFocusEffects, turnoverRate, workloadIndex,
 } from './hr';
-import { buildParams } from './params';
+import { buildParams, param } from './params';
 
 const params = buildParams();
 
@@ -110,7 +110,7 @@ describe('climat social', () => {
   });
 
   it('classe les restructurations par brutalité croissante', () => {
-    const c = RESTRUCTURING_CLIMATE_COST;
+    const c = RESTRUCTURING_CLIMATE_SHARE;
     expect(c.aucune).toBeLessThan(c.reorganisation);
     expect(c.reorganisation).toBeLessThan(c.externalisation);
     expect(c.externalisation).toBeLessThan(c.fermeture_site);
@@ -366,5 +366,119 @@ describe('consolidateHeadcount', () => {
 
   it('n’additionne jamais un effectif négatif', () => {
     expect(consolidateHeadcount([{ headcount: 100 }, { headcount: -50 }], 0)).toBe(100);
+  });
+});
+
+// ===========================================================================
+// LES DEUX SORTIES DE LA BOUCLE RH
+//
+// Ces tests portent sur ce qui manquait : jusqu'ici la chaîne RH se refermait
+// sur elle-même et n'atteignait jamais la production.
+// ===========================================================================
+
+describe('disponibilité sociale', () => {
+  it('ne retire rien au-dessus du pivot de 60', () => {
+    expect(socialAvailability(60, params)).toBeCloseTo(1, 10);
+    expect(socialAvailability(85, params)).toBeCloseTo(1, 10);
+    expect(socialAvailability(100, params)).toBeCloseTo(1, 10);
+  });
+
+  it('retire le poids plein quand le climat est effondré', () => {
+    const poids = param(params, 'climate.capacity_impact_weight');
+    expect(socialAvailability(0, params)).toBeCloseTo(1 - poids, 10);
+  });
+
+  it('décroît sans discontinuité entre les deux', () => {
+    let precedent = 1.01;
+    for (const climat of [60, 50, 40, 30, 20, 10, 0]) {
+      const v = socialAvailability(climat, params);
+      expect(v).toBeLessThan(precedent);
+      precedent = v;
+    }
+  });
+
+  it('reste une fraction : jamais négative, jamais au-dessus de un', () => {
+    for (const climat of [-50, 0, 30, 70, 150]) {
+      const v = socialAvailability(climat, params);
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('obéit au réglage du facilitateur', () => {
+    const doux = buildParams({ 'climate.capacity_impact_weight': 0.05 });
+    const dur = buildParams({ 'climate.capacity_impact_weight': 0.6 });
+    expect(socialAvailability(20, doux)).toBeGreaterThan(socialAvailability(20, dur));
+  });
+});
+
+describe('écart de compétence', () => {
+  it('vaut zéro au niveau HÉRITÉ : ne rien décider ne coûte ni ne rapporte', () => {
+    const herite = param(params, 'endowment.expert_share');
+    expect(skillEdge(herite, params)).toBeCloseTo(0, 10);
+  });
+
+  it('est positif au-dessus de la dotation, négatif en dessous', () => {
+    expect(skillEdge(80, params)).toBeGreaterThan(0);
+    expect(skillEdge(5, params)).toBeLessThan(0);
+  });
+});
+
+describe('barème de climat réellement réglable', () => {
+  it('classe les restructurations par brutalité croissante, à l’échelle de la session', () => {
+    const c = (n: keyof typeof RESTRUCTURING_CLIMATE_SHARE) =>
+      restructuringClimateCost(n, params);
+    expect(c('aucune')).toBeLessThan(c('reorganisation'));
+    expect(c('reorganisation')).toBeLessThan(c('externalisation'));
+    expect(c('externalisation')).toBeLessThan(c('fermeture_site'));
+  });
+
+  it('suit le paramètre : adoucir l’échelle adoucit toutes les natures', () => {
+    const doux = buildParams({ 'climate.restructuring_malus': 5 });
+    expect(restructuringClimateCost('fermeture_site', doux))
+      .toBeLessThan(restructuringClimateCost('fermeture_site', params));
+  });
+
+  it('plafonne le choc de recrutement au lieu de le laisser filer', () => {
+    const base = {
+      previousClimat: 70, workloadIndex: 100, layoffRatio: 0,
+      trainingIntensity: 0, salaryRatio: 1, automationDelta: 0,
+      restructuring: 'aucune' as const,
+    };
+    // Recruter l'équivalent de l'effectif coûtait 48 points, soit plus qu'une
+    // fermeture de site. Le malus est désormais borné par son paramètre.
+    const plafond = param(params, 'climate.recruitment_shock_malus');
+    const calme = nextClimatSocial({ ...base, hiringRatio: 0 }, params);
+    const fou = nextClimatSocial({ ...base, hiringRatio: 1 }, params);
+    expect(calme - fou).toBeCloseTo(plafond, 6);
+    expect(calme - fou).toBeLessThan(restructuringClimateCost('fermeture_site', params));
+  });
+
+  it('ne sanctionne pas un recrutement sous le seuil de choc', () => {
+    const base = {
+      previousClimat: 70, workloadIndex: 100, layoffRatio: 0,
+      trainingIntensity: 0, salaryRatio: 1, automationDelta: 0,
+      restructuring: 'aucune' as const,
+    };
+    const seuil = param(params, 'social.recruitment_shock_threshold_pct');
+    expect(nextClimatSocial({ ...base, hiringRatio: seuil }, params))
+      .toBeCloseTo(nextClimatSocial({ ...base, hiringRatio: 0 }, params), 6);
+  });
+});
+
+describe('manque social', () => {
+  it('est nul au-dessus du pivot, plein à zéro', () => {
+    expect(socialShortfall(60)).toBe(0);
+    expect(socialShortfall(100)).toBe(0);
+    expect(socialShortfall(0)).toBe(1);
+    expect(socialShortfall(30)).toBeCloseTo(0.5, 10);
+  });
+
+  it('est la SEULE source des deux conséquences : capacité et coût', () => {
+    // Si les deux canaux divergeaient, l'écran ne pourrait plus expliquer le
+    // résultat à l'équipe. Ils lisent le même manque.
+    const poids = param(params, 'climate.capacity_impact_weight');
+    expect(socialAvailability(30, params))
+      .toBeCloseTo(1 - poids * socialShortfall(30), 10);
   });
 });

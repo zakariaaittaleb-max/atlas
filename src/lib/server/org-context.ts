@@ -244,6 +244,8 @@ export async function loadOrgContext(): Promise<OrgContext> {
           payrollMad: num(st.payroll_mad),
           workloadIndex: num(st.workload_index),
           skillIndex: num(st.skill_index),
+          departuresCount: num(st.departures_count),
+          qualityLossPts: num(st.quality_loss_pts),
           // Recalculé côté écran plutôt que persisté : c'est une conséquence
           // directe de la standardisation atteinte, pas un état à mémoriser.
           safeReduction: Math.floor(

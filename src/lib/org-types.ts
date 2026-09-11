@@ -101,6 +101,16 @@ export interface DasHrState {
   skillIndex: number;
   /** Effectif retirable sans perte de qualité, grâce à la standardisation. */
   safeReduction: number;
+  /**
+   * Départs SUBIS au dernier exercice, distincts des licenciements.
+   *
+   * L'équipe doit les voir : c'est par eux que son climat social lui coûte de
+   * l'effectif, donc de la capacité. Un effectif qui fond sans licenciement
+   * passerait sinon pour une erreur de calcul.
+   */
+  departuresCount: number;
+  /** Points de qualité que les coupes du tour ont emportés, appliqués ce tour-ci. */
+  qualityLossPts: number;
 }
 
 export interface DasOrganisation {

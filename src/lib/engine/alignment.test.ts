@@ -387,6 +387,43 @@ describe('effets économiques de l’alignement', () => {
     const gros = synergyEffect(0, 50, 100, 6, params);
     expect(gros.hqOverheadPct).toBeGreaterThan(petit.hqOverheadPct);
   });
+
+  // ── Un service partagé qu'on ne dote pas ne produit pas d'économie ──────
+  // Couper les frais de siège était une économie SANS contrepartie, alors
+  // qu'une équipe peut centraliser cinq fonctions groupe en même temps : elle
+  // les déclarait, ne payait personne pour les tenir, et encaissait quand même
+  // les économies d'échelle.
+  it('n’ampute rien quand le siège est financé à sa référence', () => {
+    const dote = synergyEffect(80, 80, 40, 2, params, 1);
+    const implicite = synergyEffect(80, 80, 40, 2, params);
+    expect(dote.savingPct).toBeCloseTo(implicite.savingPct, 10);
+    expect(dote.coordinationCostPct).toBeCloseTo(implicite.coordinationCostPct, 10);
+  });
+
+  it('ampute la synergie d’un siège sous-financé', () => {
+    const dote = synergyEffect(80, 80, 40, 2, params, 1);
+    const affame = synergyEffect(80, 80, 40, 2, params, 0.4);
+    expect(affame.savingPct).toBeLessThan(dote.savingPct);
+  });
+
+  it('ajoute du coût de coordination à proportion de ce qui est centralisé', () => {
+    const peuCentralise = synergyEffect(80, 80, 10, 2, params, 0.4);
+    const tresCentralise = synergyEffect(80, 80, 100, 2, params, 0.4);
+    expect(tresCentralise.coordinationCostPct)
+      .toBeGreaterThan(peuCentralise.coordinationCostPct);
+  });
+
+  it('rend un siège affamé et très centralisé plus cher qu’un siège doté', () => {
+    const dote = synergyEffect(80, 80, 100, 2, params, 1);
+    const affame = synergyEffect(80, 80, 100, 2, params, 0.4);
+    expect(affame.opexMultiplier).toBeGreaterThan(dote.opexMultiplier);
+  });
+
+  it('ne récompense pas un siège sur-doté : le rapport est plafonné à un', () => {
+    const dote = synergyEffect(80, 80, 40, 2, params, 1);
+    const prodigue = synergyEffect(80, 80, 40, 2, params, 3);
+    expect(prodigue.savingPct).toBeCloseTo(dote.savingPct, 10);
+  });
 });
 
 // ===========================================================================

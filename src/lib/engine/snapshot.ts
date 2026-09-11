@@ -192,6 +192,20 @@ export interface PreviousDasHr {
   avgSalaryBrutMad: number;
   /** Ancienneté moyenne, qui détermine le coût des indemnités de rupture. */
   seniorityYears: number;
+  /**
+   * Rotation subie à la clôture du tour précédent, 0–1.
+   *
+   * Elle était calculée, persistée et AFFICHÉE — « ce sont les plus qualifiés
+   * qui partent », disait l'écran — sans que personne ne parte jamais. Les
+   * départs sont désormais prélevés sur l'effectif de ce tour : un climat
+   * dégradé vide l'atelier, et il faut recruter pour tenir la même charge.
+   */
+  turnoverRate: number;
+  /**
+   * Points de qualité perdus par les coupes d'effectif du tour précédent,
+   * au-delà de ce que la standardisation autorisait.
+   */
+  qualityLossPts: number;
 }
 
 export interface TeamDasSnapshot {

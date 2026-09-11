@@ -102,13 +102,20 @@ export const DEFAULT_PARAMS = {
 
   // --- Capacité (doc 02 §3) -------------------------------------------------
   'capacity.depreciation_per_round': 0.06,
-  'capacity.commissioning_delay_rounds': 1,
+  // `capacity.commissioning_delay_rounds` retiré : le délai est STRUCTUREL.
+  // L'instantané transporte le CAPEX du tour précédent (`commissionedCapexMad`),
+  // ce qui fixe le délai à un tour par construction. Un réglage qui ne
+  // pouvait rien changer valait moins que son absence.
   'capacity.underuse_threshold': 0.7,
   'capacity.underuse_penalty_factor': 0.5,
   'capacity.overuse_threshold': 0.95,
   'capacity.subcontracting_multiplier': 1.6,
 
   // --- Courbe d'expérience et automatisation (doc 02 §4) --------------------
+  // Repli quand le référentiel du DAS ne fixe pas de taux d'apprentissage.
+  // Lu par `load-snapshot` : la valeur était là depuis l'origine et personne
+  // ne la consultait, un DAS sans taux héritait donc d'un zéro — soit un
+  // exposant d'apprentissage infini.
   'learning.rate_default': 0.85,
   'learning.cost_floor_ratio': 0.55,
   'automation.variable_cost_reduction': 0.3,
@@ -174,18 +181,25 @@ export const DEFAULT_PARAMS = {
   'notoriety.mkt_coefficient': 50,
   'notoriety.mkt_reference_intensity': 0.08,
   'stockout.notoriety_penalty': 12,
-  'stockout.quality_penalty': 10,
+  // ── La qualité PERÇUE porte déjà la sanction de la rupture ───────────────
+  // `stockout.quality_penalty` a été retiré : il faisait double emploi avec
+  // `quality.weight.availability`, qui prélève déjà la disponibilité dans la
+  // qualité perçue — la seule qui entre dans la compétitivité. Une rupture ne
+  // dégrade pas le PRODUIT, elle dégrade ce que le client en éprouve.
   'segment.quality_shortfall_divisor': 2,
 
   // --- Chocs PESTEL ---------------------------------------------------------
-  'pestel.shock_probability': 0.25,
-  'pestel.shock_max_points': 15,
-  'pestel.response_attenuate_cost_pct': 0.02,
-  'pestel.response_absorb_cost_pct': 0.05,
-  'pestel.response_reverse_cost_pct': 0.1,
-  'pestel.response_attenuate_effect': 0.4,
-  'pestel.response_absorb_effect': 0.75,
-  'pestel.response_reverse_effect': 1.0,
+  //
+  // Huit paramètres ont été RETIRÉS ici : deux de tirage aléatoire
+  // (`shock_probability`, `shock_max_points`) et six de barème de réponse
+  // (`response_*`). Aucun n'était lu, et aucun ne pouvait l'être : le
+  // facilitateur tire les cartes lui-même depuis son écran, et il arbitre
+  // l'ampleur au cas par cas avec le curseur de la salle de crise — lequel lit
+  // la réponse ÉCRITE par l'équipe plutôt qu'un menu à trois options.
+  //
+  // Les laisser aurait entretenu une illusion coûteuse : un facilitateur qui
+  // règle « probabilité de choc » avant une session croit doser l'aléa, et rien
+  // ne se produit. Mieux vaut l'absence du réglage que son inertie.
 
   // --- Finance (doc 02 §9) --------------------------------------------------
   'finance.risk_margin_base': 0.015,
@@ -250,15 +264,78 @@ export const DEFAULT_PARAMS = {
   'social.smig_monthly_mad': 3_422.72,
   'social.recruitment_shock_threshold_pct': 0.2,
 
+  // --- Compétences : ce que le niveau de qualification fait à l'économie ----
+  //
+  // ── LE DÉFAUT CORRIGÉ ────────────────────────────────────────────────────
+  // L'indice de compétence était calculé, persisté, affiché — et n'avait
+  // AUCUNE conséquence économique. Former coûtait de la trésorerie et ne
+  // rapportait qu'un chiffre sur un écran. La boucle que `hr.ts` annonce en
+  // tête de fichier — « le climat pèse sur la compétence, donc sur la
+  // productivité du tour suivant » — n'existait pas : elle se refermait sur
+  // elle-même, du climat vers la compétence vers le climat.
+  //
+  // ── POURQUOI UN ÉCART, ET NON UN NIVEAU ──────────────────────────────────
+  // Les deux coefficients ci-dessous s'appliquent à l'ÉCART entre l'indice de
+  // compétence et celui dont l'équipe a HÉRITÉ (`endowment.expert_share`), et
+  // non à l'indice lui-même. Une équipe qui n'a rien décidé n'est donc ni
+  // récompensée ni punie : elle produit au coût et à la qualité de référence.
+  // Un pivot arbitraire à 50 aurait taxé tout le monde dès le premier tour
+  // pour une décision que personne n'avait prise.
+  //
+  // Ce que 100 points d'écart retirent au coût variable unitaire : moins de
+  // rebut, moins de casse, moins de temps de réglage perdu.
+  'skill.unit_cost_leverage': 0.15,
+  // Ce que le même écart ajoute — ou retire — au rendement de la R&D. Un
+  // budget de recherche confié à des gens qui ne savent pas l'exécuter produit
+  // moins de qualité que le même budget entre des mains formées.
+  'quality.skill_leverage': 0.5,
+
   // --- Compétences (axe B8 de l'alignement) ---------------------------------
   // Budget de formation par tête au-delà duquel l'effort est considéré maximal.
   'skill.training_reference_per_head_mad': 8_000,
 
   // --- Climat social --------------------------------------------------------
+  //
+  // Ces quatre valeurs étaient en base, modifiables par le facilitateur, et
+  // AUCUNE n'était lue : `hr.ts` portait les mêmes grandeurs en dur. Un
+  // facilitateur qui adoucissait le coût d'un plan social avant une session
+  // n'adoucissait rien du tout.
+  //
+  // Points de climat perdus quand le recrutement du tour atteint le double du
+  // seuil de choc — au-delà, le malus est plafonné. Il l'était auparavant à
+  // une pente sans borne : recruter l'équivalent de son effectif coûtait
+  // 48 points, soit plus qu'une fermeture de site.
   'climate.recruitment_shock_malus': 15,
+  // Échelle du coût des restructurations. Les natures en prennent une part :
+  // une réorganisation un quart, une externalisation sept dixièmes, une
+  // fermeture de site un peu plus que le tout (voir `RESTRUCTURING_CLIMATE_SHARE`).
   'climate.restructuring_malus': 25,
-  'climate.training_bonus': 10,
+  // Plafond du bonus de formation, en points de climat.
+  'climate.training_bonus': 12,
+  // ── LA SORTIE DE LA BOUCLE RH ────────────────────────────────────────────
+  // Ce qu'un climat effondré retire à la capacité de production : absentéisme,
+  // conflictualité, rebuts, gestes de mauvaise volonté. Le pivot est 60 — le
+  // même que celui vers lequel le climat revient spontanément et celui à partir
+  // duquel la rotation s'aggrave. Au-dessus, rien ne se perd ; à zéro, on perd
+  // ce poids-là de la capacité installée.
+  //
+  // C'est par ce paramètre que la RH cesse d'être une pièce fermée : sans lui,
+  // le climat social ne coûtait pas une unité produite.
   'climate.capacity_impact_weight': 0.3,
+  // ── POURQUOI UN SECOND CANAL, ET NON LE SEUL PLAFOND DE CAPACITÉ ─────────
+  //
+  // Vérifié sur une session réelle : la capacité installée y valait deux fois
+  // et demie la demande. Un climat effondré retirait bien 12 % de l'outil, et
+  // cela ne changeait RIEN — il restait de la marge. La sanction n'existait
+  // que pour une équipe déjà saturée, soit l'inverse de la pédagogie visée :
+  // la mauvaise gestion sociale passait inaperçue tant qu'on avait des murs.
+  //
+  // Ce que la dégradation du climat ajoute au coût variable unitaire est, lui,
+  // toujours payé : heures supplémentaires pour couvrir les absences, reprises,
+  // rebuts, malfaçons. Les deux canaux sont vrais en atelier, et ensemble ils
+  // font que le climat coûte quoi qu'il arrive — plus cher encore quand
+  // l'équipe est tendue sur sa capacité.
+  'climate.unit_cost_penalty': 0.12,
 
   // --- Trésorerie -----------------------------------------------------------
   'treasury.surveillance_malus': 0.1,
@@ -282,6 +359,9 @@ export const DEFAULT_PARAMS = {
   'blue_ocean.failure_probability': 0.35,
 
   // --- Ansoff ---------------------------------------------------------------
+  // Lues par CLÉ DYNAMIQUE : `ansoffRisk` compose `ansoff.risk.${mouvement}`.
+  // Un audit qui cherche la chaîne littérale ne les trouvera pas — elles sont
+  // bien branchées, et supprimer l'une d'elles rendrait son mouvement gratuit.
   'ansoff.risk.penetration': 0.0,
   'ansoff.risk.developpement_marche': 0.12,
   'ansoff.risk.developpement_produit': 0.15,
@@ -294,7 +374,8 @@ export const DEFAULT_PARAMS = {
   // Ces marges DOIVENT rester alignées sur `TIER_PROFILES` : c'est la valeur
   // du paramètre qui gagne, la constante ne servant que de repli. Les
   // désaccorder ferait annoncer une précision au facilitateur et en appliquer
-  // une autre aux équipes.
+  // une autre aux équipes. Lues par clé dynamique, comme les risques d'Ansoff :
+  // `tierProfile` compose `consulting.tier.${palier}.*`.
   'consulting.tier.express.price_multiplier': 0.35,
   'consulting.tier.express.error_margin': 0.1,
   'consulting.tier.standard.price_multiplier': 1.0,
@@ -348,11 +429,13 @@ export const DEFAULT_PARAMS = {
   'endowment.climat_social': 70,
   'endowment.expert_share': 20,
 
-  // --- M&A (réservé phase 5) ------------------------------------------------
-  'ma.failure_prob_floor': 0.1,
-  'ma.failure_prob_ceiling': 0.9,
-  'ma.integration_budget_reference_pct': 0.2,
-  'ma.notification_threshold_global_mad': 750_000_000,
+  // --- M&A ------------------------------------------------------------------
+  //
+  // Les quatre paramètres `ma.*` ont été retirés : les acquisitions sont
+  // arrivées, et elles lisent les paramètres de CESSION (`divest.*`) — c'est
+  // la même mécanique, vue de l'acheteur plutôt que du vendeur. Deux jeux de
+  // réglages pour un seul calcul, c'était la garantie qu'un facilitateur
+  // règle celui qui ne sert pas.
 } as const;
 
 export type ParamKey = keyof typeof DEFAULT_PARAMS;

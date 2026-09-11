@@ -119,7 +119,21 @@ export function HrSection({
               term="Taux de rotation"
               value={`${(state.turnoverRate * 100).toFixed(1)} %`}
               tone={state.turnoverRate > 0.15 ? 'bad' : undefined}
-              note={state.turnoverRate > 0.15 ? 'Ce sont les plus qualifiés qui partent.' : undefined}
+              note={
+                state.turnoverRate > 0.15
+                  ? 'Ce sont les plus qualifiés qui partent, et ils partent ce tour-ci.'
+                  : 'Ce taux s’applique à votre effectif ce tour-ci, en départs subis.'
+              }
+            />
+            <Kpi
+              term="Départs subis"
+              value={state.departuresCount.toLocaleString('fr-FR')}
+              tone={state.departuresCount > 0 ? 'bad' : undefined}
+              note={
+                state.departuresCount > 0
+                  ? 'Partis d’eux-mêmes. À remplacer pour tenir la même charge.'
+                  : undefined
+              }
             />
             <Kpi term="Effectif de clôture" value={state.headcount.toLocaleString('fr-FR')} />
             <Kpi term="Masse salariale" value={formatMadCompact(state.payrollMad)} />
@@ -138,6 +152,30 @@ export function HrSection({
             Votre standardisation et votre automatisation permettent de retirer{' '}
             <strong>{state.safeReduction.toLocaleString('fr-FR')} postes</strong> sans perdre en
             qualité. Au-delà, chaque poste supprimé se paie en qualité produit.
+            {state.qualityLossPts > 0 ? (
+              <>
+                {' '}
+                Vos coupes du dernier exercice ont dépassé ce seuil :{' '}
+                <strong>−{state.qualityLossPts.toFixed(1)} points de qualité</strong> sont
+                retirés à votre produit ce tour-ci.
+              </>
+            ) : null}
+          </p>
+
+          {/* ── Ce que la RH coûte, ou rapporte, en dehors de la RH ────────
+              Ces trois conséquences existaient dans le cahier des charges et
+              nulle part dans le moteur : le climat et la compétence se
+              calculaient sans jamais toucher une unité produite. Les énoncer
+              ici est la moitié du travail — une équipe qui découvre la
+              sanction à la révélation ne peut plus rien en faire. */}
+          <p className="mt-3 rounded-lg border border-(--border) px-4 py-3 text-sm text-(--foreground-muted)">
+            Sous <strong>60 de climat social</strong>, vous payez deux fois : une part de votre
+            outil cesse de produire, et chaque unité produite coûte plus cher — absences à
+            couvrir, reprises, rebuts. Votre <strong>indice de compétence</strong> (
+            {state.skillIndex.toFixed(0)}) joue lui aussi sur deux tableaux : au-dessus du niveau
+            dont vous avez hérité, il abaisse votre coût de production et fait mieux rendre votre
+            budget de recherche ; en dessous, l’inverse. Ces effets se voient au tour{' '}
+            <strong>suivant</strong> : on subit en retard ce qu’on a décidé aujourd’hui.
           </p>
         </div>
       )}
