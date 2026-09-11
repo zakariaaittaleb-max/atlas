@@ -22,6 +22,7 @@
  * la simulation veut faire commettre puis débriefer — en connaissance de cause.
  */
 
+import Link from 'next/link';
 import {
   Bar,
   BarChart,
@@ -762,12 +763,12 @@ function Unavailable({
           <p className="mt-3 text-sm">
             À commander au cabinet : <strong>{studies.join(' et ')}</strong>.
           </p>
-          <a
+          <Link
             href="/cabinet"
             className="mt-3 inline-block rounded-lg bg-(--accent) px-4 py-2 text-sm font-medium text-white"
           >
             Aller au cabinet
-          </a>
+          </Link>
         </>
       ) : null}
     </div>

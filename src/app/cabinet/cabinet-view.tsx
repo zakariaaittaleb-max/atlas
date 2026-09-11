@@ -16,8 +16,9 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
-import { DisclosureList } from '@/components/disclosure-list';
-import { StudyCharts, SupplierRanks, type ChartSubject } from '@/components/study-charts';
+import Link from 'next/link';
+
+import type { ChartSubject } from '@/components/study-charts';
 import type { FieldDisclosure } from '@/lib/consulting-types';
 import { formatMadCompact, formatPct } from '@/lib/format';
 
@@ -42,6 +43,7 @@ export interface OrderedStudy {
   studyName: string;
   tier: string;
   dasId: string | null;
+  targetActorId: string | null;
   roundNumber: number;
   priceMad: number;
   errorMargin: number;
@@ -52,6 +54,30 @@ export interface OrderedStudy {
 
 export interface DeliverableView extends ChartSubject {
   fields: FieldDisclosure[];
+}
+
+/**
+ * Le palier déjà commandé ce tour pour cette étude, sur ce périmètre.
+ *
+ * Le périmètre compte : une étude concurrentielle sur l'agro-industrie ne dit
+ * rien du textile, et une due diligence porte sur UNE cible. Griser les paliers
+ * sans regarder le domaine interdirait d'étudier son second métier.
+ */
+function boughtTierOf(
+  orders: OrderedStudy[],
+  studyKey: string,
+  roundNumber: number,
+  dasId: string | null,
+  targetActorId: string | null,
+): string | null {
+  const match = orders.find(
+    (o) =>
+      o.studyKey === studyKey &&
+      o.roundNumber === roundNumber &&
+      (dasId === null || o.dasId === dasId) &&
+      (targetActorId === null || o.targetActorId === targetActorId),
+  );
+  return match?.tier ?? null;
 }
 
 /** Ce que chaque étude réserve à son palier approfondi, et pourquoi ça compte. */
@@ -185,15 +211,39 @@ export function CabinetView({
             ) : null}
 
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              {offer.tiers.map((t) => (
+              {offer.tiers.map((t) => {
+                // Déjà payée ce tour, sur CE domaine et CETTE cible : les autres
+                // paliers se grisent. Ils restent cliquables — monter en gamme
+                // est une décision légitime — mais au prix complet, et l'écran
+                // le dit avant le clic plutôt qu'après le débit.
+                const bought = boughtTierOf(
+                  orders, offer.key, roundNumber,
+                  offer.scope === 'das' ? (selectedDas[offer.key] ?? das[0]?.id ?? null) : null,
+                  offer.key === 'due_diligence' ? selectedTarget : null,
+                );
+                const isBought = bought === t.tier;
+                const otherBought = bought !== null && !isBought;
+
+                return (
                 <button
                   key={t.tier}
                   type="button"
                   disabled={disabled}
                   onClick={() => order(offer.key, t.tier, offer.scope)}
-                  className="rounded-lg border border-(--border) p-4 text-left transition-colors hover:border-(--accent) disabled:opacity-40"
+                  className="rounded-lg border p-4 text-left transition-colors hover:border-(--accent) disabled:opacity-40"
+                  style={{
+                    borderColor: isBought ? 'var(--accent)' : 'var(--border)',
+                    opacity: otherBought ? 0.55 : 1,
+                  }}
                 >
-                  <span className="block text-sm font-medium">{t.label}</span>
+                  <span className="block text-sm font-medium">
+                    {t.label}
+                    {isBought ? (
+                      <span className="ml-2 text-xs font-normal text-(--positive)">
+                        commandée ce tour
+                      </span>
+                    ) : null}
+                  </span>
                   <span className="tabular mt-1 block text-lg font-semibold">
                     {formatMadCompact(t.priceMad)}
                   </span>
@@ -203,13 +253,20 @@ export function CabinetView({
                       : 'Sans marge d’erreur'}
                     {t.bandCount !== null ? ` · ${t.bandCount} bandes` : ' · valeurs chiffrées'}
                   </span>
+                  {otherBought ? (
+                    <span className="mt-2 block text-xs" style={{ color: 'var(--warning)' }}>
+                      Vous avez déjà commandé cette étude ce tour. La reprendre ici coûtera
+                      le prix complet.
+                    </span>
+                  ) : null}
                   {!t.includesWeakSignals && WEAK_SIGNALS[offer.key] ? (
                     <span className="mt-2 block text-xs text-(--warning)">
                       Ne couvre pas : {WEAK_SIGNALS[offer.key]}
                     </span>
                   ) : null}
                 </button>
-              ))}
+                );
+              })}
             </div>
           </article>
         ))}
@@ -248,49 +305,13 @@ export function CabinetView({
                   Télécharger le classeur
                 </a>
 
-                {/* ── Le livrable, lisible sur place ──────────────────────
-                    Il ne se consultait qu'en téléchargeant un classeur : on
-                    sortait du jeu pour le lire, puis on revenait décider de
-                    mémoire. */}
                 {o.subjects.length > 0 ? (
-                  <details className="w-full border-t border-(--border) pt-4">
-                    <summary className="cursor-pointer list-none text-sm font-medium">
-                      Lire l’étude
-                      <span className="ml-2 font-normal text-(--foreground-muted)">
-                        {o.subjects.length} sujet{o.subjects.length > 1 ? 's' : ''} analysé
-                        {o.subjects.length > 1 ? 's' : ''}
-                      </span>
-                    </summary>
-
-                    <div className="mt-4 space-y-6">
-                      {o.subjects.some((s) => (s.history ?? []).length > 0) ? (
-                        <StudyCharts subjects={o.subjects} errorMargin={o.errorMargin} />
-                      ) : null}
-
-                      {o.subjects.map((subject) => (
-                        <div
-                          key={subject.subjectId}
-                          className="rounded-lg border p-4"
-                          style={{
-                            borderColor: subject.isSelf ? 'var(--accent)' : 'var(--border)',
-                          }}
-                        >
-                          <p className="mb-3 font-medium">{subject.subjectName}</p>
-                          <DisclosureList fields={subject.fields} />
-                        </div>
-                      ))}
-
-                      <SupplierRanks subjects={o.subjects} />
-
-                      {o.notes.length > 0 ? (
-                        <ul className="space-y-1 border-t border-(--border) pt-3 text-xs text-(--foreground-muted)">
-                          {o.notes.map((note) => (
-                            <li key={note}>— {note}</li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </div>
-                  </details>
+                  <Link
+                    href={`/cabinet/${o.orderId}`}
+                    className="rounded-lg bg-(--accent) px-4 py-2 text-sm font-medium text-white"
+                  >
+                    Lire le rapport
+                  </Link>
                 ) : null}
               </li>
             ))}

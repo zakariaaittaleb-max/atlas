@@ -23,7 +23,7 @@ export default async function CabinetPage() {
     supabase.from('strategic_units').select('id, name').order('name'),
     supabase
       .from('consulting_orders')
-      .select('id, study_key, tier, das_id, round_number, price_paid_mad, error_margin, payload')
+      .select('id, study_key, tier, das_id, target_actor_id, round_number, price_paid_mad, error_margin, payload')
       .eq('team_id', team.teamId)
       .order('created_at', { ascending: false }),
     supabase
@@ -78,6 +78,7 @@ export default async function CabinetPage() {
         studyName: offers.find((s) => s.key === String(o.study_key))?.name ?? String(o.study_key),
         tier: String(o.tier),
         dasId: o.das_id ? String(o.das_id) : null,
+        targetActorId: o.target_actor_id ? String(o.target_actor_id) : null,
         roundNumber: Number(o.round_number),
         priceMad: Number(o.price_paid_mad),
         errorMargin: Number(o.error_margin),

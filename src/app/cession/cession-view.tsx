@@ -14,6 +14,7 @@
  *   • les acheteurs ne voient qu'une fiche limitée, et s'ignorent entre eux.
  */
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
@@ -217,7 +218,7 @@ export function CessionView({
         <p className="mb-4 max-w-3xl rounded-lg border border-(--border) px-4 py-3 text-sm text-(--foreground-muted)">
           Les chiffres de ces cibles ne sont pas affichés : chiffre d’affaires, capacité et
           surtout <strong>passifs non déclarés</strong> s’obtiennent en{' '}
-          <a href="/cabinet" className="underline">due diligence</a>. Acquérir à l’aveugle est un
+          <Link href="/cabinet" className="underline">due diligence</Link>. Acquérir à l’aveugle est un
           choix, pas un oubli.
         </p>
 
@@ -678,7 +679,7 @@ function TargetStats({
         ) : (
           <p className="text-sm text-(--foreground-muted)">
             Chiffre d’affaires, part de marché, marge et passifs de cette cible
-            s’achètent au <a href="/cabinet" className="underline">cabinet</a>, en due
+            s’achètent au <Link href="/cabinet" className="underline">cabinet</Link>, en due
             diligence. Sans elle, vous enchérissez sur un nom.
           </p>
         )}

@@ -16,8 +16,8 @@ import 'server-only';
 import {
   AUDIT_DEPTH,
   STUDY_FIELDS,
-  TIER_PROFILES,
   buildStudyDeliverable,
+  tierProfile,
   type DisclosureContext,
   type FieldDisclosure,
   type StudyTier,
@@ -97,7 +97,10 @@ export async function fulfilStudy(input: FulfilInput): Promise<Deliverable> {
     studyKey: input.studyKey,
     tier: input.tier,
     roundNumber: observedRound,
-    errorMargin: TIER_PROFILES[input.tier].errorMargin,
+    // Le paramètre de session, pas la constante : c'est lui que `discloseField`
+    // applique. Les lire à deux endroits différents faisait archiver une marge
+    // et en livrer une autre.
+    errorMargin: tierProfile(input.tier, input.params).errorMargin,
     notes: [] as string[],
   };
 
@@ -139,6 +142,11 @@ async function pestel(
   const { data: summary } = await input.admin
     .from('pool_round_summary').select('market_size_mad')
     .eq('das_id', input.dasId!).eq('round_number', round).maybeSingle();
+  // Tous les tours joués : c'est la trajectoire du marché, pas sa photo, qui
+  // dit s'il faut investir ou se retirer.
+  const { data: sizes } = await input.admin
+    .from('pool_round_summary').select('round_number, market_size_mad')
+    .eq('das_id', input.dasId!).lte('round_number', round);
   const { data: shocks } = await input.admin
     .from('market_shocks').select('id')
     .eq('session_id', input.sessionId).eq('das_id', input.dasId!)
@@ -184,22 +192,36 @@ async function pestel(
     return [`exposure_${dim}`, Math.min(weight * 12, 100)];
   }));
 
-  const values = {
-    market_size_mad: num(summary?.market_size_mad, num(das?.base_market_size_mad)),
+  // La taille du marché est la seule grandeur qui bouge d'un tour à l'autre :
+  // élasticité, prix de référence et exposition PESTEL sont des propriétés de
+  // filière. Leur courbe sera donc plate — et c'est une information : une
+  // filière dont l'exposition ne bouge pas est une filière stable.
+  const sizeAt = new Map(
+    ((sizes ?? []) as Row[]).map((r) => [num(r.round_number), num(r.market_size_mad)]),
+  );
+  const playedRounds = [...sizeAt.keys()].sort((a, b) => a - b);
+
+  const valuesAt = (r: number) => ({
+    market_size_mad: sizeAt.get(r) ?? num(summary?.market_size_mad, num(das?.base_market_size_mad)),
     growth_rate: growth,
     price_elasticity: num(das?.price_elasticity, 1.5),
     reference_unit_price_mad: num(das?.reference_unit_price_mad),
     next_round_shock_risk: shockRisk,
     ...exposure,
-  };
+  });
 
   return {
-    subjects: [{
-      subjectId: String(input.dasId),
-      subjectName: str(das?.name, 'DAS'),
-      fields: buildStudyDeliverable(
-        'pestel_sectoriel', input.tier, values, context(String(input.dasId)), input.params),
-    }],
+    subjects: [
+      subjectWithHistory(
+        'pestel_sectoriel',
+        { id: String(input.dasId), name: str(das?.name, 'DAS') },
+        playedRounds.length > 0 ? playedRounds : [round],
+        round,
+        valuesAt,
+        context,
+        input,
+      ),
+    ],
     notes: [
       'Données du tour écoulé. Les bornes de croissance sont annuelles.',
       'L’exposition mesure la VOLATILITÉ de la filière sur chaque dimension — combien d’événements peuvent l’y frapper — et non la probabilité qu’un événement précis survienne.',
@@ -389,6 +411,51 @@ async function competitive(
   };
 }
 
+
+/**
+ * Un sujet livré AVEC son historique.
+ *
+ * Une étude ne valait qu'en photo : elle disait où en était un fournisseur, un
+ * segment ou une cible, jamais s'il s'améliorait. Or c'est la trajectoire qui
+ * décide — un fournisseur dont la fiabilité s'effrite depuis trois tours ne se
+ * traite pas comme un fournisseur qui vient de trébucher.
+ *
+ * Le bruit reste déterministe ET PROPRE À CHAQUE TOUR : le contexte de
+ * divulgation porte le numéro de tour, si bien que relire l'étude au tour 5
+ * redonne exactement les chiffres du tour 2. Deux études du même palier
+ * achetées à deux tours différents s'emboîtent au lieu de se contredire.
+ */
+function subjectWithHistory(
+  studyKey: string,
+  subject: { id: string; name: string; isSelf?: boolean },
+  rounds: number[],
+  observedRound: number,
+  valuesAt: (round: number) => Record<string, number>,
+  context: (id: string) => DisclosureContext,
+  input: FulfilInput,
+): DeliverableSubject {
+  const disclose = (round: number) =>
+    subject.isSelf
+      ? exactFields(studyKey, valuesAt(round))
+      : buildStudyDeliverable(
+          studyKey, input.tier, valuesAt(round),
+          { ...context(subject.id), roundNumber: round }, input.params,
+        );
+
+  return {
+    subjectId: subject.id,
+    subjectName: subject.name,
+    ...(subject.isSelf ? { isSelf: true } : {}),
+    fields: disclose(observedRound),
+    history: rounds.map((round): SubjectHistoryPoint => ({
+      roundNumber: round,
+      values: Object.fromEntries(
+        disclose(round).map((f) => [f.key, f.mode === 'withheld' ? null : valueOf(f)]),
+      ),
+    })),
+  };
+}
+
 /** La valeur numérique d'un champ divulgué, quel que soit son régime. */
 function valueOf(field: FieldDisclosure): number | null {
   if (field.mode === 'exact' || field.mode === 'estimate') return field.value;
@@ -414,25 +481,47 @@ async function panel(
 ) {
   const { data: segments } = await input.admin
     .from('market_segments').select('*').eq('das_id', input.dasId!);
-  const { data: own } = await input.admin
-    .from('team_das_round_metrics').select('perceived_quality, notoriety')
-    .eq('team_id', input.teamId).eq('das_id', input.dasId!).eq('round_number', round).maybeSingle();
+  // Tous les tours : ce que le panel mesure sur VOTRE offre bouge d'un tour à
+  // l'autre. Les caractéristiques du segment, elles, sont structurelles — leur
+  // courbe sera plate, et c'est une information en soi.
+  const { data: ownRounds } = await input.admin
+    .from('team_das_round_metrics').select('round_number, perceived_quality, notoriety')
+    .eq('team_id', input.teamId).eq('das_id', input.dasId!).lte('round_number', round)
+    .order('round_number');
 
-  const subjects: DeliverableSubject[] = (segments ?? []).map((s) => ({
-    subjectId: String(s.id),
-    subjectName: str(s.name, str(s.segment_key)),
-    fields: buildStudyDeliverable('panel_conso', input.tier, {
-      perceived_quality: num(own?.perceived_quality, 50),
-      aided_awareness: num(own?.notoriety, 50),
-      price_sensitivity: num(s.price_sensitivity, 1),
-      quality_requirement: num(s.quality_requirement),
-      segment_growth: num(s.relative_growth, 1) - 1,
-    }, context(String(s.id)), input.params),
-  }));
+  const own = (ownRounds ?? []) as Row[];
+  const ownAt = new Map(own.map((r) => [num(r.round_number), r]));
+  const playedRounds = own.map((r) => num(r.round_number));
+
+  const subjects: DeliverableSubject[] = (segments ?? []).map((s) => {
+    const valuesAt = (r: number) => {
+      const mine = ownAt.get(r);
+      return {
+        perceived_quality: num(mine?.perceived_quality, 50),
+        aided_awareness: num(mine?.notoriety, 50),
+        price_sensitivity: num(s.price_sensitivity, 1),
+        quality_requirement: num(s.quality_requirement),
+        segment_growth: num(s.relative_growth, 1) - 1,
+      };
+    };
+
+    return subjectWithHistory(
+      'panel_conso',
+      { id: String(s.id), name: str(s.name, str(s.segment_key)) },
+      playedRounds.length > 0 ? playedRounds : [round],
+      round,
+      valuesAt,
+      context,
+      input,
+    );
+  });
 
   return {
     subjects,
-    notes: ['Qualité perçue et notoriété mesurées sur votre propre offre.'],
+    notes: [
+      'Qualité perçue et notoriété mesurées sur votre propre offre : elles évoluent avec vos décisions.',
+      'Sensibilité au prix, exigence de qualité et croissance sont des caractéristiques du segment. Elles ne bougent pas — et c’est précisément pourquoi une offre qui ne leur correspond pas ne s’en sortira pas en attendant.',
+    ],
   };
 }
 
@@ -448,13 +537,18 @@ async function ecosystem(
     .eq('session_id', input.sessionId).eq('das_id', input.dasId!).eq('actor_type', actorType);
 
   const subjects: DeliverableSubject[] = (actors ?? []).map((actor) => {
-    const rounds = ((actor.ecosystem_actor_rounds ?? []) as Row[])
+    const history = ((actor.ecosystem_actor_rounds ?? []) as Row[])
       .filter((r) => num(r.round_number) <= round)
-      .sort((a, b) => num(b.round_number) - num(a.round_number));
-    const state = rounds[0] ?? {};
+      .sort((a, b) => num(a.round_number) - num(b.round_number));
 
-    const values: Record<string, number> =
-      actorType === 'fournisseur'
+    const stateAt = (r: number) =>
+      // Le dernier état connu À CETTE DATE : un acteur dont l'écosystème n'a
+      // pas été réécrit ce tour garde celui du tour d'avant.
+      history.filter((row) => num(row.round_number) <= r).slice(-1)[0] ?? {};
+
+    const valuesAt = (r: number): Record<string, number> => {
+      const state = stateAt(r);
+      return actorType === 'fournisseur'
         ? {
             price_index: num(state.price_index, 1),
             capacity_units: num(state.capacity_units),
@@ -470,12 +564,20 @@ async function ecosystem(
             service_level: num(state.service_level, 60),
             minimum_volume: num(state.minimum_volume),
           };
-
-    return {
-      subjectId: String(actor.id),
-      subjectName: `${String(actor.name)}${actor.region_key ? ` — ${String(actor.region_key)}` : ''}`,
-      fields: buildStudyDeliverable(studyKey, input.tier, values, context(String(actor.id)), input.params),
     };
+
+    return subjectWithHistory(
+      studyKey,
+      {
+        id: String(actor.id),
+        name: `${String(actor.name)}${actor.region_key ? ` — ${String(actor.region_key)}` : ''}`,
+      },
+      history.map((r) => num(r.round_number)),
+      round,
+      valuesAt,
+      context,
+      input,
+    );
   });
 
   const notes = actorType === 'fournisseur'
@@ -499,15 +601,15 @@ async function dueDiligence(
   const rounds = ((actor?.ecosystem_actor_rounds ?? []) as Row[])
     .filter((r) => num(r.round_number) <= round)
     .sort((a, b) => num(b.round_number) - num(a.round_number));
-  const state = rounds[0] ?? {};
 
-  const revenue = num(state.revenue_mad);
   // Passifs non déclarés : d'autant plus lourds que la cible va mal. C'est le
   // signal faible — racheter sans due diligence approfondie, c'est hériter
   // d'une ardoise qu'on ne découvre qu'après.
-  const health = num(state.financial_health, 70);
-  const rng = makeRng(seedFrom(input.sessionId, String(input.targetActorId), 'liabilities'));
-  const hiddenLiabilities = revenue * (0.05 + 0.25 * (1 - health / 100)) * (0.6 + rng() * 0.8);
+  //
+  // Un tirage par tour : le même passif ne peut pas valoir deux montants dans
+  // la même étude, ni changer quand on relit l'étude plus tard.
+  const rng2 = (r: number) =>
+    makeRng(seedFrom(input.sessionId, String(input.targetActorId), 'liabilities', r))();
 
   /**
    * La marge d'exploitation de la cible, dérivée de sa SANTÉ FINANCIÈRE.
@@ -519,7 +621,6 @@ async function dueDiligence(
    * bord du dépôt de bilan à 22 % pour une affaire saine — reste dans ce qu'on
    * observe en industrie.
    */
-  const marginPct = 0.04 + 0.18 * (health / 100);
 
   // La part de marché de la cible sur son domaine. Le chiffre d'affaires seul
   // ne dit pas si c'est une position dominante ou résiduelle.
@@ -543,22 +644,47 @@ async function dueDiligence(
   ]);
   const marketSize = num(summary?.market_size_mad) || num(unit?.base_market_size_mad);
 
+  // La trajectoire d'une cible vaut son état : une entreprise dont le chiffre
+  // d'affaires s'effrite depuis trois tours ne se paie pas le prix d'une
+  // entreprise qui vient de trébucher.
+  const chronological = [...rounds].sort((a, b) => num(a.round_number) - num(b.round_number));
+  const stateAt = (r: number) =>
+    chronological.filter((row) => num(row.round_number) <= r).slice(-1)[0] ?? {};
+
+  const valuesAt = (r: number): Record<string, number> => {
+    const at = stateAt(r);
+    const rev = num(at.revenue_mad);
+    const health = num(at.financial_health, 70);
+    const margin = 0.04 + 0.18 * (health / 100);
+    return {
+      revenue_mad: rev,
+      ...(marketSize > 0 ? { market_share_pct: (rev / marketSize) * 100 } : {}),
+      ebitda_mad: rev * margin,
+      margin_pct: margin * 100,
+      capacity_units: num(at.capacity_units),
+      headcount: Math.round(num(at.capacity_units) / 14_000),
+      divest_appetite: num(at.divest_appetite, 30),
+      hidden_liabilities_mad:
+        rev * (0.05 + 0.25 * (1 - health / 100)) * (0.6 + rng2(r) * 0.8),
+    };
+  };
+
   return {
-    subjects: [{
-      subjectId: String(input.targetActorId),
-      subjectName: str(actor?.name, 'Cible'),
-      fields: buildStudyDeliverable('due_diligence', input.tier, {
-        revenue_mad: revenue,
-        ...(marketSize > 0 ? { market_share_pct: (revenue / marketSize) * 100 } : {}),
-        ebitda_mad: revenue * marginPct,
-        margin_pct: marginPct * 100,
-        capacity_units: num(state.capacity_units),
-        headcount: Math.round(num(state.capacity_units) / 14_000),
-        divest_appetite: num(state.divest_appetite, 30),
-        hidden_liabilities_mad: hiddenLiabilities,
-      }, context(String(input.targetActorId)), input.params),
-    }],
-    notes: ['Les passifs non déclarés ne sont couverts qu’en due diligence approfondie.'],
+    subjects: [
+      subjectWithHistory(
+        'due_diligence',
+        { id: String(input.targetActorId), name: str(actor?.name, 'Cible') },
+        chronological.map((r) => num(r.round_number)),
+        round,
+        valuesAt,
+        context,
+        input,
+      ),
+    ],
+    notes: [
+      'Les passifs non déclarés ne sont couverts qu’en due diligence approfondie.',
+      'La trajectoire vaut l’état : une cible qui s’effrite depuis trois tours ne se paie pas le prix d’une cible qui vient de trébucher.',
+    ],
   };
 }
 
@@ -573,12 +699,16 @@ async function dueDiligence(
 async function audit(input: FulfilInput, round: number) {
   const depth = AUDIT_DEPTH[input.tier];
 
-  const [{ data: scores }, { data: details }] = await Promise.all([
+  const [{ data: scores }, { data: details }, { data: allScores }] = await Promise.all([
     input.admin.from('alignment_scores').select('*')
       .eq('team_id', input.teamId).eq('round_number', round).maybeSingle(),
     input.admin.from('alignment_axis_details').select('*')
       .eq('team_id', input.teamId).eq('round_number', round)
       .order('penalty_pts', { ascending: false }),
+    // La trajectoire de la cohérence : un verdict de « milieu de gué » ne se
+    // lit pas pareil selon qu'on y tombe ou qu'on en sort.
+    input.admin.from('alignment_scores').select('round_number, sab_global, sac_score, ia_final')
+      .eq('team_id', input.teamId).lte('round_number', round).order('round_number'),
   ]);
 
   if (!scores) {
@@ -615,7 +745,38 @@ async function audit(input: FulfilInput, round: number) {
   }
 
   // Zéro : c'est ce qui distingue l'audit de toutes les autres missions.
-  return { subjects: [], auditRows: rows, auditVerdict: verdict, notes, errorMargin: 0 };
+  // Le seul livrable SANS bruit : le cabinet analyse les données que l'équipe
+  // lui a elle-même transmises, il ne peut pas se tromper dessus. Les valeurs
+  // sont donc exactes, y compris dans l'historique.
+  const chronological = (allScores ?? []) as Row[];
+  const scoreAt = new Map(chronological.map((r) => [num(r.round_number), r]));
+
+  const subject: DeliverableSubject = {
+    subjectId: input.teamId,
+    subjectName: 'Votre alignement',
+    isSelf: true,
+    fields: exactFields('audit_alignement', {
+      sab_global: num(scores.sab_global),
+      sac_score: num(scores.sac_score),
+      ia_final: num(scores.ia_final),
+    }),
+    history: chronological.map((r) => ({
+      roundNumber: num(r.round_number),
+      values: {
+        sab_global: num(scoreAt.get(num(r.round_number))?.sab_global),
+        sac_score: num(scoreAt.get(num(r.round_number))?.sac_score),
+        ia_final: num(scoreAt.get(num(r.round_number))?.ia_final),
+      },
+    })),
+  };
+
+  return {
+    subjects: [subject],
+    auditRows: rows,
+    auditVerdict: verdict,
+    notes,
+    errorMargin: 0,
+  };
 }
 
 /** Indice de Herfindahl, ramené sur 0–100 : mesure de concentration du pool. */

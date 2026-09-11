@@ -20,6 +20,7 @@
  * exactement ce que le cabinet vend.
  */
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 
@@ -105,7 +106,7 @@ export function MarchesView({
           </p>
           <p className="mt-3 max-w-3xl rounded-lg border border-(--border) px-4 py-3 text-sm text-(--foreground-muted)">
             Les capacités, fiabilités et marges exigées de ces acteurs ne sont pas affichées ici :
-            elles s’achètent auprès du <a href="/cabinet" className="underline">cabinet</a>.
+            elles s’achètent auprès du <Link href="/cabinet" className="underline">cabinet</Link>.
             Sans benchmark, vous choisissez sur le nom.
           </p>
         </header>

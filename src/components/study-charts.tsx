@@ -40,30 +40,42 @@ export interface ChartSubject {
   isSelf?: boolean;
   history?: SubjectHistoryPoint[];
   suppliers?: SupplierRank[];
+  /** Le livrable du tour observé : c'est lui qui nomme les indicateurs. */
+  fields?: { key: string; label: string; unit?: string }[];
 }
 
 /**
- * Les indicateurs qu'on met en courbe, dans l'ordre où on les consulte.
+ * Les indicateurs traçables, déduits du livrable.
  *
- * Tous ne méritent pas une trajectoire : la barrière à l'entrée et la menace
- * des substituts sont des propriétés de filière, identiques pour tout le monde
- * et plates par construction. Les tracer donnerait six droites superposées.
+ * Ils étaient énumérés en dur, ce qui ne marchait que pour l'étude
+ * concurrentielle : les quatre autres n'avaient aucune courbe alors que leurs
+ * données sont bien historisées. On lit donc les champs du livrable lui-même —
+ * chacun porte son libellé et son unité — et on ne garde que ceux qui BOUGENT.
+ *
+ * Une grandeur strictement plate n'a pas de courbe à montrer : l'exigence de
+ * qualité d'un segment ou l'exposition PESTEL d'une filière sont structurelles.
+ * Les tracer donnerait des droites horizontales qu'on prendrait pour une panne.
  */
-const PLOTTABLE: { key: string; label: string; unit: 'DH' | '%' | 'unites' | 'score' }[] = [
-  { key: 'competitor_market_share', label: 'Part de marché', unit: '%' },
-  { key: 'volume_sold', label: 'Volume vendu', unit: 'unites' },
-  { key: 'production_estimate', label: 'Production estimée', unit: 'unites' },
-  { key: 'revenue_mad', label: 'Chiffre d’affaires', unit: 'DH' },
-  { key: 'revenue_forecast_mad', label: 'CA prévisionnel', unit: 'DH' },
-  { key: 'gross_margin_mad', label: 'Marge brute', unit: 'DH' },
-  { key: 'margin_pct', label: 'Taux de marge', unit: '%' },
-  { key: 'distribution_coverage', label: 'Couverture de distribution', unit: '%' },
-  { key: 'competitor_quality', label: 'Qualité perçue', unit: 'score' },
-  { key: 'competitor_notoriety', label: 'Notoriété', unit: 'score' },
-  { key: 'competitor_price_position', label: 'Positionnement prix', unit: 'score' },
-  { key: 'competitor_capacity', label: 'Capacité installée', unit: 'unites' },
-  { key: 'volume_lost', label: 'Demande non servie', unit: 'unites' },
-];
+export function plottableOf(subjects: ChartSubject[]): { key: string; label: string; unit: string }[] {
+  const reference = subjects.find((s) => (s.fields ?? []).length > 0);
+  if (!reference) return [];
+
+  return (reference.fields ?? [])
+    .map((field) => ({
+      key: field.key,
+      label: field.label,
+      unit: field.unit === 'DH' ? 'DH' : field.unit === '%' ? '%' : 'score',
+    }))
+    .filter((metric) => {
+      const values = subjects.flatMap((subject) =>
+        (subject.history ?? [])
+          .map((point) => point.values[metric.key])
+          .filter((v): v is number => typeof v === 'number'),
+      );
+      if (values.length < 2) return false;
+      return new Set(values.map((v) => v.toFixed(6))).size > 1;
+    });
+}
 
 /**
  * Palette des séries.
@@ -90,9 +102,10 @@ export function StudyCharts({
   /** Marge du palier payé, annoncée sur le graphique. */
   errorMargin: number;
 }) {
-  const [metric, setMetric] = useState(PLOTTABLE[0].key);
+  const plottable = plottableOf(subjects);
+  const [metric, setMetric] = useState<string | null>(null);
 
-  const spec = PLOTTABLE.find((p) => p.key === metric) ?? PLOTTABLE[0];
+  const spec = plottable.find((p) => p.key === metric) ?? plottable[0];
   const rounds = [
     ...new Set(subjects.flatMap((s) => (s.history ?? []).map((h) => h.roundNumber))),
   ].sort((a, b) => a - b);
@@ -103,29 +116,29 @@ export function StudyCharts({
     const row: Record<string, number | string | null> = { round: roundLabel(round) };
     for (const subject of subjects) {
       const point = (subject.history ?? []).find((h) => h.roundNumber === round);
-      row[subject.subjectName] = point?.values[metric] ?? null;
+      row[subject.subjectName] = spec ? point?.values[spec.key] ?? null : null;
     }
     return row;
   });
 
-  const hasData = data.some((row) =>
+  const hasData = Boolean(spec) && data.some((row) =>
     subjects.some((s) => typeof row[s.subjectName] === 'number'),
   );
 
   return (
     <div>
       <div className="mb-4 flex flex-wrap gap-1.5">
-        {PLOTTABLE.map((item) => (
+        {plottable.map((item) => (
           <button
             key={item.key}
             type="button"
             onClick={() => setMetric(item.key)}
-            aria-pressed={metric === item.key}
+            aria-pressed={spec?.key === item.key}
             className="rounded-lg border px-2.5 py-1 text-xs"
             style={{
-              borderColor: metric === item.key ? 'var(--accent)' : 'var(--border)',
-              background: metric === item.key ? 'var(--surface-muted)' : undefined,
-              fontWeight: metric === item.key ? 600 : 400,
+              borderColor: spec?.key === item.key ? 'var(--accent)' : 'var(--border)',
+              background: spec?.key === item.key ? 'var(--surface-muted)' : undefined,
+              fontWeight: spec?.key === item.key ? 600 : 400,
             }}
           >
             {item.label}
@@ -147,10 +160,10 @@ export function StudyCharts({
                 stroke="var(--foreground-muted)"
                 tick={{ fontSize: 12 }}
                 width={72}
-                tickFormatter={(v: number) => axisLabel(Number(v), spec.unit)}
+                tickFormatter={(v: number) => axisLabel(Number(v), spec?.unit ?? 'score')}
               />
               <Tooltip
-                formatter={(v, name) => [axisLabel(Number(v), spec.unit), String(name)]}
+                formatter={(v, name) => [axisLabel(Number(v), spec?.unit ?? 'score'), String(name)]}
                 labelFormatter={(l) => (String(l) === 'Départ' ? 'Dotation initiale' : `Tour ${String(l).replace('T', '')}`)}
                 contentStyle={{
                   background: 'var(--surface)',
@@ -176,8 +189,9 @@ export function StudyCharts({
         </div>
       ) : (
         <p className="rounded-lg border border-(--border) p-6 text-sm text-(--foreground-muted)">
-          Aucun tour n’a encore été résolu : il n’y a pas de trajectoire à tracer.
-          Les indicateurs apparaîtront après la première résolution.
+          {plottable.length === 0
+            ? 'Aucun indicateur de cette étude n’a bougé sur la période observée : il n’y a pas de trajectoire à tracer, seulement des valeurs structurelles.'
+            : 'Aucun tour n’a encore été résolu : les courbes apparaîtront après la première résolution.'}
         </p>
       )}
 
