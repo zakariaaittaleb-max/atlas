@@ -1,0 +1,763 @@
+'use client';
+
+/**
+ * ATLAS — le tableau de bord.
+ *
+ * Il montrait six nombres et comparait deux tours. Savoir que sa marge vaut
+ * 12 % ne dit pas si l'on vient de la doubler ou de la diviser par deux, et
+ * c'est pourtant la seule question qui change une décision. Tout y est donc en
+ * TRAJECTOIRE, sur tous les tours résolus.
+ *
+ * ── CE QUI EST OUVERT, ET POURQUOI ─────────────────────────────────────────
+ * L'écran se consulte pendant un tour chronométré, debout, entre deux
+ * arbitrages. Les sections qui répondent aux questions les plus fréquentes —
+ * « est-ce qu'on tient ? », « quel métier nous porte ? », « sommes-nous
+ * cohérents ? » — sont ouvertes. Les matrices et la concurrence se déplient
+ * quand on a le temps de creuser.
+ *
+ * ── LA FRONTIÈRE ENTRE CE QU'ON SAIT ET CE QU'ON ESTIME ────────────────────
+ * Les courbes de l'équipe sont pleines, celles venues du cabinet en
+ * POINTILLÉS, avec la marge du palier payé affichée. Une estimation qui ne dit
+ * pas qu'elle en est une devient une vérité, et c'est exactement l'erreur que
+ * la simulation veut faire commettre puis débriefer — en connaissance de cause.
+ */
+
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  PolarAngleAxis,
+  PolarGrid,
+  PolarRadiusAxis,
+  Radar,
+  RadarChart,
+  ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  Tooltip,
+  XAxis,
+  YAxis,
+  ZAxis,
+} from 'recharts';
+import { useState } from 'react';
+
+import type {
+  CabinetOverlay, DasSeries, DashboardContext, GroupPoint,
+} from '@/lib/dashboard-types';
+import { formatMadCompact, formatScore, formatUnits } from '@/lib/format';
+
+const SERIES_COLOURS = [
+  'var(--accent)', '#c2410c', '#0f766e', '#7c3aed', '#a16207', '#be123c', '#1d4ed8',
+];
+
+const AXIS = { stroke: 'var(--foreground-muted)', tick: { fontSize: 12 } } as const;
+
+const TOOLTIP_STYLE = {
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  fontSize: 13,
+} as const;
+
+export function DashboardView({
+  context,
+  activeDasId,
+}: {
+  context: DashboardContext;
+  /** Le domaine choisi dans la barre du haut : l'écran le suit, comme les saisies. */
+  activeDasId: string | null;
+}) {
+  const das = context.das.find((d) => d.dasId === activeDasId) ?? context.das[0] ?? null;
+
+  if (!context.hasResults) {
+    return (
+      <section className="rounded-xl border border-(--border) bg-(--surface) p-8">
+        <h2 className="text-xl font-medium">Aucun tour résolu pour l’instant</h2>
+        <p className="mt-3 max-w-2xl text-(--foreground-muted)">
+          Vos indicateurs apparaîtront ici après la résolution du premier tour. D’ici là,
+          saisissez vos décisions et commandez vos premières études auprès du cabinet — sans
+          elles, vous jouerez à l’aveugle.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Section title="Santé du Groupe" hint="Ce que vous gagnez, ce qu’il vous reste." open>
+        <GroupHealth group={context.group} />
+      </Section>
+
+      <Section
+        title="Portefeuille"
+        hint="Quel métier fait vivre l’entreprise, et lequel la fait vivre bien. Le poids en chiffre d’affaires et la marge brute ne disent pas toujours la même chose."
+        open
+      >
+        <Portfolio das={context.das} />
+      </Section>
+
+      <Section
+        title="Cohérence stratégique"
+        hint="Une entreprise cohérente exécute mieux : la prime joue sur la marge."
+        open
+      >
+        <Alignment context={context} />
+      </Section>
+
+      {das ? (
+        <Section title={`Domaine : ${das.name}`} hint="Tout ce qui se décide sur ce métier." open>
+          <DasTrajectory das={das} />
+        </Section>
+      ) : null}
+
+      {das ? (
+        <Section
+          title="Matrices stratégiques"
+          hint="Les grilles classiques, calculées sur vos chiffres — pas sur un exemple de manuel."
+        >
+          <Matrices das={das} group={context.group} allDas={context.das} />
+        </Section>
+      ) : null}
+
+      <Section
+        title="La concurrence"
+        hint="Ce que vous savez des autres, et ce que vous ignorez."
+      >
+        <Competition cabinet={context.cabinet} das={das} />
+      </Section>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Coque de section
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function Section({
+  title, hint, children, open = false,
+}: {
+  title: string;
+  hint: string;
+  children: React.ReactNode;
+  open?: boolean;
+}) {
+  return (
+    <details
+      open={open}
+      className="rounded-xl border border-(--border) bg-(--surface) [&_summary::-webkit-details-marker]:hidden"
+    >
+      <summary className="cursor-pointer list-none px-6 py-4">
+        <span className="text-lg font-medium">{title}</span>
+        <span className="mt-1 block max-w-3xl text-sm text-(--foreground-muted)">{hint}</span>
+      </summary>
+      <div className="border-t border-(--border) px-6 py-5">{children}</div>
+    </details>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Santé du Groupe
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const GROUP_METRICS = [
+  { key: 'treasuryMad', label: 'Trésorerie', unit: 'DH' },
+  { key: 'revenueMad', label: 'Chiffre d’affaires', unit: 'DH' },
+  { key: 'netIncomeMad', label: 'Résultat net', unit: 'DH' },
+  { key: 'grossMarginMad', label: 'Marge brute', unit: 'DH' },
+  { key: 'marginPct', label: 'Taux de marge', unit: '%' },
+  { key: 'iaScore', label: 'Indice d’alignement', unit: 'score' },
+  { key: 'climatSocial', label: 'Climat social', unit: 'score' },
+] as const;
+
+function GroupHealth({ group }: { group: GroupPoint[] }) {
+  const [metric, setMetric] = useState<string>('treasuryMad');
+  const spec = GROUP_METRICS.find((m) => m.key === metric) ?? GROUP_METRICS[0];
+  const last = group[group.length - 1];
+  const previous = group[group.length - 2];
+
+  return (
+    <div>
+      <dl className="tabular mb-5 grid gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        {GROUP_METRICS.map((m) => {
+          const value = last[m.key] as number;
+          const before = previous ? (previous[m.key] as number) : null;
+          return (
+            <div key={m.key}>
+              <dt className="text-xs text-(--foreground-muted)">{m.label}</dt>
+              <dd className="text-lg font-semibold">{show(value, m.unit)}</dd>
+              {before !== null ? <Trend value={value} before={before} unit={m.unit} /> : null}
+            </div>
+          );
+        })}
+      </dl>
+
+      <Picker
+        options={GROUP_METRICS.map((m) => ({ key: m.key, label: m.label }))}
+        value={metric}
+        onChange={setMetric}
+      />
+      <Trajectory
+        data={group.map((p) => ({ round: roundLabel(p.roundNumber), valeur: p[spec.key] as number }))}
+        unit={spec.unit}
+        series={[{ dataKey: 'valeur', name: spec.label, colour: SERIES_COLOURS[0] }]}
+      />
+    </div>
+  );
+}
+
+function Trend({ value, before, unit }: { value: number; before: number; unit: string }) {
+  const delta = value - before;
+  if (Math.abs(delta) < 1e-9) {
+    return <dd className="text-xs text-(--foreground-muted)">= inchangé</dd>;
+  }
+  return (
+    <dd
+      className="text-xs"
+      style={{ color: delta > 0 ? 'var(--positive)' : 'var(--negative)' }}
+    >
+      {delta > 0 ? '↑ +' : '↓ −'}{show(Math.abs(delta), unit)} vs tour précédent
+    </dd>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Portefeuille
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function Portfolio({ das }: { das: DasSeries[] }) {
+  const data = das.map((d) => ({
+    name: d.name,
+    'Part du chiffre d’affaires': d.revenueShareOfGroup * 100,
+    'Marge brute': d.grossMarginMad,
+  }));
+
+  return (
+    <div>
+      <div className="h-64 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: 8 }}>
+            <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="name" {...AXIS} />
+            <YAxis
+              yAxisId="part" {...AXIS} width={56}
+              tickFormatter={(v: number) => `${Math.round(v)} %`}
+            />
+            <YAxis
+              yAxisId="marge" orientation="right" {...AXIS} width={72}
+              tickFormatter={(v: number) => formatMadCompact(v)}
+            />
+            <Tooltip
+              contentStyle={TOOLTIP_STYLE}
+              formatter={(v, name) => [
+                String(name) === 'Marge brute'
+                  ? formatMadCompact(Number(v))
+                  : `${formatScore(Number(v), 1)} %`,
+                String(name),
+              ]}
+            />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Bar yAxisId="part" dataKey="Part du chiffre d’affaires" fill="var(--accent)" />
+            <Bar yAxisId="marge" dataKey="Marge brute" fill="#0f766e" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="mt-3 text-xs text-(--foreground-muted)">
+        L’écart entre les deux barres est souvent la révélation : un domaine peut faire le
+        volume sans faire la marge.
+      </p>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Alignement
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function Alignment({ context }: { context: DashboardContext }) {
+  const { alignment, group } = context;
+
+  return (
+    <div>
+      <p
+        className="mb-4 rounded-lg border px-4 py-3"
+        style={{
+          borderColor:
+            alignment.stuckInTheMiddle || alignment.drift ? 'var(--warning)' : 'var(--border)',
+        }}
+      >
+        {alignment.sentence}
+      </p>
+
+      <Trajectory
+        data={group.map((p) => ({ round: roundLabel(p.roundNumber), valeur: p.iaScore }))}
+        unit="score"
+        series={[{ dataKey: 'valeur', name: 'Indice d’alignement', colour: SERIES_COLOURS[0] }]}
+      />
+
+      {alignment.worstAxes.length > 0 ? (
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-medium tracking-wide text-(--foreground-muted) uppercase">
+            Ce qui vous coûte le plus
+          </p>
+          <ul className="tabular space-y-1 text-sm">
+            {alignment.worstAxes.map((axis) => (
+              <li key={axis.axisKey} className="flex flex-wrap items-baseline gap-2">
+                <span>{axis.axisKey.replace(/_/g, ' ')}</span>
+                <span className="text-(--foreground-muted)">
+                  écart {formatScore(axis.gap, 1)} · −{formatScore(axis.penalty, 1)} points
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Le domaine piloté
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const DAS_METRICS = [
+  { key: 'marketSharePct', label: 'Part de marché', unit: '%' },
+  { key: 'revenueMad', label: 'Chiffre d’affaires', unit: 'DH' },
+  { key: 'grossMarginMad', label: 'Marge brute', unit: 'DH' },
+  { key: 'volumeSold', label: 'Volume vendu', unit: 'unites' },
+  { key: 'productionUnits', label: 'Production', unit: 'unites' },
+  { key: 'volumeLost', label: 'Demande non servie', unit: 'unites' },
+  { key: 'inputStockUnits', label: 'Matière en magasin', unit: 'unites' },
+  { key: 'finishedStockUnits', label: 'Produits finis en stock', unit: 'unites' },
+  { key: 'competitivenessScore', label: 'Compétitivité', unit: 'score' },
+  { key: 'perceivedQuality', label: 'Qualité perçue', unit: 'score' },
+  { key: 'notoriety', label: 'Notoriété', unit: 'score' },
+  { key: 'pricePosition', label: 'Positionnement prix', unit: 'score' },
+  { key: 'distributionCoverage', label: 'Couverture de distribution', unit: '%' },
+  { key: 'utilisationRate', label: 'Taux d’utilisation', unit: '%' },
+] as const;
+
+function DasTrajectory({ das }: { das: DasSeries }) {
+  const [metric, setMetric] = useState<string>('marketSharePct');
+  const spec = DAS_METRICS.find((m) => m.key === metric) ?? DAS_METRICS[0];
+
+  return (
+    <div>
+      <Picker
+        options={DAS_METRICS.map((m) => ({ key: m.key, label: m.label }))}
+        value={metric}
+        onChange={setMetric}
+      />
+      <Trajectory
+        data={das.history.map((p) => ({
+          round: roundLabel(p.roundNumber),
+          valeur: p[spec.key] as number,
+        }))}
+        unit={spec.unit}
+        series={[{ dataKey: 'valeur', name: spec.label, colour: SERIES_COLOURS[0] }]}
+      />
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Matrices
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function Matrices({
+  das, group, allDas,
+}: {
+  das: DasSeries;
+  group: GroupPoint[];
+  allDas: DasSeries[];
+}) {
+  const last = group[group.length - 1];
+
+  return (
+    <div className="space-y-8">
+      <Bcg allDas={allDas} />
+
+      {last?.bsc ? (
+        <div>
+          <h3 className="mb-1 font-medium">Balanced Scorecard</h3>
+          <p className="mb-3 text-sm text-(--foreground-muted)">
+            Les quatre perspectives de Kaplan et Norton, calculées par le moteur sur vos
+            résultats. Un profil déséquilibré tient rarement dans la durée.
+          </p>
+          <div className="h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart
+                data={[
+                  { axe: 'Financier', valeur: last.bsc.financial },
+                  { axe: 'Client', valeur: last.bsc.client },
+                  { axe: 'Processus', valeur: last.bsc.process },
+                  { axe: 'Apprentissage', valeur: last.bsc.learning },
+                ]}
+              >
+                <PolarGrid stroke="var(--border)" />
+                <PolarAngleAxis dataKey="axe" tick={{ fontSize: 12 }} />
+                <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+                <Radar
+                  name="Votre profil" dataKey="valeur"
+                  stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.3}
+                />
+                <Tooltip contentStyle={TOOLTIP_STYLE} />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      ) : null}
+
+      <div>
+        <h3 className="mb-1 font-medium">Les cinq forces de Porter — {das.name}</h3>
+        <p className="mb-3 text-sm text-(--foreground-muted)">
+          Plus une force est haute, moins la filière est profitable de ce côté-là. Le pouvoir
+          des fournisseurs et des distributeurs se déduit du nombre d’acteurs indépendants
+          qu’il vous reste : en racheter un le fait baisser.
+        </p>
+        <div className="h-72 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <RadarChart
+              data={[
+                { axe: 'Entrants', valeur: 100 - das.forces.entryBarrier },
+                { axe: 'Substituts', valeur: das.forces.substitution },
+                { axe: 'Fournisseurs', valeur: das.forces.supplierPower },
+                { axe: 'Distributeurs', valeur: das.forces.distributorPower },
+                { axe: 'Rivalité', valeur: das.forces.rivalry },
+              ]}
+            >
+              <PolarGrid stroke="var(--border)" />
+              <PolarAngleAxis dataKey="axe" tick={{ fontSize: 12 }} />
+              <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+              <Radar
+                name="Intensité" dataKey="valeur"
+                stroke="#c2410c" fill="#c2410c" fillOpacity={0.25}
+              />
+              <Tooltip contentStyle={TOOLTIP_STYLE} />
+            </RadarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <McKinsey allDas={allDas} />
+    </div>
+  );
+}
+
+/**
+ * La matrice BCG — et pourquoi elle peut rester vide.
+ *
+ * Ses deux axes s'achètent : la part relative au leader vient de l'étude
+ * concurrentielle, la croissance du marché de l'étude PESTEL. Le moteur en a
+ * fait délibérément la récompense de deux missions. L'emplacement existe donc
+ * toujours et dit ce qu'il manque — le manque d'information devient visible,
+ * au lieu d'être une absence qu'on ne remarque pas.
+ */
+function Bcg({ allDas }: { allDas: DasSeries[] }) {
+  const placeable = allDas.filter(
+    (d) => d.relativeShare !== null && d.marketGrowth !== null,
+  );
+
+  return (
+    <div>
+      <h3 className="mb-1 font-medium">Matrice BCG</h3>
+      <p className="mb-3 text-sm text-(--foreground-muted)">
+        Part relative au leader en abscisse, croissance du marché en ordonnée. La taille des
+        points est le poids du domaine dans votre chiffre d’affaires.
+      </p>
+
+      {placeable.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-(--border) p-6">
+          <p className="text-sm">
+            Vos domaines ne peuvent pas être placés : il vous manque leurs deux coordonnées.
+          </p>
+          <ul className="mt-3 space-y-1 text-sm text-(--foreground-muted)">
+            <li>
+              — <strong>Part relative au leader</strong> : étude concurrentielle. Votre part
+              seule ne suffit pas — 20 % fait un poids mort face à un leader à 60 %, et une
+              vache à lait face à un second à 8 %.
+            </li>
+            <li>
+              — <strong>Croissance du marché</strong> : étude PESTEL sectorielle.
+            </li>
+          </ul>
+          <a href="/cabinet" className="mt-3 inline-block text-sm underline">
+            Commander ces études au cabinet
+          </a>
+        </div>
+      ) : (
+        <div className="h-80 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart margin={{ top: 12, right: 24, bottom: 12, left: 8 }}>
+              <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
+              <XAxis
+                type="number" dataKey="x" name="Part relative au leader" {...AXIS}
+                domain={[0, 'dataMax']}
+                tickFormatter={(v: number) => `${formatScore(v, 1)}×`}
+              />
+              <YAxis
+                type="number" dataKey="y" name="Croissance du marché" {...AXIS} width={64}
+                tickFormatter={(v: number) => `${formatScore(v * 100, 0)} %`}
+              />
+              <ZAxis type="number" dataKey="z" range={[80, 500]} />
+              <Tooltip
+                contentStyle={TOOLTIP_STYLE}
+                formatter={(v, name) => [formatScore(Number(v), 2), String(name)]}
+              />
+              <Scatter
+                data={placeable.map((d) => ({
+                  x: d.relativeShare ?? 0,
+                  y: d.marketGrowth ?? 0,
+                  z: Math.max(d.revenueShareOfGroup * 100, 5),
+                  name: d.name,
+                }))}
+              >
+                {placeable.map((d, i) => (
+                  <Cell key={d.dasId} fill={SERIES_COLOURS[i % SERIES_COLOURS.length]} />
+                ))}
+              </Scatter>
+            </ScatterChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * McKinsey / GE : attractivité du marché contre force compétitive.
+ *
+ * Les deux axes se calculent sur vos propres chiffres — la compétitivité que le
+ * moteur vous attribue, et l'attractivité déduite des forces de la filière.
+ * Contrairement à la BCG, elle ne demande donc rien au cabinet.
+ */
+function McKinsey({ allDas }: { allDas: DasSeries[] }) {
+  const points = allDas.map((d, i) => {
+    const last = d.history[d.history.length - 1];
+    // Un marché est d'autant plus attractif qu'il est difficile d'y entrer et
+    // peu menacé par les substituts.
+    const attractivite = Math.max(
+      0,
+      Math.min(100, (d.forces.entryBarrier + (100 - d.forces.substitution)) / 2),
+    );
+    return {
+      x: last?.competitivenessScore ?? 0,
+      y: attractivite,
+      z: Math.max(d.revenueShareOfGroup * 100, 5),
+      name: d.name,
+      colour: SERIES_COLOURS[i % SERIES_COLOURS.length],
+    };
+  });
+
+  return (
+    <div>
+      <h3 className="mb-1 font-medium">Matrice McKinsey / GE</h3>
+      <p className="mb-3 text-sm text-(--foreground-muted)">
+        Force compétitive en abscisse, attractivité du marché en ordonnée. Elle se calcule
+        sur vos chiffres : contrairement à la BCG, elle ne demande rien au cabinet.
+      </p>
+      <div className="h-80 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <ScatterChart margin={{ top: 12, right: 24, bottom: 12, left: 8 }}>
+            <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
+            <XAxis type="number" dataKey="x" name="Force compétitive" domain={[0, 100]} {...AXIS} />
+            <YAxis
+              type="number" dataKey="y" name="Attractivité" domain={[0, 100]} width={56} {...AXIS}
+            />
+            <ZAxis type="number" dataKey="z" range={[80, 500]} />
+            <Tooltip
+              contentStyle={TOOLTIP_STYLE}
+              formatter={(v, name) => [formatScore(Number(v), 1), String(name)]}
+            />
+            <Scatter data={points}>
+              {points.map((p) => (
+                <Cell key={p.name} fill={p.colour} />
+              ))}
+            </Scatter>
+          </ScatterChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Concurrence
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function Competition({
+  cabinet, das,
+}: {
+  cabinet: CabinetOverlay[];
+  das: DasSeries | null;
+}) {
+  const study = cabinet.find(
+    (o) => o.studyKey === 'concurrentielle' && (!das || o.dasId === das.dasId),
+  );
+
+  if (!study) {
+    return (
+      <div className="rounded-lg border border-dashed border-(--border) p-6">
+        <p className="text-sm">
+          Vous ne voyez que vos propres chiffres. Sans étude concurrentielle, une part de
+          marché de 18 % ne vous dit pas si elle fait de vous le premier ou le dernier.
+        </p>
+        <a href="/cabinet" className="mt-3 inline-block text-sm underline">
+          Commander une étude concurrentielle
+        </a>
+      </div>
+    );
+  }
+
+  const rounds = [
+    ...new Set(study.subjects.flatMap((s) => (s.history ?? []).map((h) => h.roundNumber))),
+  ].sort((a, b) => a - b);
+
+  const data = rounds.map((round) => {
+    const row: Record<string, number | string | null> = { round: roundLabel(round) };
+    for (const subject of study.subjects) {
+      const point = (subject.history ?? []).find((h) => h.roundNumber === round);
+      row[subject.subjectName] = point?.values.competitor_market_share ?? null;
+    }
+    return row;
+  });
+
+  return (
+    <div>
+      <p className="mb-3 text-sm text-(--foreground-muted)">
+        Parts de marché, votre équipe en trait plein et les concurrents en pointillés.
+        <span
+          className="ml-2 rounded px-1.5 py-0.5 text-xs"
+          style={{ background: 'var(--surface-muted)' }}
+        >
+          cabinet ±{Math.round(study.errorMargin * 100)} %
+        </span>
+      </p>
+
+      <div className="h-72 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: 8 }}>
+            <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="round" {...AXIS} />
+            <YAxis {...AXIS} width={56} tickFormatter={(v: number) => `${Math.round(v)} %`} />
+            <Tooltip
+              contentStyle={TOOLTIP_STYLE}
+              formatter={(v, name) => [`${formatScore(Number(v), 1)} %`, String(name)]}
+            />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            {study.subjects.map((subject, index) => (
+              <Line
+                key={subject.subjectId}
+                type="monotone"
+                dataKey={subject.subjectName}
+                stroke={SERIES_COLOURS[index % SERIES_COLOURS.length]}
+                strokeWidth={subject.isSelf ? 3 : 1.75}
+                // Le pointillé porte la frontière entre ce qu'on sait et ce
+                // qu'on estime. Le trait plein n'appartient qu'à vos chiffres.
+                strokeDasharray={subject.isSelf ? undefined : '5 4'}
+                dot={{ r: 3 }}
+                connectNulls
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Briques communes
+   ══════════════════════════════════════════════════════════════════════════ */
+
+function Picker({
+  options, value, onChange,
+}: {
+  options: { key: string; label: string }[];
+  value: string;
+  onChange: (key: string) => void;
+}) {
+  return (
+    <div className="mb-4 flex flex-wrap gap-1.5">
+      {options.map((option) => (
+        <button
+          key={option.key}
+          type="button"
+          onClick={() => onChange(option.key)}
+          aria-pressed={value === option.key}
+          className="rounded-lg border px-2.5 py-1 text-xs"
+          style={{
+            borderColor: value === option.key ? 'var(--accent)' : 'var(--border)',
+            background: value === option.key ? 'var(--surface-muted)' : undefined,
+            fontWeight: value === option.key ? 600 : 400,
+          }}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Trajectory({
+  data, unit, series,
+}: {
+  data: Record<string, number | string>[];
+  unit: string;
+  series: { dataKey: string; name: string; colour: string }[];
+}) {
+  if (data.length === 0) {
+    return (
+      <p className="rounded-lg border border-(--border) p-6 text-sm text-(--foreground-muted)">
+        Aucun tour résolu : il n’y a pas encore de trajectoire à tracer.
+      </p>
+    );
+  }
+
+  return (
+    <div className="h-64 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 8, right: 16, bottom: 4, left: 8 }}>
+          <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="round" {...AXIS} />
+          <YAxis {...AXIS} width={76} tickFormatter={(v: number) => show(v, unit)} />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            formatter={(v, name) => [show(Number(v), unit), String(name)]}
+          />
+          {series.map((s) => (
+            <Line
+              key={s.dataKey}
+              type="monotone"
+              dataKey={s.dataKey}
+              name={s.name}
+              stroke={s.colour}
+              strokeWidth={2.5}
+              dot={{ r: 3 }}
+              connectNulls
+            />
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function show(value: number, unit: string): string {
+  if (unit === 'DH') return formatMadCompact(value);
+  if (unit === '%') return `${formatScore(value, 1)} %`;
+  if (unit === 'unites') return formatUnits(Math.round(value));
+  return formatScore(value, 1);
+}
+
+/**
+ * Le provisionnement écrit une ligne AVANT le premier tour : c'est la dotation,
+ * identique pour toutes les équipes. L'afficher « T-1 » laissait croire à un
+ * tour joué que personne ne se rappelait.
+ */
+function roundLabel(round: number): string {
+  return round < 0 ? 'Départ' : `T${round}`;
+}
