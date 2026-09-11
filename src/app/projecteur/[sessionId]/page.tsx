@@ -32,7 +32,7 @@ export default async function ProjectorPage({
       admin.from('strategic_units').select('id, name').eq('session_id', sessionId),
       admin.from('team_das_round_metrics').select('team_id, das_id, market_share_pct, revenue_mad, competitiveness_score').eq('round_number', roundNumber),
       admin.from('team_das_round_metrics').select('team_id, das_id, market_share_pct').eq('round_number', roundNumber - 1),
-      admin.from('pool_round_summary').select('das_id, unserved_share').eq('round_number', roundNumber),
+      admin.from('pool_round_summary').select('das_id, unserved_share, installed_share').eq('round_number', roundNumber),
     ]);
 
   const teamById = new Map((teams ?? []).map((t) => [String(t.id), t]));
@@ -48,12 +48,15 @@ export default async function ProjectorPage({
     const team = teamById.get(String(m.team_id));
     if (!team) continue;
 
+    const summary = (summaries ?? []).find((s) => String(s.das_id) === dasId);
     const entry = byDas.get(dasId) ?? {
       dasId,
       dasName: dasName.get(dasId) ?? '—',
-      unservedShare: Number(
-        (summaries ?? []).find((s) => String(s.das_id) === dasId)?.unserved_share ?? 0,
-      ),
+      unservedShare: Number(summary?.unserved_share ?? 0),
+      // Les entreprises installées tiennent une part du marché sans figurer au
+      // classement : sans cette ligne, la colonne des parts ne somme pas à
+      // 100 % et l'écran projeté au mur a l'air faux.
+      installedShare: Number(summary?.installed_share ?? 0),
       rows: [],
     };
 

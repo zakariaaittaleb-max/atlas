@@ -199,6 +199,7 @@ export async function POST(request: Request) {
         dasId: s.dasId,
         marketSizeMad: s.marketSizeMad,
         unservedShare: s.unservedShare,
+        installedShare: s.installedShare,
       })),
       transfers: result.transfers,
       acquisitions: result.acquisitions,

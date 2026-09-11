@@ -15,18 +15,35 @@
  * axe unique se lit d'un coup d'œil, les noms d'équipes s'inscrivent dans les
  * segments, et la lisibilité tient jusqu'à douze équipes là où l'anneau devient
  * illisible au-delà de six.
- * ───────────────────────────────────────────────────────────────────────────
+ *
+ * ── TOUT LE MARCHÉ, PAS SEULEMENT LES ÉQUIPES ──────────────────────────────
+ * Une barre empilée dit « voici comment 100 % se partagent ». Elle ne peut donc
+ * pas ne montrer que les équipes : un domaine a aussi ses entreprises
+ * installées, et une part que personne n'a su servir. Tant que ces deux
+ * tranches manquaient, la barre s'arrêtait avant le bord sans rien expliquer —
+ * un blanc qu'on lit comme un bug d'affichage, alors que c'est un résultat.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
 import { formatPct } from '@/lib/format';
 
+/** Ce que représente une tranche — la couleur et la légende en découlent. */
+export type SliceKind = 'team' | 'installed' | 'unserved';
+
 export interface ShareSlice {
-  teamId: string;
-  teamName: string;
+  /** Identité stable de la tranche : `teamId`, ou un mot-clé pour le reste. */
+  key: string;
+  label: string;
   share: number;
   previousShare: number;
+  kind: SliceKind;
+  /**
+   * Rang dans la palette. Fourni par l'appelant plutôt que déduit de la
+   * position : une équipe doit garder SA couleur d'un domaine à l'autre, et la
+   * composition d'un domaine n'est pas celle du voisin.
+   */
+  colorIndex?: number;
 }
 
 /**
@@ -71,20 +88,30 @@ function usePrefersReducedMotion(): boolean {
   );
 }
 
+/** Les équipes d'abord, puis les installés, puis ce que personne n'a servi. */
+const KIND_RANK: Record<SliceKind, number> = { team: 0, installed: 1, unserved: 2 };
+
 export function ShareBar({
   slices,
-  /** L'équipe qui regarde : sa tranche est entourée et nommée « vous ». */
-  viewerTeamId,
+  /** La tranche de l'équipe qui regarde : entourée et nommée « vous ». */
+  highlightKey,
   animate,
   onSettled,
+  label = 'Répartition des parts de marché',
 }: {
   slices: ShareSlice[];
-  viewerTeamId: string;
+  highlightKey?: string;
   animate: boolean;
   onSettled?: () => void;
+  label?: string;
 }) {
   const reducedMotion = usePrefersReducedMotion();
   const shouldAnimate = animate && !reducedMotion;
+
+  // Un identifiant par instance : l'écran empile une barre par domaine, et
+  // deux `clipPath` de même id feraient que la première découpe toutes les
+  // autres — un id de document ne peut pas être une constante de module.
+  const domId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
 
   const [animProgress, setAnimProgress] = useState(0);
   const [hovered, setHovered] = useState<string | null>(null);
@@ -127,7 +154,10 @@ export function ShareBar({
   // Ordre FIXE, indépendant du classement : c'est ce qui permet à l'œil de
   // suivre sa propre tranche pendant qu'elle se déplace.
   const ordered = useMemo(
-    () => [...slices].sort((a, b) => a.teamId.localeCompare(b.teamId)),
+    () =>
+      [...slices].sort(
+        (a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind] || a.key.localeCompare(b.key),
+      ),
     [slices],
   );
 
@@ -135,24 +165,32 @@ export function ShareBar({
   // fermeture : un `useMemo` doit rester une pure dérivation.
   const segments = useMemo(
     () =>
-      ordered.reduce<
-        (ShareSlice & { index: number; x: number; width: number; value: number })[]
-      >((acc, slice, index) => {
-        const value = slice.previousShare + (slice.share - slice.previousShare) * progress;
-        const width = Math.max(value * W, 0);
-        const previousSegment = acc[acc.length - 1];
-        const x = previousSegment ? previousSegment.x + previousSegment.width : 0;
-        return [...acc, { ...slice, index, x, width, value }];
-      }, []),
+      ordered.reduce<(ShareSlice & { x: number; width: number; value: number })[]>(
+        (acc, slice) => {
+          const value = slice.previousShare + (slice.share - slice.previousShare) * progress;
+          const width = Math.max(value * W, 0);
+          const previousSegment = acc[acc.length - 1];
+          const x = previousSegment ? previousSegment.x + previousSegment.width : 0;
+          return [...acc, { ...slice, x, width, value }];
+        },
+        [],
+      ),
     [ordered, progress],
   );
+
+  const fillOf = (slice: ShareSlice, position: number) => {
+    if (slice.kind === 'installed') return 'var(--outside)';
+    if (slice.kind === 'unserved') return `url(#unserved-${domId})`;
+    return `var(--s${((slice.colorIndex ?? position) % 8) + 1})`;
+  };
 
   return (
     <figure className="viz-root m-0">
       <style>{`
         .viz-root { --s1:${SERIES_LIGHT[0]}; --s2:${SERIES_LIGHT[1]}; --s3:${SERIES_LIGHT[2]};
                     --s4:${SERIES_LIGHT[3]}; --s5:${SERIES_LIGHT[4]}; --s6:${SERIES_LIGHT[5]};
-                    --s7:${SERIES_LIGHT[6]}; --s8:${SERIES_LIGHT[7]}; }
+                    --s7:${SERIES_LIGHT[6]}; --s8:${SERIES_LIGHT[7]};
+                    --outside: var(--foreground-muted); }
         @media (prefers-color-scheme: dark) {
           :root:where(:not([data-theme="light"])) .viz-root {
             --s1:${SERIES_DARK[0]}; --s2:${SERIES_DARK[1]}; --s3:${SERIES_DARK[2]};
@@ -169,36 +207,51 @@ export function ShareBar({
         viewBox="0 0 1000 46"
         preserveAspectRatio="none"
         role="img"
-        aria-label="Répartition des parts de marché du pool"
+        aria-label={label}
         className="h-[46px] w-full"
       >
         <defs>
-          <clipPath id="share-bar-round">
+          <clipPath id={`round-${domId}`}>
             <rect x="0" y="0" width="1000" height="46" rx="5" />
           </clipPath>
+
+          {/* Hachures pour le marché que personne n'a servi : ni un
+              concurrent, ni un aplat de couleur — une tranche vide, mais
+              nommée. `patternTransform` plutôt qu'un motif oblique tracé à la
+              main, la viewBox étant étirée sans conserver les proportions. */}
+          <pattern
+            id={`unserved-${domId}`}
+            width="8"
+            height="8"
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(35)"
+          >
+            <rect width="8" height="8" fill="var(--surface-muted)" />
+            <line x1="0" y1="0" x2="0" y2="8" stroke="var(--foreground-muted)" strokeWidth="2.5" />
+          </pattern>
         </defs>
 
-        <g clipPath="url(#share-bar-round)">
-          {segments.map((seg) => {
-            const isViewer = seg.teamId === viewerTeamId;
-            const dim = hovered !== null && hovered !== seg.teamId;
+        <g clipPath={`url(#round-${domId})`}>
+          {segments.map((seg, position) => {
+            const isViewer = seg.key === highlightKey;
+            const dim = hovered !== null && hovered !== seg.key;
             return (
               <rect
-                key={seg.teamId}
+                key={seg.key}
                 x={seg.x}
                 y={0}
                 width={Math.max(seg.width - GAP, 0)}
                 height={H}
-                fill={`var(--s${(seg.index % 8) + 1})`}
+                fill={fillOf(seg, position)}
                 opacity={dim ? 0.35 : 1}
                 style={{ transition: 'opacity 160ms ease' }}
-                onMouseEnter={() => setHovered(seg.teamId)}
+                onMouseEnter={() => setHovered(seg.key)}
                 onMouseLeave={() => setHovered(null)}
               >
                 {/* Une seule chaîne : React refuse un tableau de nœuds dans
                     <title>, que le navigateur aplatirait de toute façon en
                     texte — d'où une erreur d'hydratation. */}
-                <title>{`${seg.teamName}${isViewer ? ' (vous)' : ''} — ${formatPct(seg.value, 1)} de part de marché`}</title>
+                <title>{`${seg.label}${isViewer ? ' (vous)' : ''} — ${formatPct(seg.value, 1)}`}</title>
               </rect>
             );
           })}
@@ -207,10 +260,10 @@ export function ShareBar({
         {/* Liseré autour de la tranche de l'équipe qui regarde : l'identité ne
             doit jamais reposer sur la seule couleur. */}
         {segments
-          .filter((s) => s.teamId === viewerTeamId && s.width > 6)
+          .filter((s) => s.key === highlightKey && s.width > 6)
           .map((seg) => (
             <rect
-              key={`${seg.teamId}-ring`}
+              key={`${seg.key}-ring`}
               x={seg.x + 1}
               y={1}
               width={Math.max(seg.width - GAP - 2, 0)}
@@ -228,21 +281,36 @@ export function ShareBar({
           teintes de la palette passent sous 3:1 sur fond clair, l'identité doit
           donc être portée aussi par du texte. */}
       <figcaption className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
-        {segments.map((seg) => (
+        {segments.map((seg, position) => (
           <span
-            key={seg.teamId}
+            key={seg.key}
             className="flex items-center gap-2 text-sm"
-            onMouseEnter={() => setHovered(seg.teamId)}
+            onMouseEnter={() => setHovered(seg.key)}
             onMouseLeave={() => setHovered(null)}
           >
             <span
               aria-hidden
               className="inline-block h-3 w-3 shrink-0 rounded-sm"
-              style={{ background: `var(--s${(seg.index % 8) + 1})` }}
+              style={
+                seg.kind === 'unserved'
+                  ? {
+                      background: 'var(--surface-muted)',
+                      border: '1px solid var(--foreground-muted)',
+                    }
+                  : { background: fillOf(seg, position) }
+              }
             />
-            <span className={seg.teamId === viewerTeamId ? 'font-semibold' : ''}>
-              {seg.teamName}
-              {seg.teamId === viewerTeamId ? ' (vous)' : ''}
+            <span
+              className={
+                seg.key === highlightKey
+                  ? 'font-semibold'
+                  : seg.kind === 'team'
+                    ? ''
+                    : 'text-(--foreground-muted)'
+              }
+            >
+              {seg.label}
+              {seg.key === highlightKey ? ' (vous)' : ''}
             </span>
             <span className="tabular text-(--foreground-muted)">
               {formatPct(seg.value, 1)}

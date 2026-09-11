@@ -211,6 +211,25 @@ export interface PoolDasSummary {
   poolId: string;
   dasId: string;
   marketSizeMad: number;
+  /**
+   * Part du marché servie par les entreprises installées, hors jeu.
+   *
+   * Elle DOIT figurer ici : sans elle, le marché ne se lit plus. Les parts des
+   * équipes sont exprimées sur le marché total, donc elles ne somment plus à 1
+   * dès qu'un installé prélève sa part — et l'écran de révélation empilerait
+   * des tranches qui laissent un trou sans savoir le nommer.
+   */
+  installedShare: number;
+  /**
+   * Part du marché total que personne n'a su servir, faute de couverture.
+   *
+   * Exprimée sur le marché TOTAL, comme les parts des équipes — et non sur la
+   * seule portion que les équipes se disputent. Les deux bases coexistaient :
+   * la répartition rend un reliquat de son propre périmètre, l'écran parlait
+   * du marché entier. Un marché où les installés tiennent 30 % et où les
+   * équipes laissent un dixième de leur part annonçait 10 % de non-servi
+   * là où le marché n'en laissait que 7.
+   */
   unservedShare: number;
   teamIds: string[];
 }
@@ -1115,8 +1134,11 @@ export function resolveRound(
     poolSummaries.push({
       poolId,
       dasId,
-      marketSizeMad: marketSizeByDas.get(dasId) ?? 0,
-      unservedShare: allocation.unservedShare,
+      marketSizeMad: marketSize,
+      installedShare: clamp01(1 - playersShareOfMarket),
+      // Rebasée sur le marché total, comme les parts des équipes : le reliquat
+      // que rend la répartition porte sur la seule portion disputée.
+      unservedShare: clamp01(allocation.unservedShare * playersShareOfMarket),
       teamIds: list.map((w) => w.teamId),
     });
   }
@@ -1897,7 +1919,14 @@ export function checkInvariants(
   const failures: InvariantFailure[] = [];
   const EPS = 1e-6;
 
-  // 1 — Σ parts + part non servie = 1, par pool et par DAS.
+  // 1 — Σ parts + non servi + installés = 1, par pool et par DAS.
+  //
+  // Le terme des installés manquait, et l'invariant a fait exactement son
+  // travail : dès que les entreprises hors jeu ont pris leur part du marché,
+  // la somme est tombée à 0,8 et TOUTE résolution était annulée en 422. Chaque
+  // session du jeu a deux installés par domaine — le défaut n'attendait que le
+  // prochain tour joué.
+
   for (const summary of poolSummaries) {
     const metrics = dasMetrics.filter(
       (m) => m.dasId === summary.dasId && summary.teamIds.includes(m.teamId),
@@ -1913,13 +1942,25 @@ export function checkInvariants(
     const contenders = metrics.filter(
       (m) => !m.blueOceanActive && (m.rawShare > 0 || m.marketSharePct > 0),
     );
-    const total = contenders.reduce((acc, m) => acc + m.marketSharePct, 0) + summary.unservedShare;
+    const total =
+      contenders.reduce((acc, m) => acc + m.marketSharePct, 0) +
+      summary.unservedShare +
+      summary.installedShare;
 
     if (contenders.length > 0 && Math.abs(total - 1) > 1e-4) {
       failures.push({
         code: 'share_sum',
-        message: `Pool ${summary.poolId}, DAS ${summary.dasId} : les parts somment à ${total.toFixed(6)} au lieu de 1.`,
-        context: { poolId: summary.poolId, dasId: summary.dasId, total },
+        message:
+          `Pool ${summary.poolId}, DAS ${summary.dasId} : les parts somment à ` +
+          `${total.toFixed(6)} au lieu de 1 (dont ${summary.installedShare.toFixed(4)} ` +
+          `aux installés et ${summary.unservedShare.toFixed(4)} non servis).`,
+        context: {
+          poolId: summary.poolId,
+          dasId: summary.dasId,
+          total,
+          installedShare: summary.installedShare,
+          unservedShare: summary.unservedShare,
+        },
       });
     }
   }

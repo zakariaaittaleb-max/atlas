@@ -24,6 +24,7 @@ export interface PoolStanding {
   dasId: string;
   dasName: string;
   unservedShare: number;
+  installedShare: number;
   rows: {
     teamId: string;
     teamName: string;
@@ -118,8 +119,15 @@ export function ProjectorView({
                 </tbody>
               </table>
 
+              {pool.installedShare > 0.001 ? (
+                <p className="mt-4 text-2xl text-(--foreground-muted)">
+                  {formatPct(pool.installedShare, 1)} du marché est servi par les entreprises
+                  déjà installées, hors jeu.
+                </p>
+              ) : null}
+
               {pool.unservedShare > 0.001 ? (
-                <p className="mt-4 text-2xl text-(--warning)">
+                <p className="mt-2 text-2xl text-(--warning)">
                   {formatPct(pool.unservedShare, 1)} du marché n’a été servi par personne.
                 </p>
               ) : null}

@@ -17,6 +17,27 @@ type Row = Record<string, unknown>;
 const num = (v: unknown, d = 0) => (typeof v === 'number' ? v : Number(v ?? d) || d);
 const str = (v: unknown, d = '') => (typeof v === 'string' ? v : d);
 
+/**
+ * Part de marché moyenne d'un groupe sur toute la session.
+ *
+ * Pondérée par la taille du marché de chaque domaine et de chaque tour : la
+ * question posée est « quelle fraction des marchés que vous avez joués avez-vous
+ * prise », et une fraction ne se moyenne pas sans tenir compte de sa base.
+ * Sans taille de marché en base — cas des tours anciens — on retombe sur la
+ * moyenne simple plutôt que de rendre zéro.
+ */
+export function weightedShare(metrics: Row[]): number {
+  if (metrics.length === 0) return 0;
+  const weight = metrics.reduce((acc, m) => acc + Math.max(num(m.market_size_mad), 0), 0);
+  if (weight <= 0) return mean(metrics.map((m) => num(m.market_share_pct)));
+  return (
+    metrics.reduce(
+      (acc, m) => acc + num(m.market_share_pct) * Math.max(num(m.market_size_mad), 0),
+      0,
+    ) / weight
+  );
+}
+
 export async function buildScorecards(
   admin: Admin,
   sessionId: string,
@@ -67,9 +88,11 @@ export async function buildScorecards(
       cumulativeRevenueMad: cumulativeRevenue,
       cumulativeNetIncomeMad: teamPnls.reduce((acc, p) => acc + num(p.net_income_mad), 0),
       equityMad: num(last(forTeam(budgets, teamId))?.equity_mad),
-      averageMarketShare: teamMetrics.length
-        ? mean(teamMetrics.map((m) => num(m.market_share_pct)))
-        : 0,
+      // Moyenne PONDÉRÉE par la taille des marchés. La moyenne arithmétique
+      // mettait sur le même plan 50 % d'un marché de 50 Md et 10 % d'un marché
+      // de 190 Md : un groupe pouvait paraître dominant en régnant sur le plus
+      // petit domaine de son portefeuille. Le palmarès s'en nourrissait.
+      averageMarketShare: weightedShare(teamMetrics),
       // Sur un portefeuille multi-DAS, on retient la moyenne du dernier tour :
       // c'est l'image de l'entreprise à l'arrivée, pas celle d'un seul métier.
       finalNotoriety: finalMetrics.length ? mean(finalMetrics.map((m) => num(m.notoriety))) : 0,

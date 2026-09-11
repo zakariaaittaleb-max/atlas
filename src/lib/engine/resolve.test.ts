@@ -638,10 +638,29 @@ describe('détection des invariants', () => {
         { teamId: 't2', dasId: 'd1', marketSharePct: 0.4, rawShare: 0.4 } as DasMetricsOutput,
       ],
       [],
-      [{ poolId: 'p1', dasId: 'd1', marketSizeMad: 1, unservedShare: 0, teamIds: ['t1', 't2'] }],
+      [{
+        poolId: 'p1', dasId: 'd1', marketSizeMad: 1,
+        installedShare: 0, unservedShare: 0, teamIds: ['t1', 't2'],
+      }],
       [],
     );
     expect(failures.map((f) => f.code)).toContain('share_sum');
+  });
+
+  it('accepte une somme complétée par les installés et le non-servi', () => {
+    const failures = checkInvariants(
+      [
+        { teamId: 't1', dasId: 'd1', marketSharePct: 0.35, rawShare: 0.35 } as DasMetricsOutput,
+        { teamId: 't2', dasId: 'd1', marketSharePct: 0.28, rawShare: 0.28 } as DasMetricsOutput,
+      ],
+      [],
+      [{
+        poolId: 'p1', dasId: 'd1', marketSizeMad: 1,
+        installedShare: 0.3, unservedShare: 0.07, teamIds: ['t1', 't2'],
+      }],
+      [],
+    );
+    expect(failures.map((f) => f.code)).not.toContain('share_sum');
   });
 
   it('refuse une part hors bornes', () => {
@@ -1393,5 +1412,51 @@ describe('concurrents non joueurs', () => {
     const total = marketOf(500_000_000_000).dasMetrics
       .reduce((acc, m) => acc + m.marketSharePct, 0);
     expect(total).toBeCloseTo(0, 6);
+  });
+
+  /**
+   * Le test qui manquait, et qui aurait dû accompagner le prélèvement des
+   * installés : la répartition passait, mais l'invariant de somme ignorait la
+   * part prélevée et annulait TOUTE résolution en 422 dès qu'un domaine avait
+   * ses entreprises installées — c'est-à-dire toujours.
+   */
+  it('respecte ses propres invariants quand les installés prélèvent leur part', () => {
+    const marche = marketOf(0).dasMetrics[0].marketSizeMad;
+    const avec = marketOf(marche * 0.2);
+
+    expect(avec.invariantFailures).toEqual([]);
+    expect(avec.ok).toBe(true);
+  });
+
+  it('nomme la part des installés dans le résumé du pool', () => {
+    const marche = marketOf(0).dasMetrics[0].marketSizeMad;
+    const summary = marketOf(marche * 0.2).poolSummaries[0];
+
+    expect(summary.installedShare).toBeCloseTo(0.2, 3);
+  });
+
+  /**
+   * Les deux bases se confondaient : la répartition rend son reliquat sur la
+   * portion que les équipes se disputent, l'écran l'annonçait comme une part
+   * du marché entier. Le non-servi était donc surévalué d'autant que les
+   * installés prélevaient.
+   */
+  it('exprime le non-servi sur le marché total, comme les parts', () => {
+    const base = baseInput({
+      // Une seule équipe, dont la couverture plafonne la part : la répartition
+      // rend forcément un reliquat, ce qui est le cas qui nous intéresse.
+      teams: [team('solo')],
+    });
+    const marche = resolveRound(base, params).poolSummaries[0].marketSizeMad;
+
+    const seul = resolveRound(base, params).poolSummaries[0];
+    const avec = resolveRound(
+      { ...base, das: base.das.map((d) => ({ ...d, npcRevenueMad: marche * 0.25 })) },
+      params,
+    ).poolSummaries[0];
+
+    expect(seul.unservedShare).toBeGreaterThan(0.01);
+    // Même reliquat de répartition, mais sur trois quarts de marché seulement.
+    expect(avec.unservedShare).toBeCloseTo(seul.unservedShare * 0.75, 4);
   });
 });

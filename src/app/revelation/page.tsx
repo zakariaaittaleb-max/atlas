@@ -1,7 +1,7 @@
 import { getRoundState, requireTeam } from '@/lib/dal';
 import { createServerClient } from '@/lib/supabase/server';
 
-import { RevelationView, type RevealRow } from './revelation-view';
+import { RevelationView, type DasSummaryRow, type RevealRow } from './revelation-view';
 
 export const metadata = { title: 'Atlas — Révélation' };
 
@@ -20,23 +20,29 @@ export default async function RevelationPage() {
   // le diagnostic d'alignement des autres équipes restent hors de portée.
   const supabase = await createServerClient();
 
-  const { data: rows } = await supabase
-    .from('pool_reveal')
-    .select('*')
-    .in('round_number', [currentRound - 1, currentRound])
-    .order('market_share_pct', { ascending: false });
+  // Les deux tours sont chargés ensemble : le tour précédent sert de point de
+  // départ à l'animation et de base aux écarts.
+  const rounds = [currentRound - 1, currentRound];
 
-  const { data: summary } = await supabase
-    .from('pool_round_summary')
-    .select('das_id, unserved_share, market_size_mad')
-    .eq('round_number', currentRound);
+  const [{ data: rows }, { data: summaries }, { data: das }, { data: ownAlignment }] =
+    await Promise.all([
+      supabase.from('pool_reveal').select('*').in('round_number', rounds),
+      // `pool_round_summary` est filtrée par la RLS sur le pool de l'équipe :
+      // on n'y lit donc que les domaines de son propre marché.
+      supabase
+        .from('pool_round_summary')
+        .select('das_id, round_number, market_size_mad, unserved_share, installed_share')
+        .in('round_number', rounds),
+      supabase.from('strategic_units').select('id, name'),
+      supabase
+        .from('alignment_scores')
+        .select('ia_final, stuck_in_the_middle, strategic_drift, drift_declared, drift_actual')
+        .eq('team_id', team.teamId)
+        .eq('round_number', currentRound)
+        .maybeSingle(),
+    ]);
 
-  const { data: ownAlignment } = await supabase
-    .from('alignment_scores')
-    .select('ia_final, stuck_in_the_middle, strategic_drift, drift_declared, drift_actual')
-    .eq('team_id', team.teamId)
-    .eq('round_number', currentRound)
-    .maybeSingle();
+  const dasName = new Map((das ?? []).map((d) => [String(d.id), String(d.name)]));
 
   return (
     <RevelationView
@@ -45,8 +51,17 @@ export default async function RevelationPage() {
       teamName={team.teamName}
       roundNumber={currentRound}
       status={status}
-      rows={(rows ?? []) as RevealRow[]}
-      unservedShare={Number(summary?.[0]?.unserved_share ?? 0)}
+      rows={(rows ?? []).map((r) => ({
+        ...r,
+        das_name: dasName.get(String(r.das_id)) ?? 'Domaine',
+      })) as RevealRow[]}
+      summaries={(summaries ?? []).map((s): DasSummaryRow => ({
+        dasId: String(s.das_id),
+        roundNumber: Number(s.round_number),
+        marketSizeMad: Number(s.market_size_mad ?? 0),
+        unservedShare: Number(s.unserved_share ?? 0),
+        installedShare: Number(s.installed_share ?? 0),
+      }))}
       ownDiagnosis={
         ownAlignment
           ? {

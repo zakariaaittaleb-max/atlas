@@ -22,6 +22,21 @@
  * à la RLS. C'est aussi ce qui rend la révélation rejouable après un
  * rafraîchissement ou une coupure réseau — l'état vit en base, pas dans
  * la mémoire du navigateur.
+ *
+ * ── DEUX POURCENTAGES, ET NON UN ───────────────────────────────────────────
+ * L'écran empilait toutes les lignes de `pool_reveal` dans une seule barre. Or
+ * cette vue rend une ligne par équipe ET PAR DOMAINE : un groupe présent sur
+ * trois domaines apparaissait trois fois, la somme des tranches montait à
+ * 200 %, et la barre débordait en rognant les dernières.
+ *
+ * Les deux mesures sont désormais distinctes, parce qu'elles ne répondent pas
+ * à la même question :
+ *
+ *   • la PART DE MARCHÉ se joue dans un domaine, contre les équipes qui y sont
+ *     et contre les entreprises installées. Une barre par domaine.
+ *   • le POIDS DU GROUPE se mesure en chiffre d'affaires, tous domaines
+ *     confondus. C'est la taille de l'entreprise, pas sa position sur un
+ *     marché. Une barre pour le pool.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -29,6 +44,14 @@ import { useRouter } from 'next/navigation';
 
 import { ShareBar, type ShareSlice } from '@/components/share-bar';
 import { createClient } from '@/lib/supabase/client';
+import {
+  colorIndexByTeam,
+  dasComposition,
+  dasOrder,
+  groupWeights,
+  type DasSummary,
+  type ShareInput,
+} from '@/lib/reveal';
 import {
   formatMadCompact,
   formatPct,
@@ -40,6 +63,8 @@ import {
 export interface RevealRow {
   team_id: string;
   team_name: string;
+  das_id: string;
+  das_name: string;
   round_number: number;
   competitiveness_score: number | null;
   perceived_quality: number | null;
@@ -52,6 +77,8 @@ export interface RevealRow {
   unit_price_mad: number | null;
 }
 
+export type DasSummaryRow = DasSummary;
+
 interface OwnDiagnosis {
   ia: number;
   stuck: boolean;
@@ -63,7 +90,7 @@ interface OwnDiagnosis {
 type Phase = 'attente' | 'calcul' | 'revelation' | 'pose';
 
 export function RevelationView({
-  sessionId, teamId, teamName, roundNumber, status, rows, unservedShare, ownDiagnosis,
+  sessionId, teamId, teamName, roundNumber, status, rows, summaries, ownDiagnosis,
 }: {
   sessionId: string;
   teamId: string;
@@ -71,7 +98,7 @@ export function RevelationView({
   roundNumber: number;
   status: string;
   rows: RevealRow[];
-  unservedShare: number;
+  summaries: DasSummaryRow[];
   ownDiagnosis: OwnDiagnosis | null;
 }) {
   const router = useRouter();
@@ -110,35 +137,67 @@ export function RevelationView({
     return () => { void supabase.removeChannel(channel); };
   }, [sessionId, router]);
 
-  const current = useMemo(() => rows.filter((r) => r.round_number === roundNumber), [rows, roundNumber]);
-  const previous = useMemo(
-    () => new Map(rows.filter((r) => r.round_number === roundNumber - 1).map((r) => [r.team_id, r])),
+  // ── Agrégations ───────────────────────────────────────────────────────────
+  const shareInputs: ShareInput[] = useMemo(
+    () =>
+      rows.map((r) => ({
+        teamId: r.team_id,
+        dasId: r.das_id,
+        roundNumber: r.round_number,
+        marketSharePct: Number(r.market_share_pct ?? 0),
+        revenueMad: Number(r.revenue_mad ?? 0),
+      })),
+    [rows],
+  );
+
+  const teamNames = useMemo(
+    () => new Map(rows.map((r) => [r.team_id, r.team_name])),
+    [rows],
+  );
+  const dasNames = useMemo(() => new Map(rows.map((r) => [r.das_id, r.das_name])), [rows]);
+
+  // La couleur suit le groupe, dans toutes les barres de l'écran.
+  const colorIndex = useMemo(() => colorIndexByTeam(shareInputs), [shareInputs]);
+
+  const weights = useMemo(() => groupWeights(shareInputs, roundNumber), [shareInputs, roundNumber]);
+  const ownWeight = weights.find((w) => w.teamId === teamId);
+  const poolRevenue = weights.reduce((acc, w) => acc + w.revenueMad, 0);
+
+  const blocks = useMemo(
+    () =>
+      dasOrder(shareInputs, summaries, roundNumber).map((dasId) => ({
+        dasId,
+        name: dasNames.get(dasId) ?? 'Domaine',
+        composition: dasComposition(dasId, shareInputs, summaries, roundNumber),
+      })),
+    [shareInputs, summaries, roundNumber, dasNames],
+  );
+
+  // Les parts du tour précédent, par équipe ET par domaine : c'est la clé
+  // composée qui manquait, et confondre les deux niveaux faisait comparer la
+  // part agro d'un groupe à sa part textile.
+  const previousByUnit = useMemo(
+    () =>
+      new Map(
+        rows
+          .filter((r) => r.round_number === roundNumber - 1)
+          .map((r) => [`${r.team_id}:${r.das_id}`, Number(r.market_share_pct ?? 0)]),
+      ),
     [rows, roundNumber],
   );
 
-  const slices: ShareSlice[] = useMemo(
+  const groupSlices: ShareSlice[] = useMemo(
     () =>
-      current.map((r) => ({
-        teamId: r.team_id,
-        teamName: r.team_name,
-        share: Number(r.market_share_pct ?? 0),
-        // Au premier tour il n'y a pas d'avant : on part d'une répartition
-        // égale, pour que l'animation raconte « voilà ce que vos décisions ont
-        // fait d'un marché qui était partagé » plutôt que de surgir du néant.
-        previousShare: Number(
-          previous.get(r.team_id)?.market_share_pct ?? 1 / Math.max(current.length, 1),
-        ),
+      weights.map((w) => ({
+        key: w.teamId,
+        label: teamNames.get(w.teamId) ?? 'Groupe',
+        share: w.weight,
+        previousShare: w.previousWeight,
+        kind: 'team' as const,
+        colorIndex: colorIndex.get(w.teamId),
       })),
-    [current, previous],
+    [weights, teamNames, colorIndex],
   );
-
-  const own = current.find((r) => r.team_id === teamId);
-  const ownPrevious = previous.get(teamId);
-  const ownShare = Number(own?.market_share_pct ?? 0);
-  const ownDelta =
-    ownPrevious?.market_share_pct != null
-      ? ownShare - Number(ownPrevious.market_share_pct)
-      : null;
 
   const handleSettled = useCallback(() => setPhase('pose'), []);
 
@@ -175,50 +234,182 @@ export function RevelationView({
     );
   }
 
+  const weightDelta =
+    ownWeight && ownWeight.previousWeight !== ownWeight.weight
+      ? ownWeight.weight - ownWeight.previousWeight
+      : null;
+
   return (
     <Shell roundNumber={roundNumber} teamName={teamName}>
-      {/* Le chiffre qui fait mal ou qui fait plaisir, avant toute explication. */}
-      <section className="mb-10">
-        <p className="text-sm font-medium text-(--foreground-muted)">Votre part de marché</p>
-        <p className="tabular mt-1 text-6xl font-semibold tracking-tight">
-          {formatPct(ownShare, 1)}
+      {/* Le chiffre qui fait mal ou qui fait plaisir, avant toute explication.
+          C'est le poids du GROUPE : un portefeuille de trois domaines n'a pas
+          « une » part de marché, il en a trois — elles arrivent juste après. */}
+      <section className="mb-8">
+        <p className="text-sm font-medium text-(--foreground-muted)">
+          Votre poids dans le pool
         </p>
-        {ownDelta !== null ? (
+        <p className="tabular mt-1 text-6xl font-semibold tracking-tight">
+          {formatPct(ownWeight?.weight ?? 0, 1)}
+        </p>
+        {weightDelta !== null ? (
           <p
             className="tabular mt-2 text-lg font-medium"
-            style={{ color: ownDelta >= 0 ? 'var(--positive)' : 'var(--negative)' }}
+            style={{ color: weightDelta >= 0 ? 'var(--positive)' : 'var(--negative)' }}
           >
-            {formatSharePoints(ownDelta)} pts
+            {formatSharePoints(weightDelta)} pts
             <span className="ml-2 font-normal text-(--foreground-muted)">vs tour précédent</span>
           </p>
         ) : (
           <p className="mt-2 text-(--foreground-muted)">Premier tour — pas de comparaison</p>
         )}
+        <p className="mt-3 max-w-2xl text-sm text-(--foreground-muted)">
+          <span className="tabular">{formatMadCompact(ownWeight?.revenueMad ?? 0)}</span> de
+          chiffre d’affaires sur <span className="tabular">{formatMadCompact(poolRevenue)}</span>{' '}
+          cumulés par les {weights.length} groupes du pool
+          {ownWeight && ownWeight.dasCount > 1
+            ? `, répartis sur ${ownWeight.dasCount} domaines`
+            : ''}
+          .
+        </p>
       </section>
 
       <section className="mb-10 rounded-xl border border-(--border) bg-(--surface) p-6">
-        <h2 className="mb-5 text-lg font-medium">Répartition du marché</h2>
+        <h2 className="text-lg font-medium">Poids des groupes</h2>
+        <p className="mt-1 mb-5 text-sm text-(--foreground-muted)">
+          Part du chiffre d’affaires cumulé des groupes, tous domaines confondus. Ce n’est
+          pas une part de marché : les entreprises installées n’y figurent pas, et un groupe
+          peut peser lourd en jouant petit sur beaucoup de domaines.
+        </p>
         <ShareBar
-          slices={slices}
-          viewerTeamId={teamId}
+          slices={groupSlices}
+          highlightKey={teamId}
           animate={phase === 'revelation'}
           onSettled={handleSettled}
+          label="Poids des groupes du pool en chiffre d’affaires"
         />
-        {unservedShare > 0.001 ? (
-          <p className="mt-5 rounded-lg border border-(--warning) px-4 py-3 text-sm text-(--warning)">
-            <strong className="tabular">{formatPct(unservedShare, 1)}</strong> du marché n’a été
-            servi par personne, faute de couverture de distribution suffisante. Ce chiffre
-            d’affaires, aucune équipe ne l’a pris.
-          </p>
-        ) : null}
       </section>
 
-      <DecompositionTable
-        rows={current}
-        previous={previous}
-        viewerTeamId={teamId}
-        visible={phase === 'pose'}
-      />
+      {/* Une part de marché n'existe que dans un domaine : une section par
+          domaine, du plus gros marché au plus petit. */}
+      <div className="space-y-10">
+        {blocks.map((block) => {
+          const { composition } = block;
+          const own = composition.teams.find((t) => t.teamId === teamId);
+          const ownPrevious = previousByUnit.get(`${teamId}:${block.dasId}`);
+          const ownDelta =
+            own && ownPrevious !== undefined ? own.share - ownPrevious : null;
+
+          const slices: ShareSlice[] = [
+            ...composition.teams.map((t) => ({
+              key: t.teamId,
+              label: teamNames.get(t.teamId) ?? 'Groupe',
+              share: t.share,
+              previousShare: t.previousShare,
+              kind: 'team' as const,
+              colorIndex: colorIndex.get(t.teamId),
+            })),
+          ];
+          if (composition.installedShare > 0.001) {
+            slices.push({
+              key: 'installes',
+              label: 'Entreprises installées',
+              share: composition.installedShare,
+              previousShare: composition.previousInstalledShare,
+              kind: 'installed',
+            });
+          }
+          if (composition.unservedShare > 0.001) {
+            slices.push({
+              key: 'non-servi',
+              label: 'Non servi',
+              share: composition.unservedShare,
+              previousShare: composition.previousUnservedShare,
+              kind: 'unserved',
+            });
+          }
+
+          return (
+            <section
+              key={block.dasId}
+              className="rounded-xl border border-(--border) bg-(--surface) p-6"
+            >
+              <div className="mb-5 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+                <h2 className="text-lg font-medium">{block.name}</h2>
+                <p className="tabular text-sm text-(--foreground-muted)">
+                  Marché de {formatMadCompact(composition.marketSizeMad)}
+                </p>
+              </div>
+
+              {own ? (
+                <p className="mb-5">
+                  <span className="text-sm text-(--foreground-muted)">Votre part — </span>
+                  <span className="tabular text-2xl font-semibold">
+                    {formatPct(own.share, 1)}
+                  </span>
+                  {ownDelta !== null ? (
+                    <span
+                      className="tabular ml-3 text-sm font-medium"
+                      style={{ color: ownDelta >= 0 ? 'var(--positive)' : 'var(--negative)' }}
+                    >
+                      {formatSharePoints(ownDelta)} pts
+                    </span>
+                  ) : null}
+                </p>
+              ) : (
+                <p className="mb-5 text-sm text-(--foreground-muted)">
+                  Vous n’êtes pas présent sur ce domaine.
+                </p>
+              )}
+
+              <ShareBar
+                slices={slices}
+                highlightKey={teamId}
+                animate={phase === 'revelation'}
+                label={`Répartition du marché du domaine ${block.name}`}
+              />
+
+              {composition.installedShare > 0.001 ? (
+                <p className="mt-5 text-sm text-(--foreground-muted)">
+                  Les entreprises déjà installées sur ce domaine, qui ne sont pas des
+                  équipes de la salle, en servent{' '}
+                  <strong className="tabular">
+                    {formatPct(composition.installedShare, 1)}
+                  </strong>
+                  . Le facilitateur peut les mettre en vente : les racheter, c’est
+                  récupérer leur part sans la disputer.
+                </p>
+              ) : null}
+
+              {composition.unservedShare > 0.001 ? (
+                <p className="mt-3 rounded-lg border border-(--warning) px-4 py-3 text-sm text-(--warning)">
+                  <strong className="tabular">
+                    {formatPct(composition.unservedShare, 1)}
+                  </strong>{' '}
+                  du marché n’a été servi par personne, faute de couverture de distribution
+                  suffisante. Ce chiffre d’affaires, aucune équipe ne l’a pris.
+                </p>
+              ) : null}
+
+              {Math.abs(composition.total - 1) > 0.01 ? (
+                <p className="mt-3 text-sm text-(--foreground-muted)">
+                  Les tranches de ce domaine ne totalisent que{' '}
+                  <span className="tabular">{formatPct(composition.total, 1)}</span> : ce tour
+                  a été résolu avant que la part des entreprises installées ne soit mesurée.
+                </p>
+              ) : null}
+
+              <DecompositionTable
+                rows={rows.filter(
+                  (r) => r.round_number === roundNumber && r.das_id === block.dasId,
+                )}
+                previousByUnit={previousByUnit}
+                viewerTeamId={teamId}
+                visible={phase === 'pose'}
+              />
+            </section>
+          );
+        })}
+      </div>
 
       {ownDiagnosis && (ownDiagnosis.stuck || ownDiagnosis.drift) ? (
         <section className="mt-8 rounded-xl border border-(--warning) bg-(--surface) p-6">
@@ -279,7 +470,12 @@ function Placeholder({ titre, texte }: { titre: string; texte: string }) {
 }
 
 /**
- * Décomposition du score, équipe par équipe.
+ * Décomposition du score, équipe par équipe, POUR UN DOMAINE.
+ *
+ * Les cinq composantes du score sont des grandeurs de domaine : la qualité
+ * perçue d'un groupe dans l'agro-industrie n'a rien à voir avec la sienne dans
+ * le textile. Les empiler dans un tableau unique mélangeait des lignes sans
+ * rapport, et deux lignes d'un même groupe s'y contredisaient.
  *
  * Elle sert aussi de « vue tableau » exigée par la règle de relief : trois
  * teintes de la palette passent sous 3:1 de contraste en mode clair, donc
@@ -287,20 +483,24 @@ function Placeholder({ titre, texte }: { titre: string; texte: string }) {
  * la couleur.
  */
 function DecompositionTable({
-  rows, previous, viewerTeamId, visible,
+  rows, previousByUnit, viewerTeamId, visible,
 }: {
   rows: RevealRow[];
-  previous: Map<string, RevealRow>;
+  previousByUnit: Map<string, number>;
   viewerTeamId: string;
   visible: boolean;
 }) {
+  const ordered = [...rows].sort(
+    (a, b) => Number(b.market_share_pct ?? 0) - Number(a.market_share_pct ?? 0),
+  );
+
   return (
-    <section
-      className="rounded-xl border border-(--border) bg-(--surface) p-6 transition-opacity duration-700"
+    <div
+      className="mt-6 border-t border-(--border) pt-6 transition-opacity duration-700"
       style={{ opacity: visible ? 1 : 0 }}
       aria-hidden={!visible}
     >
-      <h2 className="text-lg font-medium">Décomposition du score de compétitivité</h2>
+      <h3 className="text-base font-medium">Décomposition du score de compétitivité</h3>
       <p className="mt-1 mb-5 text-sm text-(--foreground-muted)">
         Qualité 30 % · Notoriété 25 % · Prix 20 % · Alignement 15 % · Pression −10 %
       </p>
@@ -324,11 +524,11 @@ function DecompositionTable({
             </tr>
           </thead>
           <tbody className="tabular">
-            {rows.map((r) => {
+            {ordered.map((r) => {
               const isViewer = r.team_id === viewerTeamId;
-              const prev = previous.get(r.team_id)?.market_share_pct;
+              const prev = previousByUnit.get(`${r.team_id}:${r.das_id}`);
               const delta =
-                prev != null ? Number(r.market_share_pct ?? 0) - Number(prev) : null;
+                prev !== undefined ? Number(r.market_share_pct ?? 0) - prev : null;
 
               return (
                 <tr
@@ -375,18 +575,13 @@ function DecompositionTable({
         </table>
       </div>
 
-      <p className="mt-5 text-sm text-(--foreground-muted)">
-        Les coûts, capacités et diagnostics d’alignement de vos concurrents ne sont pas
-        publics — ils s’achètent auprès du cabinet.
-      </p>
-
       <details className="mt-4">
         <summary className="cursor-pointer text-sm text-(--foreground-muted)">
-          Chiffre d’affaires et prix pratiqués
+          Chiffre d’affaires et prix pratiqués sur ce domaine
         </summary>
         <table className="tabular mt-3 w-full border-collapse text-sm">
           <tbody>
-            {rows.map((r) => (
+            {ordered.map((r) => (
               <tr key={r.team_id} className="border-b border-(--border) last:border-0">
                 <td className="py-2 pr-4">{r.team_name}</td>
                 <td className="py-2 pr-4 text-right">{formatMadCompact(r.revenue_mad)}</td>
@@ -398,6 +593,11 @@ function DecompositionTable({
           </tbody>
         </table>
       </details>
-    </section>
+
+      <p className="mt-5 text-sm text-(--foreground-muted)">
+        Les coûts, capacités et diagnostics d’alignement de vos concurrents ne sont pas
+        publics — ils s’achètent auprès du cabinet.
+      </p>
+    </div>
   );
 }
