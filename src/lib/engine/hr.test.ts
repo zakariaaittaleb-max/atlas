@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  HOURS_PER_MONTH, RESTRUCTURING_CLIMATE_SHARE, consolidateClimate, restructuringClimateCost, skillEdge, socialAvailability, socialShortfall, consolidateHeadcount, giacSupport, nextClimatSocial, nextSkillIndex, ofpptReimbursement, qualityLossFromCuts, safeHeadcountReduction, severancePerHead, standardisationLevel, trainingFocusEffects, turnoverRate, workloadIndex,
+  HOURS_PER_MONTH, RESTRUCTURING_CLIMATE_SHARE, consolidateClimate, qualityFocusFactor, restructuringClimateCost, skillEdge, socialAvailability, socialShortfall, consolidateHeadcount, giacSupport, nextClimatSocial, nextSkillIndex, ofpptReimbursement, qualityLossFromCuts, safeHeadcountReduction, severancePerHead, standardisationLevel, trainingFocusEffects, turnoverRate, workloadIndex,
 } from './hr';
 import { buildParams, param } from './params';
 
@@ -480,5 +480,41 @@ describe('manque social', () => {
     const poids = param(params, 'climate.capacity_impact_weight');
     expect(socialAvailability(30, params))
       .toBeCloseTo(1 - poids * socialShortfall(30), 10);
+  });
+});
+
+describe('orientation de formation et rendement qualité', () => {
+  /**
+   * Quatre coefficients étaient déclarés et aucun n'était lu : l'orientation
+   * « normes et contrôle », vendue comme la montée en gamme, ne touchait pas un
+   * point de qualité.
+   */
+  it('classe les orientations comme le tableau l’annonce', () => {
+    const plein = 0.10; // au-delà de l'effort maximal
+    const f = (o: Parameters<typeof qualityFocusFactor>[0]) => qualityFocusFactor(o, plein);
+    expect(f('qualite')).toBeGreaterThan(f('technique'));
+    expect(f('technique')).toBeGreaterThan(f('polyvalence'));
+    expect(f('polyvalence')).toBeGreaterThan(f('management'));
+  });
+
+  it('ne rend rien sans budget : cocher une orientation ne forme personne', () => {
+    expect(qualityFocusFactor('qualite', 0)).toBeCloseTo(1, 10);
+    expect(qualityFocusFactor('management', 0)).toBeCloseTo(1, 10);
+  });
+
+  it('monte progressivement avec l’effort, puis sature', () => {
+    const petit = qualityFocusFactor('qualite', 0.01);
+    const moyen = qualityFocusFactor('qualite', 0.04);
+    const plein = qualityFocusFactor('qualite', 0.07);
+    const enorme = qualityFocusFactor('qualite', 0.5);
+    expect(moyen).toBeGreaterThan(petit);
+    expect(plein).toBeGreaterThan(moyen);
+    expect(enorme).toBeCloseTo(plein, 10);
+  });
+
+  it('est neutre quand aucune orientation n’est saisie', () => {
+    // Repli sur « technique », comme le reste du module — mais sans budget,
+    // le facteur reste exactement neutre.
+    expect(qualityFocusFactor(null, 0)).toBeCloseTo(1, 10);
   });
 });

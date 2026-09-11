@@ -129,7 +129,7 @@ function unit(over: Partial<TeamDasSnapshot> = {}): TeamDasSnapshot {
       // de formation implicite ne déplace les coûts.
       headcount: 400, climatSocial: 70, skillIndex: 20,
       avgSalaryBrutMad: 5800, seniorityYears: 8,
-      turnoverRate: 0, qualityLossPts: 0,
+      turnoverRate: 0, qualityLossPts: 0, qualityFocusFactor: 1,
     },
     procurement: [
       {
@@ -1869,5 +1869,32 @@ describe('climat social et coût de production, bout en bout', () => {
     const lesDeux = resolveRound(soloWith({ climatSocial: 10, skillIndex: 5 }), params).dasMetrics[0];
     expect(unSeul.unitVariableCostMad).toBeGreaterThan(bon.unitVariableCostMad);
     expect(lesDeux.unitVariableCostMad).toBeGreaterThan(unSeul.unitVariableCostMad);
+  });
+});
+
+describe('orientation de formation, bout en bout', () => {
+  it('persiste un facteur de rendement qualité conforme à l’orientation', () => {
+    const run = (focus: 'qualite' | 'management') =>
+      resolveRound(
+        baseInput({
+          teams: [
+            team('solo', {
+              units: [unit({
+                hr: hrDecision({ trainingFocus: focus, trainingBudgetMad: 400_000_000 }),
+              })],
+            }),
+          ],
+        }),
+        params,
+      ).dasHr[0].qualityFocusFactor;
+
+    expect(run('qualite')).toBeGreaterThan(1);
+    expect(run('management')).toBeLessThan(1);
+  });
+
+  it('applique au tour suivant le facteur hérité', () => {
+    const withFactor = (f: number) =>
+      resolveRound(soloWith({ qualityFocusFactor: f }), params).dasMetrics[0].quality;
+    expect(withFactor(1.4)).toBeGreaterThan(withFactor(0.9));
   });
 });

@@ -206,6 +206,15 @@ export interface PreviousDasHr {
    * au-delà de ce que la standardisation autorisait.
    */
   qualityLossPts: number;
+  /**
+   * Rendement qualité de l'orientation de formation du tour précédent.
+   *
+   * 1 = neutre, soit aussi le cas d'une équipe qui n'a rien formé. C'est un
+   * FACTEUR et non l'orientation elle-même : l'état RH doit porter ce que le
+   * moteur a effectivement appliqué, budget compris, et non une étiquette
+   * qu'il faudrait réinterpréter au tour suivant.
+   */
+  qualityFocusFactor: number;
 }
 
 export interface TeamDasSnapshot {

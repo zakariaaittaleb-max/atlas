@@ -49,7 +49,7 @@ import { scoreGroupAlignment, type GroupAlignmentResult } from './group-alignmen
 import { computeIndicators } from './indicators';
 import {
   giacSupport, nextClimatSocial, nextSkillIndex, ofpptReimbursement,
-  qualityLossFromCuts, safeHeadcountReduction, severancePerHead,
+  qualityFocusFactor, qualityLossFromCuts, safeHeadcountReduction, severancePerHead,
   consolidateClimate, consolidateHeadcount, skillEdge, socialAvailability,
   socialShortfall,
   standardisationLevel, trainingFocusEffects, turnoverRate, workloadIndex,
@@ -329,6 +329,13 @@ export interface DasHrOutput {
    * un effectif qui fond sans licenciement passerait pour une erreur de calcul.
    */
   departuresCount: number;
+  /**
+   * Rendement qualité de l'orientation de formation, budget compris.
+   *
+   * Persisté parce que c'est le tour SUIVANT qui l'applique : l'état RH porte
+   * ce que le moteur a calculé, et non une étiquette à réinterpréter.
+   */
+  qualityFocusFactor: number;
 }
 
 export interface ResolutionOutput {
@@ -649,7 +656,11 @@ export function resolveRound(
         // Ce que la RH du tour précédent laisse en héritage : des gens formés
         // font rendre la recherche, des coupes trop profondes emportent le
         // tour de main.
-        { skillEdge: edge, qualityLossPts: unit.previousHr.qualityLossPts },
+        {
+          skillEdge: edge,
+          qualityLossPts: unit.previousHr.qualityLossPts,
+          focusFactor: unit.previousHr.qualityFocusFactor,
+        },
       );
       const notoriety = nextNotoriety(
         unit.previous.notoriety,
@@ -1524,6 +1535,7 @@ export function resolveRound(
         prev.headcount,
       ),
       departuresCount: departures,
+      qualityFocusFactor: qualityFocusFactor(d?.trainingFocus, trainingIntensity),
     };
   });
 

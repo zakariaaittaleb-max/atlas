@@ -846,3 +846,21 @@ describe('climat social et coût de production', () => {
     expect(socialCostFactor(1, params)).toBeLessThan(1.5);
   });
 });
+
+describe('orientation de formation et qualité produit', () => {
+  const CA = 40_000_000_000;
+  const RD = 0.08 * CA;
+
+  it('fait rendre le même budget de recherche selon l’orientation formée', () => {
+    const normes = nextQuality(50, RD, CA, 0, params, { focusFactor: 1.4 });
+    const neutre = nextQuality(50, RD, CA, 0, params);
+    const encadrement = nextQuality(50, RD, CA, 0, params, { focusFactor: 0.9 });
+    expect(normes).toBeGreaterThan(neutre);
+    expect(neutre).toBeGreaterThan(encadrement);
+  });
+
+  it('ne peut pas rendre le gain négatif', () => {
+    expect(nextQuality(50, RD, CA, 0, params, { focusFactor: -5 }))
+      .toBeCloseTo(nextQuality(50, 0, CA, 0, params), 6);
+  });
+});

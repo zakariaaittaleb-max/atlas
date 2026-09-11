@@ -481,6 +481,47 @@ export function trainingFocusEffects(focus: TrainingFocus | null | undefined) {
   return TRAINING_FOCUS_EFFECTS[focus ?? 'technique'] ?? TRAINING_FOCUS_EFFECTS.technique;
 }
 
+/**
+ * Intensité de formation à partir de laquelle l'effort est considéré maximal :
+ * 7 % de la masse salariale.
+ *
+ * Ce n'est pas un chiffre neuf : c'est le point où le gain de compétence
+ * sature déjà dans `nextSkillIndex` (18 points au plafond). Le nommer ici
+ * évite que l'orientation de formation et le gain de compétence ne saturent à
+ * deux endroits différents — un écran ne pourrait plus expliquer pourquoi
+ * doubler le budget change l'un et pas l'autre.
+ */
+export const TRAINING_FULL_EFFORT_INTENSITY = 0.07;
+
+/**
+ * Ce que l'ORIENTATION de la formation fait au rendement qualité de la R&D.
+ *
+ * ── LE DÉFAUT CORRIGÉ ──────────────────────────────────────────────────────
+ * `TRAINING_FOCUS_EFFECTS` déclare quatre coefficients `quality` distincts —
+ * 1,15 pour le geste métier, 1,40 pour « normes et contrôle », 0,90 pour
+ * l'encadrement — et AUCUN n'était lu. L'orientation « qualité », vendue à
+ * l'écran comme la montée en gamme, ne touchait pas un point de qualité. Les
+ * trois autres coefficients du même tableau étaient branchés ; celui-là
+ * avait été oublié, ce qui est la pire configuration : l'écran promet une
+ * hiérarchie et le moteur en applique une autre.
+ *
+ * ── POURQUOI PONDÉRÉ PAR L'EFFORT ──────────────────────────────────────────
+ * Une orientation n'est pas une décision gratuite : cocher « qualité » sans
+ * budget de formation ne forme personne. Le coefficient ne s'applique donc
+ * qu'à proportion de ce que l'équipe engage réellement, et vaut exactement 1
+ * quand elle n'engage rien.
+ */
+export function qualityFocusFactor(
+  focus: TrainingFocus | null | undefined,
+  trainingIntensity: number,
+): number {
+  const effort = Math.min(
+    Math.max(trainingIntensity, 0) / TRAINING_FULL_EFFORT_INTENSITY,
+    1,
+  );
+  return 1 + (trainingFocusEffects(focus).quality - 1) * effort;
+}
+
 // ---------------------------------------------------------------------------
 // Consolidation d'équipe
 // ---------------------------------------------------------------------------

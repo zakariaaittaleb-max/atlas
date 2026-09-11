@@ -26,11 +26,19 @@ import { referenceOr, type VariationScale } from '@/lib/variation-scale';
 import { formatMadCompact } from '@/lib/format';
 import type { DasHr, DasHrState } from '@/lib/org-types';
 
+/**
+ * Ce que chaque orientation sert RÉELLEMENT, dans l'ordre où le moteur la lit.
+ *
+ * « Management » annonçait la délégation, que rien ne mesure : ce que
+ * l'encadrement intermédiaire produit dans le moteur, c'est du climat social —
+ * de loin le plus fort coefficient des quatre. La promesse est alignée sur le
+ * calcul, et non l'inverse.
+ */
 const TRAINING_FOCUS = [
-  ['technique', 'Technique', 'Le geste métier. Sert la qualité et la productivité.'],
-  ['management', 'Management', 'Encadrement intermédiaire. Sert la délégation.'],
-  ['qualite', 'Qualité', 'Normes et contrôle. Sert la montée en gamme.'],
-  ['polyvalence', 'Polyvalence', 'Sert la standardisation et absorbe les à-coups.'],
+  ['technique', 'Technique', 'Le geste métier. Sert la compétence, et la qualité après elle.'],
+  ['management', 'Management', 'Encadrement intermédiaire. Sert d’abord le climat social.'],
+  ['qualite', 'Qualité', 'Normes et contrôle. Le meilleur rendement en qualité produit.'],
+  ['polyvalence', 'Polyvalence', 'Sert la standardisation : c’est elle qui autorise à réduire l’effectif sans perdre en qualité.'],
 ] as const;
 
 const RESTRUCTURING = [

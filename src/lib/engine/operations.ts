@@ -222,7 +222,16 @@ export function nextQuality(
    * la qualité et n'en coûtait aucune. Ils frappent ICI, au tour suivant —
    * l'atelier ne perd pas son tour de main le jour de la notification.
    */
-  hrCarryOver: { skillEdge?: number; qualityLossPts?: number } = {},
+  hrCarryOver: {
+    skillEdge?: number;
+    qualityLossPts?: number;
+    /**
+     * Ce que l'ORIENTATION de formation du tour précédent fait au rendement :
+     * « normes et contrôle » rend plus en qualité que « encadrement », à budget
+     * égal. Les quatre coefficients étaient déclarés et aucun n'était lu.
+     */
+    focusFactor?: number;
+  } = {},
 ): number {
   const obsolescence = param(params, 'quality.obsolescence_per_round');
   const coefficient = param(params, 'quality.rd_coefficient');
@@ -236,7 +245,9 @@ export function nextQuality(
     0,
   );
   // Rendement décroissant : plus on est haut, plus il est cher de monter.
-  const gain = coefficient * effort * (1 - decayed / 100) * skillFactor;
+  const gain =
+    coefficient * effort * (1 - decayed / 100) * skillFactor *
+    Math.max(hrCarryOver.focusFactor ?? 1, 0);
 
   return clamp100(
     decayed + gain + technologyPartnerBonus - Math.max(hrCarryOver.qualityLossPts ?? 0, 0),

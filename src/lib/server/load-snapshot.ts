@@ -783,6 +783,10 @@ export async function loadResolutionSnapshot(
             // tour-ci qu'elles se paient, en départs subis et en qualité.
             turnoverRate: num(prev?.turnover_rate),
             qualityLossPts: num(prev?.quality_loss_pts),
+            // Repli NEUTRE : une session résolue avant l'introduction du
+            // champ ne doit ni gagner ni perdre de qualité pour une
+            // orientation de formation qu'on ne lui a pas demandée.
+            qualityFocusFactor: num(prev?.quality_focus_factor, 1),
             // Deux exercices sont clos avant le tour 1 : l'entreprise est
             // héritée, pas créée. Une ancienneté de huit ans est le cas
             // courant d'une PME industrielle marocaine, et c'est elle qui
