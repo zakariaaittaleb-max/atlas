@@ -350,6 +350,7 @@ export function StrategieGroupeView({
         state={autosave.state}
         pending={autosave.pending}
         lastError={autosave.lastError}
+        savedAt={autosave.savedAt}
         missing={missing}
         decisionsOpen={context.decisionsOpen}
         onValidate={async () => { await autosave.flush(); router.refresh(); }}
@@ -485,28 +486,28 @@ export function StrategieDasView({
                 size="sm"
                 label="Stratégie générique"
                 value={strategyLabel(d.genericStrategy)}
-                delta={d.genericStrategy === b.genericStrategy ? { value: 0, label: '=', direction: 'flat' } : null}
-                note={`Changée — était : ${strategyLabel(b.genericStrategy)}`}
+                delta={context.roundNumber > 0 && d.genericStrategy === b.genericStrategy ? { value: 0, label: '=', direction: 'flat' } : null}
+                note={context.roundNumber > 0 ? `Changée — était : ${strategyLabel(b.genericStrategy)}` : undefined}
                 polarity="neutral"
               />
               <StatCard
                 label="Prix vs marché"
                 value={priceMultiplier(d.pricePosition)}
-                delta={delta(pricePct(d.pricePosition), pricePct(b.pricePosition), (v) => `${formatScore(v, 0)} pts`)}
+                delta={context.roundNumber > 0 ? delta(pricePct(d.pricePosition), pricePct(b.pricePosition), (v) => `${formatScore(v, 0)} pts`) : null}
                 polarity="neutral"
                 hint={`Position ${d.pricePosition} sur 100. 0 = agressif (60 % du prix marché), 50 = prix marché, 100 = premium (140 %).`}
               />
               <StatCard
                 label="Segments servis"
                 value={`${d.servedSegments.length} / ${das.segments.length}`}
-                delta={delta(d.servedSegments.length, b.servedSegments.length, (v) => formatScore(v, 0))}
+                delta={context.roundNumber > 0 ? delta(d.servedSegments.length, b.servedSegments.length, (v) => formatScore(v, 0)) : null}
                 polarity="neutral"
               />
               {showInvestments ? (
                 <StatCard
                   label="Engagé sur ce domaine"
                   value={formatMadCompact(engagedOn(d))}
-                  delta={delta(engagedOn(d), engagedOn(b), (v) => formatMadCompact(v))}
+                  delta={context.roundNumber > 0 ? delta(engagedOn(d), engagedOn(b), (v) => formatMadCompact(v)) : null}
                   polarity="neutral"
                   hint={
                     context.treasuryMad > 0
@@ -707,6 +708,7 @@ export function StrategieDasView({
         state={autosave.state}
         pending={autosave.pending}
         lastError={autosave.lastError}
+        savedAt={autosave.savedAt}
         missing={missing}
         decisionsOpen={context.decisionsOpen}
         onValidate={async () => { await autosave.flush(); router.refresh(); }}

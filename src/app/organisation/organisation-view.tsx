@@ -722,6 +722,7 @@ export function OrganisationView({
           <div className="flex items-center gap-2">
             <SaveIndicator
               state={autosave.state} pending={autosave.pending} lastError={autosave.lastError}
+              savedAt={autosave.savedAt}
             />
             <InfoHint label="Enregistrement de vos saisies">
               Vos saisies sont enregistrées au fil de la frappe. « Terminer la conception » envoie

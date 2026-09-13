@@ -86,6 +86,8 @@ export interface AutosaveResult {
   /** Nombre d'écritures encore en attente d'acquittement. */
   pending: number;
   lastError: string | null;
+  /** Heure de la dernière sauvegarde acquittée : « Enregistré » seul ne dit pas si c'était il y a dix secondes ou vingt minutes. */
+  savedAt: number | null;
   save: (payload: Payload) => void;
   /** Force l'envoi immédiat — au clic sur « Valider mes décisions ». */
   flush: () => Promise<void>;
@@ -95,6 +97,7 @@ export function useAutosave(): AutosaveResult {
   const [state, setState] = useState<SaveState>('idle');
   const [pending, setPending] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
 
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const inFlight = useRef(false);
@@ -167,6 +170,7 @@ export function useAutosave(): AutosaveResult {
     setPending(remaining);
     if (remaining === 0) {
       setLastError(null);
+      setSavedAt(Date.now());
       setState('saved');
     }
   }, []);
@@ -228,13 +232,18 @@ export function useAutosave(): AutosaveResult {
         );
       }
     };
-    document.addEventListener('visibilitychange', () => {
+    // La MÊME fonction à l'ajout et au retrait : le retrait visait `onHide`
+    // alors qu'une fonction anonyme avait été ajoutée, si bien que chaque
+    // montage d'écran empilait un écouteur de plus — et autant d'envois en
+    // double à la fermeture de l'onglet.
+    const onVisibility = () => {
       if (document.visibilityState === 'hidden') onHide();
-    });
-    return () => document.removeEventListener('visibilitychange', onHide);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
-  return { state, pending, lastError, save, flush };
+  return { state, pending, lastError, savedAt, save, flush };
 }
 
 export const SAVE_LABELS: Record<SaveState, string> = {

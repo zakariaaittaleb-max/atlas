@@ -105,8 +105,15 @@ export function RevelationView({
   const router = useRouter();
   const resolved = status === 'round_resolved' || status === 'completed';
 
+  // Seuls le verrouillage et la résolution justifient l'écran de calcul. En
+  // onboarding, il tournait sans fin — aucune résolution n'y est prévue — et
+  // laissait croire à une panne.
   const [phase, setPhase] = useState<Phase>(
-    resolved ? 'revelation' : status === 'round_active' ? 'attente' : 'calcul',
+    resolved
+      ? 'revelation'
+      : status === 'round_locked' || status === 'round_resolving'
+        ? 'calcul'
+        : 'attente',
   );
   const [nextRoundOpen, setNextRoundOpen] = useState(false);
 
@@ -205,17 +212,33 @@ export function RevelationView({
   if (phase === 'attente') {
     return (
       <Shell roundNumber={roundNumber} teamName={teamName}>
-        <Placeholder
-          titre="Le tour est en cours"
-          texte="La révélation s’ouvrira ici dès que le facilitateur aura clos le tour. Vos décisions restent modifiables jusque-là."
-        />
+        {status === 'round_active' ? (
+          <Placeholder
+            titre="Le tour est en cours"
+            texte="La révélation s’ouvrira ici dès que le facilitateur aura clos le tour. Vos décisions restent modifiables jusque-là."
+          />
+        ) : status === 'draft' ? (
+          <Placeholder
+            titre="La session n’est pas encore ouverte"
+            texte="La révélation s’ouvrira ici à la clôture du premier tour, une fois la partie lancée par le facilitateur."
+          />
+        ) : (
+          <Placeholder
+            titre="Pas encore de révélation"
+            texte="La première aura lieu à la clôture du tour 1. D’ici là, préparez vos décisions et commandez vos premières études au cabinet : ce sont les seules données dont vous disposerez."
+          />
+        )}
       </Shell>
     );
   }
 
   if (phase === 'calcul' || !resolved) {
     return (
-      <Shell roundNumber={roundNumber} teamName={teamName}>
+      <Shell
+        roundNumber={roundNumber}
+        teamName={teamName}
+        announce="Calcul en cours. Toutes les équipes du pool verront le résultat au même instant."
+      >
         <div className="rounded-xl border border-(--border) bg-(--surface) p-10 text-center">
           <div
             className="mx-auto mb-6 h-1.5 w-56 overflow-hidden rounded-full bg-(--surface-muted)"
@@ -241,7 +264,13 @@ export function RevelationView({
       : null;
 
   return (
-    <Shell roundNumber={roundNumber} teamName={teamName}>
+    <Shell
+      roundNumber={roundNumber}
+      teamName={teamName}
+      announce={`Résultats publiés. Votre poids dans le pool : ${formatPct(ownWeight?.weight ?? 0, 1)}${
+        weightDelta !== null ? `, ${formatSharePoints(weightDelta)} points par rapport au tour précédent` : ''
+      }.`}
+    >
       {/* Le chiffre qui fait mal ou qui fait plaisir, avant toute explication.
           C'est le poids du GROUPE : un portefeuille de trois domaines n'a pas
           « une » part de marché, il en a trois — elles arrivent juste après. */}
@@ -441,19 +470,27 @@ export function RevelationView({
         >
           Continuer vers le tour suivant
         </button>
-        {!nextRoundOpen ? (
-          <p className="text-sm text-(--foreground-muted)">
-            En attente de l’ouverture du tour par le facilitateur.
-          </p>
-        ) : null}
+        <p role="status" className="text-sm text-(--foreground-muted)">
+          {nextRoundOpen
+            ? 'Le tour suivant est ouvert : vous pouvez continuer.'
+            : 'En attente de l’ouverture du tour par le facilitateur.'}
+        </p>
       </div>
     </Shell>
   );
 }
 
+/**
+ * La coque de l'écran, commune à toutes les phases.
+ *
+ * Elle porte la région d'annonce : les phases changent sur un événement temps
+ * réel, sans navigation ni clic, et un lecteur d'écran n'en saurait rien. Rendue
+ * au même endroit dans chaque phase, la région survit au changement et React se
+ * contente d'en remplacer le texte — c'est ce remplacement qui est lu.
+ */
 function Shell({
-  children, roundNumber, teamName,
-}: { children: React.ReactNode; roundNumber: number; teamName: string }) {
+  children, roundNumber, teamName, announce = '',
+}: { children: React.ReactNode; roundNumber: number; teamName: string; announce?: string }) {
   return (
     <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-10">
       <header className="mb-10">
@@ -462,6 +499,7 @@ function Shell({
         </p>
         <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">{teamName}</h1>
       </header>
+      <p role="status" className="sr-only">{announce}</p>
       {children}
     </main>
   );

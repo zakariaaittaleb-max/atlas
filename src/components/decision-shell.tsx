@@ -32,6 +32,7 @@
  * d'un tour serré coûterait la séance.
  */
 
+import { Circle, CircleCheck, CloudOff, LoaderCircle, Lock, PencilLine } from 'lucide-react';
 import { useState } from 'react';
 
 import { InfoHint } from '@/components/ui/info-hint';
@@ -45,25 +46,59 @@ export interface MissingDecision {
   dasId: string | null;
 }
 
+const SAVE_ICONS: Record<SaveState, typeof Circle> = {
+  idle: Circle,
+  pending: PencilLine,
+  saving: LoaderCircle,
+  saved: CircleCheck,
+  error: CloudOff,
+  locked: Lock,
+};
+
+/**
+ * L'état de l'enregistrement, en mots, en icône et en heure.
+ *
+ * Un point de couleur portait l'état : invisible en daltonisme, et muet sur ce
+ * qui compte en fin de tour — « enregistré », mais QUAND ? L'heure de la
+ * dernière sauvegarde répond, et chaque état a sa forme.
+ *
+ * Le lecteur d'écran n'entend que les issues (enregistré, hors ligne, refusé) :
+ * annoncer « modification en cours » à chaque frappe couvrirait tout le reste.
+ */
 export function SaveIndicator({
-  state, pending, lastError,
-}: { state: SaveState; pending: number; lastError: string | null }) {
+  state, pending, lastError, savedAt = null,
+}: { state: SaveState; pending: number; lastError: string | null; savedAt?: number | null }) {
   const colour =
     state === 'saved' ? 'var(--positive)'
     : state === 'error' || state === 'locked' ? 'var(--negative)'
     : 'var(--foreground-muted)';
+  const Icon = SAVE_ICONS[state];
+
+  // Le message du serveur prime quand il existe ; sinon l'étiquette générique,
+  // qui dit l'essentiel : rien n'est perdu.
+  const label =
+    lastError && (state === 'error' || state === 'locked') ? lastError
+    : state === 'saved' && savedAt !== null ? `${SAVE_LABELS.saved} à ${clockOf(savedAt)}`
+    : SAVE_LABELS[state];
+  const announce = state === 'saved' || state === 'error' || state === 'locked' ? label : '';
 
   return (
-    <p className="flex items-center gap-2 text-sm" style={{ color: colour }} role="status">
-      <span aria-hidden className="inline-block h-2 w-2 rounded-full bg-current" />
-      {/* Le message du serveur prime quand il existe ; sinon l'étiquette
-          générique, qui dit l'essentiel : rien n'est perdu. */}
-      {lastError && (state === 'error' || state === 'locked') ? lastError : SAVE_LABELS[state]}
+    <p className="flex items-center gap-2 text-sm" style={{ color: colour }}>
+      <Icon
+        aria-hidden
+        className={`h-4 w-4 shrink-0 ${state === 'saving' ? 'animate-spin motion-reduce:animate-none' : ''}`}
+      />
+      <span>{label}</span>
       {pending > 0 ? (
         <span className="tabular text-(--foreground-muted)">({pending} en attente)</span>
       ) : null}
+      <span role="status" className="sr-only">{announce}</span>
     </p>
   );
+}
+
+function clockOf(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
 
 /**
@@ -90,7 +125,8 @@ export function SectionActions({
 
   if (locked) {
     return (
-      <p className="mt-6 border-t border-(--border) pt-4 text-sm text-(--foreground-muted)">
+      <p className="mt-6 flex items-center gap-2 border-t border-(--border) pt-4 text-sm text-(--foreground-muted)">
+        <Lock aria-hidden className="h-4 w-4 shrink-0" />
         Tour verrouillé — ce bloc n’accepte plus de modification.
       </p>
     );
@@ -203,11 +239,12 @@ export function DasChecklist({
 }
 
 export function DecisionBar({
-  state, pending, lastError, missing, decisionsOpen, onValidate,
+  state, pending, lastError, savedAt = null, missing, decisionsOpen, onValidate,
 }: {
   state: SaveState;
   pending: number;
   lastError: string | null;
+  savedAt?: number | null;
   missing: MissingDecision[];
   decisionsOpen: boolean;
   onValidate: () => void;
@@ -219,7 +256,7 @@ export function DecisionBar({
       <div className="mx-auto flex w-full min-w-0 max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <SaveIndicator state={state} pending={pending} lastError={lastError} />
+            <SaveIndicator state={state} pending={pending} lastError={lastError} savedAt={savedAt} />
             <InfoHint label="Enregistrement de vos saisies">
               Vos saisies sont enregistrées au fil de la frappe : le bouton de droite ne
               sauvegarde rien, il déclare votre tour prêt.

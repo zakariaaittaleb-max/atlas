@@ -422,6 +422,7 @@ export function MarchesView({
 
       <DecisionBar
         state={autosave.state} pending={autosave.pending} lastError={autosave.lastError}
+        savedAt={autosave.savedAt}
         missing={missing} decisionsOpen={context.decisionsOpen}
         onValidate={async () => { await autosave.flush(); router.refresh(); }}
       />
