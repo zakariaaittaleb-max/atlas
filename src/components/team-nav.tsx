@@ -1,3 +1,4 @@
+import { Lock } from 'lucide-react';
 import { cookies } from 'next/headers';
 
 import { DasSwitcher } from '@/components/das-scope';
@@ -79,6 +80,19 @@ const STATUS_LABELS: Record<string, string> = {
   completed: 'Session terminée',
 };
 
+/**
+ * Ce que dit le bandeau quand la saisie est fermée. Les champs restent lisibles
+ * (voir `data-round-locked` dans globals.css) : il faut donc dire, en mots,
+ * pourquoi ils ne répondent plus.
+ */
+const READ_ONLY_NOTICE: Record<string, string> = {
+  draft: 'Session pas encore ouverte — lecture seule.',
+  round_locked: 'Tour verrouillé — lecture seule. Les valeurs affichées sont celles que le moteur a reçues.',
+  round_resolving: 'Calcul en cours — lecture seule. Les valeurs affichées sont celles que le moteur a reçues.',
+  round_resolved: 'Résultats publiés — lecture seule jusqu’à l’ouverture du tour suivant.',
+  completed: 'Session terminée — lecture seule.',
+};
+
 export async function TeamShell({ children }: { children: React.ReactNode }) {
   const team = await getTeamContext();
   // Pas d'équipe (connexion, facilitateur, admin) : l'écran reste nu.
@@ -109,7 +123,15 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
   const open = status === 'round_active' || status === 'onboarding';
 
   return (
-    <div className="min-h-0 flex-1 lg:flex">
+    <div className="min-h-0 flex-1 lg:flex" data-round-locked={open ? undefined : ''}>
+      {/* Premier arrêt de la tabulation : sans lui, clavier et lecteur d'écran
+          traversaient toute la navigation avant d'atteindre chaque écran. */}
+      <a
+        href="#contenu"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-(--accent) focus:px-4 focus:py-2.5 focus:text-sm focus:font-semibold focus:text-(--on-accent)"
+      >
+        Aller au contenu
+      </a>
       <SidebarNav
         teamName={team.teamName}
         groups={groups}
@@ -132,7 +154,7 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
               {config.showBudget ? (
                 <MoneyItem label="Vous disposez de" value={formatMadCompact(money.availableMad)}>
                   {config.showCredits && money.drawnThisRoundMad > 0 ? (
-                    <span className="text-xs text-(--meta)">
+                    <span className="text-sm text-(--meta)">
                       dont {formatMadCompact(money.drawnThisRoundMad)} de crédit pris
                     </span>
                   ) : null}
@@ -166,9 +188,20 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
 
           {/* ── Le domaine piloté, là où il gouverne la saisie ─────────── */}
           <DasSwitcher />
+
+          {!open ? (
+            <p className="flex items-center gap-2 border-t border-(--border) bg-(--warning-subtle) px-6 py-2 text-sm font-medium text-(--warning)">
+              <Lock aria-hidden className="h-4 w-4 shrink-0" />
+              {READ_ONLY_NOTICE[status] ?? 'Lecture seule.'}
+            </p>
+          ) : null}
         </div>
 
-        {children}
+        {/* Cible du lien d'évitement. Un conteneur, pas une commande : le
+            contour de focus n'y signalerait rien d'actionnable. */}
+        <div id="contenu" tabIndex={-1} className="flex min-w-0 flex-1 flex-col" style={{ outline: 'none' }}>
+          {children}
+        </div>
       </div>
     </div>
   );

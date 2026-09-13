@@ -74,11 +74,11 @@ export function Term({ children, className = '' }: { children: string; className
           className="absolute bottom-full left-0 z-50 mb-2 block w-72 rounded-lg border border-(--border) p-3 text-left shadow-lg"
           style={{ background: 'var(--surface)' }}
         >
-          <span className="block text-xs leading-relaxed text-(--foreground)">
+          <span className="block text-sm leading-relaxed text-(--foreground)">
             {entry.definition}
           </span>
           <span
-            className="mt-2 block border-t border-(--border) pt-2 text-xs leading-relaxed italic text-(--foreground-muted)"
+            className="mt-2 block border-t border-(--border) pt-2 text-sm leading-relaxed italic text-(--foreground-muted)"
           >
             {entry.example}
           </span>

@@ -221,7 +221,7 @@ export function CabinetView({
                       {/* Le périmètre fait partie de l'identité de l'étude : une
                           concurrentielle sur l'agro-industrie ne dit rien du
                           textile, et deux lignes au même nom se confondaient. */}
-                      <span className="rounded-full bg-(--accent-subtle) px-2 py-0.5 text-xs font-semibold text-(--accent-text)">
+                      <span className="rounded-full bg-(--accent-subtle) px-2 py-0.5 text-sm font-semibold text-(--accent-text)">
                         {scopeOf(o, das, targets)}
                       </span>
                       <span className="font-normal text-(--foreground-muted)">
@@ -339,7 +339,7 @@ export function CabinetView({
                       <span className="flex items-center justify-between gap-2 text-sm font-medium">
                         {t.label}
                         {isBought ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-(--accent-text)">
+                          <span className="inline-flex items-center gap-1 text-sm font-semibold text-(--accent-text)">
                             <Check aria-hidden className="h-3.5 w-3.5" strokeWidth={3} />
                             commandée
                           </span>
@@ -348,7 +348,7 @@ export function CabinetView({
                       <span className="tabular mt-1 block font-mono text-lg font-semibold">
                         {formatMadCompact(t.priceMad)}
                       </span>
-                      <span className="mt-2 block text-xs text-(--foreground-muted)">
+                      <span className="mt-2 block text-sm text-(--foreground-muted)">
                         {t.errorMargin > 0
                           ? `±${(t.errorMargin * 100).toFixed(0)} %`
                           : 'Sans marge d’erreur'}
@@ -358,7 +358,7 @@ export function CabinetView({
                           : ''}
                       </span>
                       {otherBought ? (
-                        <span className="mt-2 block text-xs font-medium text-(--warning)">
+                        <span className="mt-2 block text-sm font-medium text-(--warning)">
                           Déjà commandée ce tour : prix complet
                         </span>
                       ) : null}

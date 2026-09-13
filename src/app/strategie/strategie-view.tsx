@@ -571,7 +571,7 @@ export function StrategieDasView({
                   onChange={(e) => pushDas(das.dasId, { ...d, pricePosition: Number(e.target.value) })}
                   className="mt-3 w-full accent-(--accent)"
                 />
-                <div className="mt-1 flex justify-between text-xs text-(--foreground-muted)">
+                <div className="mt-1 flex justify-between text-sm text-(--foreground-muted)">
                   <span>0 — agressif</span>
                   <span>50 — prix marché</span>
                   <span>100 — premium</span>

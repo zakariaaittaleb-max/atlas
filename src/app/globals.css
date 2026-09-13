@@ -213,11 +213,14 @@ body {
   transform: translateY(-1px);
 }
 
-/* Une cible atteinte par lien (« Régler ce levier ») : sous la barre collante,
-   et surlignée le temps de la repérer. */
-.accordion,
-.lever-target {
-  scroll-margin-top: 7.5rem;
+/* Deux barres collantes encadrent les écrans d'équipe : l'argent et le domaine
+   en haut, la validation en bas. Sans marge de défilement, un champ atteint à
+   la tabulation — ou une cible atteinte par lien, « Régler ce levier » —
+   s'arrêtait dessous, focus invisible (WCAG 2.4.11). La marge vaut pour le
+   défilement du focus comme pour les ancres. */
+html {
+  scroll-padding-top: 10rem;
+  scroll-padding-bottom: 6rem;
 }
 
 @keyframes atlas-flash {
@@ -231,6 +234,32 @@ body {
 
 .flash-target {
   animation: atlas-flash 1.6s ease-out;
+}
+
+/* ── Tour verrouillé : lecture seule, mais lisible ──────────────────────────
+   Un champ désactivé tombait à 50 % d'opacité. Au débriefing, projeté, plus
+   personne ne lisait les valeurs dont on était précisément en train de parler.
+   `data-round-locked` est posé par la coque d'équipe quand la saisie est
+   fermée : les valeurs gardent un contraste plein, les champs perdent leur
+   bordure, et un bandeau dit l'état en toutes lettres.
+
+   Hors couche, ces règles priment sur les utilitaires `disabled:opacity-*` de
+   Tailwind, rangés dans `@layer utilities`. */
+[data-round-locked] input:not([type="range"], [type="checkbox"], [type="radio"]):disabled,
+[data-round-locked] select:disabled,
+[data-round-locked] textarea:disabled {
+  opacity: 1;
+  color: var(--foreground);
+  -webkit-text-fill-color: var(--foreground);
+  background-color: var(--surface-muted);
+  border-color: transparent;
+  cursor: default;
+}
+
+[data-round-locked] input:is([type="range"], [type="checkbox"], [type="radio"]):disabled,
+[data-round-locked] button[aria-pressed]:disabled {
+  opacity: 1;
+  cursor: default;
 }
 
 @media (prefers-reduced-motion: reduce) {

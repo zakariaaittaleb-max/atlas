@@ -401,7 +401,7 @@ function Reference({
   if (bits.length === 0) return null;
 
   return (
-    <p className="tabular mt-1 text-xs text-(--foreground-muted)">{bits.join('  ·  ')}</p>
+    <p className="tabular mt-1 text-sm text-(--foreground-muted)">{bits.join('  ·  ')}</p>
   );
 }
 
@@ -448,6 +448,7 @@ export function HeadcountStepper({
         </button>
         <input
           type="number" min={0} max={max} step={step} value={value} disabled={disabled}
+          aria-label={label}
           onChange={(e) => onChange(cap(Math.max(Math.round(Number(e.target.value) || 0), 0)))}
           className="tabular min-w-0 flex-1 rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-center disabled:opacity-50"
         />
@@ -461,7 +462,7 @@ export function HeadcountStepper({
           +
         </button>
       </div>
-      <p className="tabular mt-1 text-xs" style={{ color: diff === 0 ? 'var(--foreground-muted)' : undefined }}>
+      <p className="tabular mt-1 text-sm" style={{ color: diff === 0 ? 'var(--foreground-muted)' : undefined }}>
         En place : {current.toLocaleString('fr-FR')}
         {diff !== 0 ? (
           <>

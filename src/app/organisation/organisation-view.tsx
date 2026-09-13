@@ -340,7 +340,7 @@ export function OrganisationView({
                               </div>
                               <div className="flex flex-wrap items-center gap-3">
                                 {central !== delegated ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-(--warning-subtle) px-2 py-0.5 text-xs font-semibold text-(--warning)">
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-(--warning-subtle) px-2 py-0.5 text-sm font-semibold text-(--warning)">
                                     <TriangleAlert aria-hidden className="h-3.5 w-3.5" />
                                     divergence
                                   </span>
@@ -394,7 +394,7 @@ export function OrganisationView({
                               <div className="flex flex-wrap items-baseline justify-between gap-2">
                                 <span className="text-sm font-medium">{offer.label}</span>
                                 <span
-                                  className={`tabular text-xs font-semibold ${offer.proximity < 40 ? 'text-(--warning)' : 'text-(--foreground-muted)'}`}
+                                  className={`tabular text-sm font-semibold ${offer.proximity < 40 ? 'text-(--warning)' : 'text-(--foreground-muted)'}`}
                                 >
                                   proximité {Math.round(offer.proximity)}
                                   {offer.proximity < 40 ? ' · faible' : ''}
@@ -547,7 +547,7 @@ export function OrganisationView({
                   }}
                   className="mt-3 w-full accent-(--accent)"
                 />
-                <div className="mt-1 flex justify-between text-xs text-(--foreground-muted)">
+                <div className="mt-1 flex justify-between text-sm text-(--foreground-muted)">
                   <span>0 — tout remonte au sommet</span>
                   <span>100 — le terrain décide seul</span>
                 </div>
@@ -643,17 +643,17 @@ export function OrganisationView({
                   répartition se fait à l'aveugle. */}
               <dl className="tabular mb-4 grid gap-4 rounded-lg bg-(--surface-muted) p-4 text-sm sm:grid-cols-3">
                 <div>
-                  <dt className="text-xs text-(--foreground-muted)">Budget total à répartir</dt>
+                  <dt className="text-sm text-(--foreground-muted)">Budget total à répartir</dt>
                   <dd className="font-mono text-base font-semibold">{formatMadCompact(context.operatingBudgetMad)}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-(--foreground-muted)">Réparti</dt>
+                  <dt className="text-sm text-(--foreground-muted)">Réparti</dt>
                   <dd className={`font-mono text-base font-semibold ${overBudget ? 'text-(--negative)' : ''}`}>
                     {formatMadCompact(budgetTotal)} · {formatPct(budgetShare, 0)}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-(--foreground-muted)">{overBudget ? 'Dépassement' : 'Non affecté'}</dt>
+                  <dt className="text-sm text-(--foreground-muted)">{overBudget ? 'Dépassement' : 'Non affecté'}</dt>
                   <dd className={`font-mono text-base font-semibold ${overBudget ? 'text-(--negative)' : ''}`}>
                     {overBudget ? '− ' : ''}{formatMadCompact(Math.abs(context.operatingBudgetMad - budgetTotal))}
                   </dd>
@@ -791,14 +791,14 @@ function HeadcountDelta({
   const diff = current - inherited;
   if (diff === 0) {
     return (
-      <span className="tabular text-xs text-(--foreground-muted)">
+      <span className="tabular text-sm text-(--foreground-muted)">
         = hérité ({inherited})
       </span>
     );
   }
 
   return (
-    <span className="tabular text-xs font-medium text-(--foreground)">
+    <span className="tabular text-sm font-medium text-(--foreground)">
       {diff > 0 ? '↑ +' : '↓ −'}
       {Math.abs(diff)}
       <span className="ml-1 font-normal text-(--foreground-muted)">vs {inherited} hérité</span>

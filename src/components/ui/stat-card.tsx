@@ -78,7 +78,7 @@ export function StatCard({
             <span className="text-xs text-(--meta)">vs tour précédent</span>
           </>
         ) : (
-          <span className="text-xs text-(--meta)">{note ?? 'Premier tour — pas de comparaison'}</span>
+          <span className="text-sm text-(--meta)">{note ?? 'Premier tour — pas de comparaison'}</span>
         )}
       </div>
 
@@ -117,7 +117,7 @@ export function TrendBadge({
 
   return (
     <span
-      className={`tabular inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-xs font-medium ${tone}`}
+      className={`tabular inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-sm font-medium ${tone}`}
     >
       <Icon aria-hidden className="h-3.5 w-3.5" strokeWidth={2.5} />
       {text}

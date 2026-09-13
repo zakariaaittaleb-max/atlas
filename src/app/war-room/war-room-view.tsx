@@ -193,7 +193,7 @@ export function WarRoomView({
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     {/* Nature portée par le mot et l'icône, pas seulement par la couleur. */}
                     <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase ${
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-sm font-semibold uppercase ${
                         opportunity
                           ? 'bg-(--positive-subtle) text-(--positive)'
                           : 'bg-(--warning-subtle) text-(--warning)'
@@ -202,7 +202,7 @@ export function WarRoomView({
                       {opportunity ? <CircleCheck aria-hidden className="h-3.5 w-3.5" /> : <TriangleAlert aria-hidden className="h-3.5 w-3.5" />}
                       {opportunity ? 'Opportunité' : 'Menace'}
                     </span>
-                    <span className="rounded-full bg-(--surface-muted) px-2.5 py-0.5 text-xs font-medium text-(--foreground-muted) ring-1 ring-(--border)">
+                    <span className="rounded-full bg-(--surface-muted) px-2.5 py-0.5 text-sm font-medium text-(--foreground-muted) ring-1 ring-(--border)">
                       {DIMENSIONS[shock.dimension] ?? shock.dimension}
                     </span>
                     <span className="tabular text-(--foreground-muted)">

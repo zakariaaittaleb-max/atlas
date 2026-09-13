@@ -478,7 +478,7 @@ function SupplierReference({
   }
 
   return (
-    <span className="tabular block text-xs text-(--foreground-muted)">
+    <span className="tabular block text-sm text-(--foreground-muted)">
       {bits.join('  ·  ')}
     </span>
   );
@@ -497,7 +497,7 @@ function DistributorReference({
 }: { value: number; previous: number | null }) {
   if (previous === null) {
     return (
-      <span className="block text-xs text-(--foreground-muted)">
+      <span className="block text-sm text-(--foreground-muted)">
         Nouveau — non retenu l’an dernier
       </span>
     );
@@ -505,7 +505,7 @@ function DistributorReference({
 
   const points = (value - previous) * 100;
   return (
-    <span className="tabular block text-xs text-(--foreground-muted)">
+    <span className="tabular block text-sm text-(--foreground-muted)">
       Tour précédent {formatPct(previous, 0)}
       {Math.abs(points) < 0.5
         ? ' · inchangé'
@@ -591,7 +591,7 @@ function Stat({
 }) {
   return (
     <div className={`rounded-lg px-3 py-2.5 ${negative ? 'bg-(--negative-subtle)' : 'bg-(--surface-muted)'}`}>
-      <dt className="flex items-center gap-1.5 text-xs text-(--foreground-muted)">
+      <dt className="flex items-center gap-1.5 text-sm text-(--foreground-muted)">
         {label}
         {hint ? <InfoHint label={label}>{hint}</InfoHint> : null}
       </dt>

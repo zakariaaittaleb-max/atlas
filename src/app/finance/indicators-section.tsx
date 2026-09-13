@@ -134,7 +134,7 @@ export function IndicatorsSection({
           <span className="flex min-w-0 items-center gap-2 text-sm">
             {l.terme}
             <InfoHint label={l.terme}>
-              <span className="block font-mono text-xs text-(--foreground-muted)">{l.calcul}</span>
+              <span className="block font-mono text-sm text-(--foreground-muted)">{l.calcul}</span>
               <span className="mt-2 block">{l.lecture}</span>
             </InfoHint>
           </span>

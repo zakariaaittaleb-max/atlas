@@ -190,7 +190,7 @@ export function LeversSection({
                 {lever.category}
               </span>
               {/* L'état se lit en mot et en pictogramme, jamais par la seule teinte. */}
-              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${status.tone}`}>
+              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-sm font-semibold ${status.tone}`}>
                 {StatusIcon ? <StatusIcon aria-hidden className="h-3.5 w-3.5" strokeWidth={2.5} /> : null}
                 {status.label}
               </span>

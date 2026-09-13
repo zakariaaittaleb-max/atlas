@@ -1,6 +1,9 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { BookOpen, ChevronDown } from 'lucide-react';
+import { useState } from 'react';
+
+import { Dialog } from '@/components/ui/dialog';
 
 const GLOSSARY = [
   {
@@ -35,60 +38,65 @@ const GLOSSARY = [
   },
 ];
 
+/**
+ * Le glossaire des concepts clés.
+ *
+ * Posé sur `Dialog` : c'était une `div` par-dessus la page, sans rôle, sans
+ * Échap, et dont la tabulation s'échappait vers les champs cachés derrière.
+ * Chaque terme se déplie par un bouton qui annonce son état.
+ */
 export function GlossaryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const toggleTerm = useCallback((term: string) => {
-    setExpanded(exp => exp === term ? null : term);
-  }, []);
-
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-xl bg-(--surface) shadow-lg">
-        <div className="sticky top-0 bg-(--surface) border-b border-(--border) px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Concepts clés d’Atlas</h2>
-          <button
-            onClick={onClose}
-            className="text-sm text-(--foreground-muted) hover:text-(--foreground) transition"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="divide-y divide-(--border)">
-          {GLOSSARY.map((item) => (
-            <div key={item.term} className="px-6 py-4">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Concepts clés d’Atlas"
+      footer={
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-lg bg-(--accent) px-4 py-2.5 font-medium text-(--on-accent) transition-colors hover:bg-(--accent-hover)"
+        >
+          Compris
+        </button>
+      }
+    >
+      <ul className="-my-2 divide-y divide-(--border)">
+        {GLOSSARY.map((item, index) => {
+          const isOpen = expanded === item.term;
+          const panelId = `glossaire-${index}`;
+          return (
+            <li key={item.term} className="py-2">
               <button
-                onClick={() => toggleTerm(item.term)}
-                className="w-full text-left flex items-center justify-between gap-3 hover:bg-(--surface-hover) p-2 rounded transition"
+                type="button"
+                aria-expanded={isOpen}
+                aria-controls={panelId}
+                onClick={() => setExpanded(isOpen ? null : item.term)}
+                className="flex w-full items-center justify-between gap-3 rounded-lg p-2 text-left transition-colors hover:bg-(--surface-muted)"
               >
-                <div>
-                  <div className="font-semibold text-(--foreground)">{item.title}</div>
-                  <div className="text-xs text-(--foreground-muted)">({item.term})</div>
-                </div>
-                <span className="text-lg flex-shrink-0">{expanded === item.term ? "−" : "+"}</span>
+                <span>
+                  <span className="block font-semibold text-(--foreground)">{item.title}</span>
+                  <span className="block text-sm text-(--foreground-muted)">{item.term}</span>
+                </span>
+                <ChevronDown
+                  aria-hidden
+                  className={`h-5 w-5 shrink-0 text-(--foreground-muted) transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                />
               </button>
-              {expanded === item.term && (
-                <p className="mt-3 text-sm text-(--foreground-muted) ml-2 leading-relaxed">
-                  {item.description}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div className="sticky bottom-0 bg-(--surface) border-t border-(--border) px-6 py-4 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-(--accent) text-(--on-accent) rounded-lg font-medium hover:bg-(--accent-hover) transition"
-          >
-            Compris !
-          </button>
-        </div>
-      </div>
-    </div>
+              <p
+                id={panelId}
+                hidden={!isOpen}
+                className="mt-1 mb-2 px-2 text-sm leading-relaxed text-(--foreground-muted)"
+              >
+                {item.description}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </Dialog>
   );
 }
 
@@ -98,10 +106,12 @@ export function GlossaryButton() {
   return (
     <>
       <button
+        type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 text-sm text-(--foreground-muted) hover:text-(--foreground) transition underline"
+        className="inline-flex min-h-9 items-center gap-2 rounded-lg px-2 text-sm font-medium text-(--foreground-muted) underline underline-offset-4 transition-colors hover:text-(--foreground)"
       >
-        <span>?</span> Concepts clés
+        <BookOpen aria-hidden className="h-4 w-4" />
+        Concepts clés
       </button>
       <GlossaryModal open={open} onClose={() => setOpen(false)} />
     </>

@@ -104,7 +104,7 @@ export function ResultsSection({ results }: { results: ResultsContext }) {
 
         <p className="mt-3 flex flex-wrap items-center gap-2 text-sm">
           <span
-            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-sm font-semibold ${
               g.leverageFavourable
                 ? 'bg-(--positive-subtle) text-(--positive)'
                 : 'bg-(--negative-subtle) text-(--negative)'
@@ -128,20 +128,20 @@ export function ResultsSection({ results }: { results: ResultsContext }) {
           <div className="min-w-0 overflow-x-auto rounded-lg border border-(--border)">
             <table className="tabular w-full min-w-[46rem] border-collapse text-sm">
               <thead>
-                <tr className="bg-(--surface-muted) text-left text-xs text-(--foreground-muted)">
-                  <th className="px-3 py-2 font-semibold">Domaine</th>
-                  <th className="px-3 py-2 font-semibold"><Term>Chiffre d’affaires</Term></th>
-                  <th className="px-3 py-2 font-semibold"><Term>Charges d’exploitation</Term></th>
-                  <th className="px-3 py-2 font-semibold"><Term>Marge d’exploitation</Term></th>
-                  <th className="px-3 py-2 font-semibold"><Term>Rentabilité économique</Term></th>
-                  <th className="px-3 py-2 font-semibold"><Term>Flux de trésorerie d’exploitation</Term></th>
-                  <th className="px-3 py-2 font-semibold">Seuil de rentabilité</th>
+                <tr className="bg-(--surface-muted) text-left text-sm text-(--foreground-muted)">
+                  <th scope="col" className="px-3 py-2 font-semibold">Domaine</th>
+                  <th scope="col" className="px-3 py-2 font-semibold"><Term>Chiffre d’affaires</Term></th>
+                  <th scope="col" className="px-3 py-2 font-semibold"><Term>Charges d’exploitation</Term></th>
+                  <th scope="col" className="px-3 py-2 font-semibold"><Term>Marge d’exploitation</Term></th>
+                  <th scope="col" className="px-3 py-2 font-semibold"><Term>Rentabilité économique</Term></th>
+                  <th scope="col" className="px-3 py-2 font-semibold"><Term>Flux de trésorerie d’exploitation</Term></th>
+                  <th scope="col" className="px-3 py-2 font-semibold">Seuil de rentabilité</th>
                 </tr>
               </thead>
               <tbody>
                 {results.das.map((d) => (
                   <tr key={d.dasId} className="border-t border-(--border)">
-                    <td className="px-3 py-2.5 font-medium">{d.dasName}</td>
+                    <th scope="row" className="px-3 py-2.5 text-left font-medium">{d.dasName}</th>
                     <td className="px-3 py-2.5 font-mono">{formatMadCompact(d.revenueMad)}</td>
                     <td className="px-3 py-2.5 font-mono">{formatMadCompact(d.totalCostsMad)}</td>
                     <td className={`px-3 py-2.5 font-mono ${d.profitMarginPct < 0 ? 'text-(--negative)' : ''}`}>
@@ -186,7 +186,7 @@ function Figure({
 }) {
   return (
     <div className="rounded-lg bg-(--surface-muted) px-3 py-2.5">
-      <dt className="flex items-center gap-1.5 text-xs text-(--foreground-muted)">
+      <dt className="flex items-center gap-1.5 text-sm text-(--foreground-muted)">
         <Term>{term}</Term>
         {note ? <InfoHint label={term}>{note}</InfoHint> : null}
       </dt>

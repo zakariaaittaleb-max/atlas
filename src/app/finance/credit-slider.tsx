@@ -157,7 +157,7 @@ export function CreditSlider({
         aria-describedby={`${id}-bornes`}
       />
 
-      <div id={`${id}-bornes`} className="tabular flex flex-wrap justify-between gap-3 text-xs text-(--foreground-muted)">
+      <div id={`${id}-bornes`} className="tabular flex flex-wrap justify-between gap-3 text-sm text-(--foreground-muted)">
         <span>
           {debt > 0 ? `tout rembourser : ${formatMadCompact(debt)}` : 'aucune dette à rembourser'}
         </span>
@@ -189,12 +189,12 @@ export function CreditSlider({
           className="tabular w-48 rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
         />
         <span className="text-sm text-(--foreground-muted)">DH</span>
-        <span className="text-xs text-(--foreground-muted)">
+        <span className="text-sm text-(--foreground-muted)">
           positif : vous empruntez · négatif : vous remboursez
         </span>
       </div>
       {clipped ? (
-        <p className="mt-1.5 mb-0 text-xs" style={{ color: 'var(--warning)' }}>{clipped}</p>
+        <p className="mt-1.5 mb-0 text-sm" style={{ color: 'var(--warning)' }}>{clipped}</p>
       ) : null}
 
     </div>

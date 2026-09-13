@@ -81,7 +81,7 @@ export function ChartContainer({
               type="button"
               aria-pressed={detailed}
               onClick={() => setDetailed((d) => !d)}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-(--accent-text) hover:bg-(--accent-subtle)"
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-(--accent-text) hover:bg-(--accent-subtle)"
             >
               {detailed ? (
                 <Minimize2 aria-hidden className="h-3.5 w-3.5" />
@@ -94,7 +94,7 @@ export function ChartContainer({
           <button
             type="button"
             onClick={() => downloadCsv(filename, columns, rows)}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-(--foreground-muted) hover:bg-(--surface-muted) hover:text-(--foreground)"
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-(--foreground-muted) hover:bg-(--surface-muted) hover:text-(--foreground)"
           >
             <Download aria-hidden className="h-3.5 w-3.5" />
             CSV
@@ -143,7 +143,7 @@ function ModeButton({
       type="button"
       aria-pressed={on}
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs ${
+      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm ${
         on
           ? 'bg-(--surface) font-semibold text-(--accent-text) shadow-sm'
           : 'font-medium text-(--foreground-muted) hover:text-(--foreground)'

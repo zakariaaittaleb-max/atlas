@@ -436,7 +436,7 @@ function Stat({
 }: { term: string; value: string; note?: string }) {
   return (
     <div className="rounded-lg bg-(--surface-muted) px-3 py-2.5">
-      <dt className="flex items-center gap-1.5 text-xs text-(--foreground-muted)">
+      <dt className="flex items-center gap-1.5 text-sm text-(--foreground-muted)">
         <Term>{term}</Term>
         {note ? <InfoHint label={term}>{note}</InfoHint> : null}
       </dt>

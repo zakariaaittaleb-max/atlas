@@ -42,7 +42,7 @@ export function DataTable({
               <th
                 key={column.key}
                 scope="col"
-                className={`border-b border-(--border) px-3 py-2 text-xs font-semibold whitespace-nowrap text-(--foreground-muted) ${
+                className={`border-b border-(--border) px-3 py-2 text-sm font-semibold whitespace-nowrap text-(--foreground-muted) ${
                   alignOf(column, rows, index) === 'right' ? 'text-right' : 'text-left'
                 }`}
               >

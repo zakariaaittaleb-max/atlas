@@ -24,6 +24,10 @@ import { useEffect, useId, useRef, useState } from 'react';
  * lisible pendant le débriefing. Le déclencheur est donc un élément
  * `role="button"` focusable, activé à la souris, à Entrée et à Espace.
  *
+ * La pastille mesure 20 px, mais sa zone de clic en fait 44 : une marge
+ * transparente (`after:`) l'élargit sans rien déplacer à l'écran. Une cible de
+ * 20 px se rate au pavé tactile, et plus encore sur une tablette.
+ *
  * Le contenu doit rester du texte en ligne (`span`, `strong`, `a`) : la bulle
  * peut être posée dans un titre, une légende ou un paragraphe.
  */
@@ -96,7 +100,7 @@ export function InfoHint({
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') toggle(event);
         }}
-        className={`inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border transition-[transform,background-color,border-color,color] duration-200 ${
+        className={`relative inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border after:absolute after:-inset-[13px] after:rounded-full after:content-[''] transition-[transform,background-color,border-color,color] duration-200 ${
           open
             ? 'rotate-45 border-(--accent) bg-(--accent) text-(--on-accent)'
             : 'border-(--border-strong) bg-(--surface) text-(--foreground-muted) hover:border-(--accent) hover:text-(--accent-text)'

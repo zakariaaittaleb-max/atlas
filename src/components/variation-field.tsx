@@ -130,7 +130,7 @@ export function VariationField({
         className="mt-2 w-full"
       />
 
-      <div className="tabular mt-1 flex justify-between text-xs text-(--foreground-muted)">
+      <div className="tabular mt-1 flex justify-between text-sm text-(--foreground-muted)">
         <span>
           {floor <= -100 ? 'supprimé' : floor === 0 ? '0 %' : `${floor} %`}
         </span>
@@ -147,6 +147,7 @@ export function VariationField({
         <input
           type="text"
           inputMode="numeric"
+          aria-label={`${label} — montant en ${unit === 'money' ? 'dirhams' : 'unités'}`}
           disabled={disabled}
           value={draft ?? formatUnits(value)}
           onFocus={() => setDraft(value === 0 ? '' : String(Math.round(value)))}
@@ -166,14 +167,14 @@ export function VariationField({
           onBlur={() => setDraft(null)}
           className="tabular w-40 rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm disabled:opacity-50"
         />
-        <span className="text-xs text-(--foreground-muted)">
+        <span className="text-sm text-(--foreground-muted)">
           {unit === 'money' ? 'DH' : 'unités'}
           {unit === 'money' && value > 0 ? ` · ${formatMadCompact(value)}` : ''}
         </span>
       </div>
 
       {outOfRange ? (
-        <p className="mt-1 text-xs" style={{ color: 'var(--warning)' }}>
+        <p className="mt-1 text-sm" style={{ color: 'var(--warning)' }}>
           Votre animateur a resserré la fourchette depuis votre saisie. Ce montant sera
           ramené à {format(valueFromVariation(reference, pct))} au prochain enregistrement.
         </p>

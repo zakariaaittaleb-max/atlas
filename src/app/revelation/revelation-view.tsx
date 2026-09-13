@@ -505,7 +505,7 @@ function DecompositionTable({
     <div
       className="mt-6 border-t border-(--border) pt-6 transition-opacity duration-700"
       style={{ opacity: visible ? 1 : 0 }}
-      aria-hidden={!visible}
+      inert={!visible}
     >
       <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-(--heading)">
         Décomposition du score de compétitivité
@@ -525,15 +525,18 @@ function DecompositionTable({
         <table className="w-full min-w-[46rem] border-collapse text-sm">
           <thead>
             <tr className="border-b border-(--border) text-left">
-              <th className="py-2 pr-4 font-medium">Équipe</th>
-              <th className="py-2 pr-4 text-right font-medium">Qualité</th>
-              <th className="py-2 pr-4 text-right font-medium">Notoriété</th>
-              <th className="py-2 pr-4 text-right font-medium">Prix</th>
-              <th className="py-2 pr-4 text-right font-medium">Alignement</th>
-              <th className="py-2 pr-4 text-right font-medium">Pression</th>
-              <th className="py-2 pr-4 text-right font-medium">Score</th>
-              <th className="py-2 pr-4 text-right font-medium">Part</th>
-              <th className="py-2 text-right font-medium">Δ</th>
+              <th scope="col" className="py-2 pr-4 font-medium">Équipe</th>
+              <th scope="col" className="py-2 pr-4 text-right font-medium">Qualité</th>
+              <th scope="col" className="py-2 pr-4 text-right font-medium">Notoriété</th>
+              <th scope="col" className="py-2 pr-4 text-right font-medium">Prix</th>
+              <th scope="col" className="py-2 pr-4 text-right font-medium">Alignement</th>
+              <th scope="col" className="py-2 pr-4 text-right font-medium">Pression</th>
+              <th scope="col" className="py-2 pr-4 text-right font-medium">Score</th>
+              <th scope="col" className="py-2 pr-4 text-right font-medium">Part</th>
+              <th scope="col" className="py-2 text-right font-medium">
+                <span aria-hidden>Δ</span>
+                <span className="sr-only">Variation de part, en points</span>
+              </th>
             </tr>
           </thead>
           <tbody className="tabular">
@@ -549,10 +552,10 @@ function DecompositionTable({
                   className="border-b border-(--border) last:border-0"
                   style={{ background: isViewer ? 'var(--surface-muted)' : undefined }}
                 >
-                  <td className={`py-2.5 pr-4 ${isViewer ? 'font-semibold' : ''}`}>
+                  <th scope="row" className={`py-2.5 pr-4 text-left ${isViewer ? 'font-semibold' : 'font-normal'}`}>
                     {r.team_name}
                     {isViewer ? <span className="text-(--foreground-muted)"> (vous)</span> : null}
-                  </td>
+                  </th>
                   <td className="py-2.5 pr-4 text-right">{formatScore(r.perceived_quality)}</td>
                   <td className="py-2.5 pr-4 text-right">{formatScore(r.notoriety)}</td>
                   <td className="py-2.5 pr-4 text-right">
@@ -593,10 +596,17 @@ function DecompositionTable({
           Chiffre d’affaires et prix pratiqués sur ce domaine
         </summary>
         <table className="tabular mt-3 w-full border-collapse text-sm">
+          <thead className="sr-only">
+            <tr>
+              <th scope="col">Équipe</th>
+              <th scope="col">Chiffre d’affaires</th>
+              <th scope="col">Prix pratiqué</th>
+            </tr>
+          </thead>
           <tbody>
             {ordered.map((r) => (
               <tr key={r.team_id} className="border-b border-(--border) last:border-0">
-                <td className="py-2 pr-4">{r.team_name}</td>
+                <th scope="row" className="py-2 pr-4 text-left font-normal">{r.team_name}</th>
                 <td className="py-2 pr-4 text-right">{formatMadCompact(r.revenue_mad)}</td>
                 <td className="py-2 text-right text-(--foreground-muted)">
                   {formatScore(r.unit_price_mad, 0)} DH / unité

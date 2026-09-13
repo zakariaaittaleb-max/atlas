@@ -251,7 +251,7 @@ export function HrSection({
                 ))}
               </select>
               {restructuring && restructuring[0] !== 'aucune' ? (
-                <span className="mt-1 block text-xs text-(--warning)">{restructuring[2]}</span>
+                <span className="mt-1 block text-sm text-(--warning)">{restructuring[2]}</span>
               ) : null}
             </label>
           ) : null}
@@ -442,7 +442,7 @@ function Kpi({
   const name = term ?? label ?? '';
   return (
     <div className={`rounded-lg px-3 py-2.5 ${alert ? 'bg-(--negative-subtle)' : 'bg-(--surface-muted)'}`}>
-      <dt className="flex items-center gap-1.5 text-xs text-(--foreground-muted)">
+      <dt className="flex items-center gap-1.5 text-sm text-(--foreground-muted)">
         {term ? <Term>{term}</Term> : label}
         {note ? <InfoHint label={name}>{note}</InfoHint> : null}
       </dt>
@@ -450,7 +450,7 @@ function Kpi({
         {value}
       </dd>
       {alert ? (
-        <dd className="flex items-center gap-1 text-xs font-medium text-(--negative)">
+        <dd className="flex items-center gap-1 text-sm font-medium text-(--negative)">
           <TriangleAlert aria-hidden className="h-3.5 w-3.5" />
           {alert}
         </dd>
@@ -484,7 +484,7 @@ function Check({
           <InfoHint label={label}>{hint}</InfoHint>
         </span>
         {requirement ? (
-          <span className="mt-0.5 block text-xs text-(--foreground-muted)">{requirement}</span>
+          <span className="mt-0.5 block text-sm text-(--foreground-muted)">{requirement}</span>
         ) : null}
       </span>
     </label>

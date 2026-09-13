@@ -183,7 +183,7 @@ export function SusView({
                 </button>
               ))}
             </div>
-            <div className="mt-1 flex justify-between text-[10px] text-(--foreground-muted)">
+            <div className="mt-1 flex justify-between text-xs text-(--foreground-muted)">
               <span>Pas d’accord</span><span>Tout à fait d’accord</span>
             </div>
           </div>

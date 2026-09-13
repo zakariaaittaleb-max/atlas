@@ -1320,7 +1320,7 @@ function RawTable({
           <button
             type="button"
             onClick={() => downloadCsv(filename, columns, rows)}
-            className="rounded-lg border border-(--border) px-3 py-1.5 text-xs font-medium hover:border-(--accent) hover:text-(--accent-text)"
+            className="rounded-lg border border-(--border) px-3 py-1.5 text-sm font-medium hover:border-(--accent) hover:text-(--accent-text)"
           >
             Exporter en CSV
           </button>
@@ -1624,7 +1624,7 @@ function CabinetFact({
 
   return (
     <div>
-      <dt className="flex flex-wrap items-center gap-1.5 text-xs text-(--foreground-muted)">
+      <dt className="flex flex-wrap items-center gap-1.5 text-sm text-(--foreground-muted)">
         {label}
         <span className="rounded bg-(--surface) px-1.5 py-0.5 text-[0.6875rem] ring-1 ring-(--border)">
           cabinet {errorMargin > 0 ? `±${Math.round(errorMargin * 100)} %` : 'exact'}
