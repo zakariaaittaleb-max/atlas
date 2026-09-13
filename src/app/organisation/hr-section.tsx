@@ -15,10 +15,17 @@
  *     est la SEULE façon de réduire un effectif sans perdre en qualité ;
  *   • le GIAC finance l'ingénierie de formation, pas la formation : sans bilan
  *     de compétences, il n'y a rien à rembourser.
+ *
+ * Les chiffres et les alertes restent visibles ; les explications de ces
+ * mécanismes sont sous les « + ».
  */
+
+import { TriangleAlert } from 'lucide-react';
 
 import { HeadcountStepper } from '@/components/decision-shell';
 import { Term } from '@/components/term';
+import { ChoiceCard, Definitions, GroupLegend } from '@/components/ui/form-controls';
+import { InfoHint } from '@/components/ui/info-hint';
 import { anyOn, isOn, type EnabledModules } from '@/lib/modules-state';
 import { VariationField } from '@/components/variation-field';
 import { endowmentReference, type VariationBasis } from '@/lib/variation-references';
@@ -102,30 +109,34 @@ export function HrSection({
   const severanceTotal = hr.layoffs * severancePerHead;
 
   const overCut = state !== null && hr.layoffs > state.safeReduction;
+  const restructuring = RESTRUCTURING.find(([v]) => v === hr.restructuring);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* ── Où l'on en est ─────────────────────────────────────────────── */}
       {state === null ? (
-        <p className="rounded-lg border border-(--border) px-4 py-3 text-sm text-(--foreground-muted)">
+        <p className="rounded-lg bg-(--surface-muted) px-4 py-3 text-sm text-(--foreground-muted)">
           Aucun exercice n’est encore clos pour ce domaine : vos indicateurs sociaux
           apparaîtront ici après la première publication.
         </p>
       ) : (
         <div>
-          <span className="text-sm font-medium">Où en est ce domaine</span>
-          <p className="mt-0.5 mb-3 text-sm text-(--foreground-muted)">
+          <GroupLegend as="p" title="Où en est ce domaine">
             Relevé du dernier exercice clos. C’est à partir de là que vos décisions agissent.
-          </p>
-          <dl className="tabular grid gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          </GroupLegend>
+          <dl className="tabular grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
             <Kpi
               term="Climat social" value={state.climatSocial.toFixed(0)}
-              tone={state.climatSocial < 40 ? 'bad' : state.climatSocial > 70 ? 'good' : undefined}
-              note={state.climatSocial < 40 ? 'Dégradé : la rotation s’emballe.' : undefined}
+              alert={state.climatSocial < 40 ? 'dégradé' : undefined}
+              note={
+                state.climatSocial < 40
+                  ? 'Dégradé : la rotation s’emballe.'
+                  : 'Sous 60, une part de l’outil cesse de produire et chaque unité coûte plus cher. L’effet se voit au tour suivant.'
+              }
             />
             <Kpi
               term="Indice de charge" value={state.workloadIndex.toFixed(0)}
-              tone={state.workloadIndex > 120 ? 'bad' : state.workloadIndex < 80 ? 'bad' : 'good'}
+              alert={state.workloadIndex > 120 ? 'surcharge' : state.workloadIndex < 80 ? 'sous-charge' : undefined}
               note={
                 state.workloadIndex > 120 ? 'Surcharge : on tient par l’usure.'
                 : state.workloadIndex < 80 ? 'Sous-charge : on paie des gens à attendre.'
@@ -135,7 +146,7 @@ export function HrSection({
             <Kpi
               term="Taux de rotation"
               value={`${(state.turnoverRate * 100).toFixed(1)} %`}
-              tone={state.turnoverRate > 0.15 ? 'bad' : undefined}
+              alert={state.turnoverRate > 0.15 ? 'élevé' : undefined}
               note={
                 state.turnoverRate > 0.15
                   ? 'Ce sont les plus qualifiés qui partent, et ils partent ce tour-ci.'
@@ -145,7 +156,7 @@ export function HrSection({
             <Kpi
               term="Départs subis"
               value={state.departuresCount.toLocaleString('fr-FR')}
-              tone={state.departuresCount > 0 ? 'bad' : undefined}
+              alert={state.departuresCount > 0 ? 'à remplacer' : undefined}
               note={
                 state.departuresCount > 0
                   ? 'Partis d’eux-mêmes. À remplacer pour tenir la même charge.'
@@ -160,40 +171,35 @@ export function HrSection({
             />
             <Kpi
               term="Niveau de standardisation" value={state.standardisationLevel.toFixed(0)}
-              note="Acquise en mutualisant puis en standardisant, plus haut sur cet écran."
+              note="Acquise en mutualisant puis en standardisant, dans le bloc Directives du Groupe."
             />
             <Kpi term="Niveau d'automatisation" value={state.automationLevel.toFixed(0)} />
+            <Kpi
+              label="Indice de compétence" value={state.skillIndex.toFixed(0)}
+              note="Au-dessus du niveau dont vous avez hérité, il abaisse votre coût de production et fait mieux rendre votre budget de recherche ; en dessous, l’inverse. Effet au tour suivant."
+            />
           </dl>
 
-          <p className="mt-4 rounded-lg border border-(--border) px-4 py-3 text-sm">
-            Votre standardisation et votre automatisation permettent de retirer{' '}
-            <strong>{state.safeReduction.toLocaleString('fr-FR')} postes</strong> sans perdre en
-            qualité. Au-delà, chaque poste supprimé se paie en qualité produit.
-            {state.qualityLossPts > 0 ? (
-              <>
-                {' '}
+          <p className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-(--surface-muted) px-4 py-3 text-sm">
+            <span>
+              Réduction possible sans perte de qualité :{' '}
+              <strong className="font-mono">{state.safeReduction.toLocaleString('fr-FR')} postes</strong>
+            </span>
+            <InfoHint label="Réduction sans perte de qualité">
+              Votre standardisation et votre automatisation permettent de retirer ces postes sans
+              perdre en qualité. Au-delà, chaque poste supprimé se paie en qualité produit.
+            </InfoHint>
+          </p>
+          {state.qualityLossPts > 0 ? (
+            <p className="mt-2 flex items-start gap-2 rounded-lg bg-(--negative-subtle) px-4 py-3 text-sm text-(--negative)">
+              <TriangleAlert aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
                 Vos coupes du dernier exercice ont dépassé ce seuil :{' '}
-                <strong>−{state.qualityLossPts.toFixed(1)} points de qualité</strong> sont
-                retirés à votre produit ce tour-ci.
-              </>
-            ) : null}
-          </p>
-
-          {/* ── Ce que la RH coûte, ou rapporte, en dehors de la RH ────────
-              Ces trois conséquences existaient dans le cahier des charges et
-              nulle part dans le moteur : le climat et la compétence se
-              calculaient sans jamais toucher une unité produite. Les énoncer
-              ici est la moitié du travail — une équipe qui découvre la
-              sanction à la révélation ne peut plus rien en faire. */}
-          <p className="mt-3 rounded-lg border border-(--border) px-4 py-3 text-sm text-(--foreground-muted)">
-            Sous <strong>60 de climat social</strong>, vous payez deux fois : une part de votre
-            outil cesse de produire, et chaque unité produite coûte plus cher — absences à
-            couvrir, reprises, rebuts. Votre <strong>indice de compétence</strong> (
-            {state.skillIndex.toFixed(0)}) joue lui aussi sur deux tableaux : au-dessus du niveau
-            dont vous avez hérité, il abaisse votre coût de production et fait mieux rendre votre
-            budget de recherche ; en dessous, l’inverse. Ces effets se voient au tour{' '}
-            <strong>suivant</strong> : on subit en retard ce qu’on a décidé aujourd’hui.
-          </p>
+                <strong>−{state.qualityLossPts.toFixed(1)} points de qualité</strong> sont retirés à
+                votre produit ce tour-ci.
+              </span>
+            </p>
+          ) : null}
         </div>
       )}
 
@@ -203,11 +209,10 @@ export function HrSection({
           et l'équipe l'augmente ou le baisse. Recrutements et licenciements
           en découlent, au lieu d'être deux champs à zéro sans point d'appui. */}
       <fieldset disabled={locked}>
-        <legend className="text-sm font-medium">Effectif de ce domaine</legend>
-        <p className="mt-1 mb-3 text-sm text-(--foreground-muted)">
+        <GroupLegend title="Effectif de ce domaine">
           Partez de ce qui est en place et ajustez. C’est l’écart qui se traduit en
           recrutements ou en départs — et qui se paie.
-        </p>
+        </GroupLegend>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <HeadcountStepper
@@ -229,20 +234,26 @@ export function HrSection({
           />
 
           {isOn(modules, 'org.restructuring') ? (
-          <div className="self-end">
-            <label className="block">
-              <span className="text-sm font-medium">Nature de la restructuration</span>
+            <label className="block self-start">
+              <span className="flex items-center gap-2 text-sm font-medium">
+                Nature de la restructuration
+                <InfoHint label="Nature de la restructuration">
+                  <Definitions items={RESTRUCTURING.map(([, label, hint]) => [label, hint] as const)} />
+                </InfoHint>
+              </span>
               <select
-                value={hr.restructuring} disabled={locked}
+                value={hr.restructuring}
                 onChange={(e) => patch({ restructuring: e.target.value as DasHr['restructuring'] })}
                 className="mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
               >
-                {RESTRUCTURING.map(([v, label, hint]) => (
-                  <option key={v} value={v}>{label} — {hint}</option>
+                {RESTRUCTURING.map(([v, label]) => (
+                  <option key={v} value={v}>{label}</option>
                 ))}
               </select>
+              {restructuring && restructuring[0] !== 'aucune' ? (
+                <span className="mt-1 block text-xs text-(--warning)">{restructuring[2]}</span>
+              ) : null}
             </label>
-          </div>
           ) : null}
         </div>
       </fieldset>
@@ -250,12 +261,11 @@ export function HrSection({
       {/* ── Qui l'on recrute ───────────────────────────────────────────── */}
       {hires > 0 ? (
         <fieldset disabled={locked}>
-          <legend className="text-sm font-medium">Qui vous recrutez</legend>
-          <p className="mt-1 mb-3 text-sm text-(--foreground-muted)">
+          <GroupLegend title={`Qui vous recrutez — ${hires.toLocaleString('fr-FR')} personne${hires > 1 ? 's' : ''}`}>
             La composition compte autant que le nombre : une différenciation crédible ne se
             construit pas avec des opérateurs seuls.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          </GroupLegend>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {HIRE_FIELDS.map(([key, field, label]) => (
               <VariationField
                 key={field}
@@ -271,7 +281,7 @@ export function HrSection({
           </div>
 
           {isOn(modules, 'org.internal_transfers') ? (
-            <div className="mt-4">
+            <div className="mt-6">
               <VariationField
                 label="Venus d’un autre domaine du groupe"
                 unit="count"
@@ -286,9 +296,12 @@ export function HrSection({
           ) : null}
 
           {state !== null && state.headcount > 0 && hires / state.headcount > 0.2 ? (
-            <p className="mt-3 rounded-lg border border-(--warning) px-4 py-2.5 text-sm text-(--warning)">
-              Vous recrutez {((hires / state.headcount) * 100).toFixed(0)} % de l’effectif en un
-              exercice. Au-delà de 20 %, l’intégration ne suit plus et le climat en pâtit.
+            <p className="mt-4 flex items-start gap-2 rounded-lg bg-(--warning-subtle) px-4 py-2.5 text-sm text-(--warning)">
+              <TriangleAlert aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                Vous recrutez {((hires / state.headcount) * 100).toFixed(0)} % de l’effectif en un
+                exercice. Au-delà de 20 %, l’intégration ne suit plus et le climat en pâtit.
+              </span>
             </p>
           ) : null}
         </fieldset>
@@ -300,155 +313,179 @@ export function HrSection({
           saisie, alors qu'il n'y a rien à saisir. */}
       {hr.layoffs > 0 ? (
         <fieldset disabled={locked}>
-          <legend className="text-sm font-medium">
-            Départs — {hr.layoffs.toLocaleString('fr-FR')} poste(s)
-          </legend>
+          <GroupLegend title={`Départs — ${hr.layoffs.toLocaleString('fr-FR')} poste${hr.layoffs > 1 ? 's' : ''}`}>
+            Les indemnités se versent immédiatement — l’économie de salaires, elle, n’arrive
+            qu’ensuite. Barème de l’article 53 du Code du travail, préavis compris.
+          </GroupLegend>
           <p
-            className="mt-3 rounded-lg border px-4 py-2.5 text-sm"
-            style={{ borderColor: overCut ? 'var(--negative)' : 'var(--warning)' }}
+            className={`flex items-start gap-2 rounded-lg px-4 py-2.5 text-sm ${
+              overCut ? 'bg-(--negative-subtle) text-(--negative)' : 'bg-(--warning-subtle) text-(--warning)'
+            }`}
           >
-            <strong>{formatMadCompact(severanceTotal)}</strong> d’indemnités légales, à verser
-            immédiatement — l’économie de salaires, elle, n’arrive qu’ensuite. Barème de
-            l’article 53 du Code du travail, préavis compris.
-            {overCut ? (
-              <>
-                {' '}Vous dépassez de {(hr.layoffs - (state?.safeReduction ?? 0)).toLocaleString('fr-FR')} postes
-                ce que votre standardisation autorise : la qualité produit en souffrira.
-              </>
-            ) : null}
+            <TriangleAlert aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              <strong className="font-mono">{formatMadCompact(severanceTotal)}</strong> d’indemnités
+              légales à verser ce tour.
+              {overCut ? (
+                <>
+                  {' '}Vous dépassez de {(hr.layoffs - (state?.safeReduction ?? 0)).toLocaleString('fr-FR')} postes
+                  ce que votre standardisation autorise : la qualité produit en souffrira.
+                </>
+              ) : null}
+            </span>
           </p>
         </fieldset>
       ) : null}
 
       {/* ── Rémunération et formation ──────────────────────────────────── */}
-      <fieldset disabled={locked} className="grid gap-4 sm:grid-cols-2">
-        <VariationField
-          label="Salaire brut mensuel moyen"
-          value={hr.avgSalaryBrutMad}
-          reference={ref('org.avg_salary', 'avgSalaryBrutMad')}
-          scale={scales.salaire}
-          disabled={locked}
-          onChange={(v) => patch({ avgSalaryBrutMad: v })}
-          hint="Payer mieux améliore le climat, avec des rendements décroissants. La fourchette est étroite : un salaire ne se renégocie pas de moitié d’un exercice à l’autre."
-        />
-
-        {isOn(modules, 'org.training_budget') ? (
+      <fieldset disabled={locked}>
+        <GroupLegend title="Rémunération et formation" />
+        <div className="grid gap-6 sm:grid-cols-2">
           <VariationField
-            label="Budget de formation"
-            value={hr.trainingBudgetMad}
-            reference={ref('org.training_budget', 'trainingBudgetMad')}
-            scale={scales.formation}
+            label="Salaire brut mensuel moyen"
+            value={hr.avgSalaryBrutMad}
+            reference={ref('org.avg_salary', 'avgSalaryBrutMad')}
+            scale={scales.salaire}
             disabled={locked}
-            onChange={(v) => patch({ trainingBudgetMad: v })}
-            hint="Améliore la compétence et le climat, et amortit le choc d’une automatisation. La dotation de repli est le droit de tirage OFPPT : 1,6 % de la masse salariale."
+            onChange={(v) => patch({ avgSalaryBrutMad: v })}
+            hint="Payer mieux améliore le climat, avec des rendements décroissants. La fourchette est étroite : un salaire ne se renégocie pas de moitié d’un exercice à l’autre."
           />
-        ) : null}
+
+          {isOn(modules, 'org.training_budget') ? (
+            <VariationField
+              label="Budget de formation"
+              value={hr.trainingBudgetMad}
+              reference={ref('org.training_budget', 'trainingBudgetMad')}
+              scale={scales.formation}
+              disabled={locked}
+              onChange={(v) => patch({ trainingBudgetMad: v })}
+              hint="Améliore la compétence et le climat, et amortit le choc d’une automatisation. La dotation de repli est le droit de tirage OFPPT : 1,6 % de la masse salariale."
+            />
+          ) : null}
+        </div>
       </fieldset>
 
       {isOn(modules, 'org.training_focus') ? (
-      <fieldset disabled={locked}>
-        <legend className="text-sm font-medium">Sur quoi former</legend>
-        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-          {TRAINING_FOCUS.map(([v, label, hint]) => (
-            <button
-              key={v} type="button" disabled={locked}
-              onClick={() => patch({ trainingFocus: v })}
-              className="rounded-lg border px-4 py-2.5 text-left text-sm"
-              style={{
-                borderColor: hr.trainingFocus === v ? 'var(--accent)' : 'var(--border)',
-                background: hr.trainingFocus === v ? 'var(--surface-muted)' : undefined,
-              }}
-            >
-              <span className="font-medium">{label}</span>
-              <span className="mt-0.5 block text-(--foreground-muted)">{hint}</span>
-            </button>
-          ))}
-        </div>
-      </fieldset>
+        <fieldset disabled={locked}>
+          <GroupLegend title="Sur quoi former">
+            <Definitions items={TRAINING_FOCUS.map(([, label, hint]) => [label, hint] as const)} />
+          </GroupLegend>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {TRAINING_FOCUS.map(([v, label]) => (
+              <ChoiceCard
+                key={v}
+                title={label}
+                selected={hr.trainingFocus === v}
+                onSelect={() => patch({ trainingFocus: v })}
+              />
+            ))}
+          </div>
+        </fieldset>
       ) : null}
 
       {/* ── Financements publics ───────────────────────────────────────── */}
       {anyOn(modules, ['org.skills_audit', 'org.claim_giac', 'org.claim_ofppt']) ? (
-      <fieldset disabled={locked}>
-        <legend className="text-sm font-medium">Diagnostic et financements</legend>
-        <div className="mt-3 space-y-2">
-          {isOn(modules, 'org.skills_audit') ? (
-            <Check
-              checked={hr.orderSkillsAudit} disabled={locked}
-              onChange={(v) => patch({ orderSkillsAudit: v, claimGiac: v && hr.claimGiac })}
-              label="Commander un bilan de compétences"
-              hint="Un plan de formation bâti sur un diagnostic rend nettement plus qu’un plan improvisé. C’est aussi ce que le GIAC finance."
-            />
-          ) : null}
-          {isOn(modules, 'org.claim_ofppt') ? (
-            <Check
-              checked={hr.claimOfppt} disabled={locked}
-              onChange={(v) => patch({ claimOfppt: v })}
-              label="Solliciter l’OFPPT (contrats spéciaux de formation)"
-              hint="Rembourse 70 % de la formation, dans la limite de votre droit de tirage — 1,6 % de votre masse salariale. Dépenser au-delà ne rembourse pas davantage."
-            />
-          ) : null}
-          {/* Le GIAC exige le bilan : si le facilitateur a fermé le bilan, la
-              case resterait cochable mais jamais satisfaisable. */}
-          {isOn(modules, 'org.claim_giac') && isOn(modules, 'org.skills_audit') ? (
-            <Check
-              checked={hr.claimGiac} disabled={locked || !hr.orderSkillsAudit}
-              onChange={(v) => patch({ claimGiac: v })}
-              label="Solliciter le GIAC sectoriel"
-              hint={
-                hr.orderSkillsAudit
-                  ? "Finance l’ingénierie de formation — le diagnostic, l’analyse des besoins, le plan."
-                  : "Exige un bilan de compétences : le GIAC finance l’ingénierie, pas la formation. Sans diagnostic, il n’y a rien à rembourser."
-              }
-            />
-          ) : null}
-        </div>
-      </fieldset>
+        <fieldset disabled={locked}>
+          <GroupLegend title="Diagnostic et financements" />
+          <div className="grid gap-2 lg:grid-cols-3">
+            {isOn(modules, 'org.skills_audit') ? (
+              <Check
+                checked={hr.orderSkillsAudit} disabled={locked}
+                onChange={(v) => patch({ orderSkillsAudit: v, claimGiac: v && hr.claimGiac })}
+                label="Commander un bilan de compétences"
+                hint="Un plan de formation bâti sur un diagnostic rend nettement plus qu’un plan improvisé. C’est aussi ce que le GIAC finance."
+              />
+            ) : null}
+            {isOn(modules, 'org.claim_ofppt') ? (
+              <Check
+                checked={hr.claimOfppt} disabled={locked}
+                onChange={(v) => patch({ claimOfppt: v })}
+                label="Solliciter l’OFPPT"
+                hint="Contrats spéciaux de formation. Rembourse 70 % de la formation, dans la limite de votre droit de tirage — 1,6 % de votre masse salariale. Dépenser au-delà ne rembourse pas davantage."
+              />
+            ) : null}
+            {/* Le GIAC exige le bilan : si le facilitateur a fermé le bilan, la
+                case resterait cochable mais jamais satisfaisable. */}
+            {isOn(modules, 'org.claim_giac') && isOn(modules, 'org.skills_audit') ? (
+              <Check
+                checked={hr.claimGiac} disabled={locked || !hr.orderSkillsAudit}
+                onChange={(v) => patch({ claimGiac: v })}
+                label="Solliciter le GIAC sectoriel"
+                requirement={hr.orderSkillsAudit ? undefined : 'Exige un bilan de compétences'}
+                hint="Finance l’ingénierie de formation — le diagnostic, l’analyse des besoins, le plan —, pas la formation elle-même. Sans diagnostic, il n’y a rien à rembourser."
+              />
+            ) : null}
+          </div>
+        </fieldset>
       ) : null}
     </div>
   );
 }
 
+/**
+ * Un indicateur social du dernier exercice.
+ *
+ * Un état dégradé se lit par un pictogramme ET un mot, pas seulement par le
+ * rouge du chiffre ; l'explication du seuil est sous le « + ».
+ */
 function Kpi({
-  term, value, note, tone,
-}: { term: string; value: string; note?: string; tone?: 'good' | 'bad' }) {
+  term, label, value, note, alert,
+}: {
+  /** Terme du glossaire, avec sa définition au survol. */
+  term?: string;
+  /** Libellé simple, quand le terme n'est pas au glossaire. */
+  label?: string;
+  value: string;
+  note?: string;
+  alert?: string;
+}) {
+  const name = term ?? label ?? '';
   return (
-    <div>
-      <dt className="text-sm text-(--foreground-muted)"><Term>{term}</Term></dt>
-      <dd
-        className="mt-0.5 text-lg font-semibold"
-        style={{
-          color:
-            tone === 'bad' ? 'var(--negative)'
-            : tone === 'good' ? 'var(--positive)'
-            : undefined,
-        }}
-      >
+    <div className={`rounded-lg px-3 py-2.5 ${alert ? 'bg-(--negative-subtle)' : 'bg-(--surface-muted)'}`}>
+      <dt className="flex items-center gap-1.5 text-xs text-(--foreground-muted)">
+        {term ? <Term>{term}</Term> : label}
+        {note ? <InfoHint label={name}>{note}</InfoHint> : null}
+      </dt>
+      <dd className={`mt-0.5 font-mono text-lg font-semibold ${alert ? 'text-(--negative)' : 'text-(--foreground)'}`}>
         {value}
       </dd>
-      {note ? <p className="mt-0.5 text-xs text-(--foreground-muted)">{note}</p> : null}
+      {alert ? (
+        <dd className="flex items-center gap-1 text-xs font-medium text-(--negative)">
+          <TriangleAlert aria-hidden className="h-3.5 w-3.5" />
+          {alert}
+        </dd>
+      ) : null}
     </div>
   );
 }
 
 function Check({
-  checked, disabled, onChange, label, hint,
+  checked, disabled, onChange, label, hint, requirement,
 }: {
   checked: boolean; disabled: boolean;
   onChange: (v: boolean) => void; label: string; hint: string;
+  /** Condition non remplie, dite en clair : elle explique la case grisée. */
+  requirement?: string;
 }) {
   return (
-    <label className="flex gap-3 rounded-lg border border-(--border) px-4 py-3">
+    <label
+      className={`flex gap-3 rounded-lg border px-4 py-3 transition-colors ${
+        checked ? 'border-(--accent) bg-(--accent-subtle)' : 'border-(--border) bg-(--surface)'
+      }`}
+    >
       <input
         type="checkbox" checked={checked} disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5"
+        className="mt-0.5 accent-(--accent)"
       />
       <span className="min-w-0">
-        <span className={`text-sm font-medium ${disabled ? 'text-(--foreground-muted)' : ''}`}>
+        <span className={`flex items-center gap-2 text-sm font-medium ${disabled ? 'text-(--foreground-muted)' : ''}`}>
           {label}
+          <InfoHint label={label}>{hint}</InfoHint>
         </span>
-        <span className="mt-0.5 block text-xs text-(--foreground-muted)">{hint}</span>
+        {requirement ? (
+          <span className="mt-0.5 block text-xs text-(--foreground-muted)">{requirement}</span>
+        ) : null}
       </span>
     </label>
   );

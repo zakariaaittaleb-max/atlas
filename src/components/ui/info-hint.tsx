@@ -18,6 +18,12 @@ import { useEffect, useId, useRef, useState } from 'react';
  * Le « + » pivote en « × » quand la bulle est ouverte : l'état se voit sans
  * dépendre de la couleur.
  *
+ * ── POURQUOI PAS UN <button> ───────────────────────────────────────────────
+ * Un tour verrouillé désactive ses champs par un `<fieldset disabled>`, qui
+ * désactive AUSSI tout bouton qu'il contient. L'aide doit pourtant rester
+ * lisible pendant le débriefing. Le déclencheur est donc un élément
+ * `role="button"` focusable, activé à la souris, à Entrée et à Espace.
+ *
  * Le contenu doit rester du texte en ligne (`span`, `strong`, `a`) : la bulle
  * peut être posée dans un titre, une légende ou un paragraphe.
  */
@@ -64,6 +70,15 @@ export function InfoHint({
     if (rect) setAlignEnd(rect.left > window.innerWidth - 320);
   }
 
+  function toggle(event: React.SyntheticEvent) {
+    // Posée dans un en-tête cliquable ou un <label>, la bulle ne doit ni
+    // replier la section ni cocher la case.
+    event.preventDefault();
+    event.stopPropagation();
+    place();
+    setPinned((value) => !value);
+  }
+
   return (
     <span
       ref={wrap}
@@ -71,27 +86,24 @@ export function InfoHint({
       onMouseEnter={() => { place(); setHovered(true); }}
       onMouseLeave={() => setHovered(false)}
     >
-      <button
-        type="button"
+      <span
+        role="button"
+        tabIndex={0}
         aria-label={`En savoir plus : ${label}`}
         aria-expanded={open}
         aria-controls={id}
-        onClick={(event) => {
-          // Posée dans un en-tête cliquable ou un <label>, la bulle ne doit ni
-          // replier la section ni activer le champ.
-          event.preventDefault();
-          event.stopPropagation();
-          place();
-          setPinned((value) => !value);
+        onClick={toggle}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') toggle(event);
         }}
-        className={`inline-flex h-5 w-5 items-center justify-center rounded-full border transition-[transform,background-color,border-color,color] duration-200 ${
+        className={`inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border transition-[transform,background-color,border-color,color] duration-200 ${
           open
             ? 'rotate-45 border-(--accent) bg-(--accent) text-(--on-accent)'
             : 'border-(--border-strong) bg-(--surface) text-(--foreground-muted) hover:border-(--accent) hover:text-(--accent-text)'
         }`}
       >
         <Plus aria-hidden className="h-3 w-3" strokeWidth={3} />
-      </button>
+      </span>
 
       {open ? (
         <span

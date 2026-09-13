@@ -19,15 +19,28 @@
  * d'ailleurs en la comparant au NOMBRE de domaines, ce qui n'a de sens qu'à
  * l'échelle du groupe. Les deux copies par domaine n'étaient lues par aucun
  * calcul : deux commandes pour une seule question, dont une sans effet.
+ *
+ * ── LA SYNTHÈSE D'ABORD ────────────────────────────────────────────────────
+ * Sept blocs de saisie s'empilaient, chacun précédé d'un paragraphe. L'écran
+ * s'ouvre désormais sur ce qui est décidé (rôle, effectif visé, climat,
+ * moyens répartis), puis un bloc repliable par décision, sa valeur courante
+ * dans le titre. Les explications sont sous les « + ».
  * ───────────────────────────────────────────────────────────────────────────
  */
 
+import { Star, TriangleAlert } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useState, useTransition } from 'react';
 
 import { useDasScope } from '@/components/das-scope';
 import { NumberInput, SaveIndicator } from '@/components/decision-shell';
-import { formatMadCompact, formatPct } from '@/lib/format';
+import { Accordion } from '@/components/ui/accordion';
+import { ChoiceCard, Definitions, GroupLegend } from '@/components/ui/form-controls';
+import { InfoHint } from '@/components/ui/info-hint';
+import { MetricToggle } from '@/components/ui/metric-toggle';
+import { StatCard } from '@/components/ui/stat-card';
+import { delta, formatMadCompact, formatPct, formatUnits } from '@/lib/format';
+import { hiresOf } from '@/lib/headcount-target';
 import type { DasOrganisation, OrgContext, PositionDraft } from '@/lib/org-types';
 import { useAutosave } from '@/lib/use-autosave';
 
@@ -149,490 +162,572 @@ export function OrganisationView({
   const overBudget = budgetTotal > context.operatingBudgetMad;
   const keyCount = das.positions.filter((p) => p.isKeyPosition).length;
 
+  // ── La synthèse, calculée comme les blocs la calculent ──────────────────
+  const role = PORTFOLIO_ROLES.find(([value]) => value === das.directives.portfolioRole);
+  const headcountNow = das.hrState?.headcount ?? 0;
+  const headcountTarget = Math.max(headcountNow + hiresOf(das.hr) - das.hr.layoffs, 0);
+  const divergences = context.group === null
+    ? 0
+    : HQ_FUNCTIONS.filter(
+        ([key, , moduleKey]) =>
+          isOn(modules, moduleKey) && context.group![CENTRAL_OF[key]] !== das.directives[key],
+      ).length;
+  const axesChosen = das.axisKeys.filter(Boolean).length;
+  const kpisChosen = context.directions.filter((direction) =>
+    das.kpis.some((k) => k.directionKey === direction.key),
+  ).length;
+
+  const cards = [
+    isOn(modules, 'org.portfolio_role') ? (
+      <StatCard
+        key="role"
+        size="sm"
+        label="Rôle dans le portefeuille"
+        value={role ? role[1] : 'À choisir'}
+        note={
+          context.group === null
+            ? 'Stratégie du Groupe pas encore arrêtée'
+            : divergences > 0
+              ? `${divergences} divergence${divergences > 1 ? 's' : ''} avec le Groupe`
+              : 'Aligné sur les directives du Groupe'
+        }
+        hint="Le rôle fixe l’intensité d’investissement attendue de ce domaine."
+      />
+    ) : null,
+    anyOn(modules, HR_KEYS) ? (
+      <StatCard
+        key="headcount"
+        label="Effectif visé"
+        value={formatUnits(headcountTarget)}
+        delta={das.hrState ? delta(headcountTarget, headcountNow, (v) => formatUnits(Math.round(v))) : null}
+        note="Aucun exercice clos pour ce domaine"
+        polarity="neutral"
+        hint="Effectif en place, plus les recrutements, moins les départs décidés dans le bloc Ressources humaines."
+      />
+    ) : null,
+    das.hrState ? (
+      <StatCard
+        key="climate"
+        label="Climat social"
+        value={das.hrState.climatSocial.toFixed(0)}
+        note={das.hrState.climatSocial < 60 ? 'Sous 60 : la production en pâtit' : 'Dernier exercice clos'}
+        hint="Sous 60, une part de l’outil cesse de produire et chaque unité produite coûte plus cher. L’effet se voit au tour suivant."
+      />
+    ) : null,
+    isOn(modules, 'org.budgets') ? (
+      <StatCard
+        key="budget"
+        label="Moyens répartis"
+        value={formatPct(budgetShare, 0)}
+        note={
+          overBudget
+            ? `Dépassement de ${formatMadCompact(budgetTotal - context.operatingBudgetMad)}`
+            : `${formatMadCompact(budgetTotal)} sur ${formatMadCompact(context.operatingBudgetMad)}`
+        }
+        hint="Part du budget de fonctionnement affectée aux directions de ce domaine."
+      />
+    ) : null,
+  ].filter(Boolean);
+
+  const inherited = das.inheritedFromRound !== null && das.inheritedFromRound < context.roundNumber;
+
   return (
     <>
-      <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-10">
-        <header className="mb-8">
-          <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
-            Exercice {context.roundNumber} · {context.teamName}
+      <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-8 lg:py-10">
+        <header className="mb-6">
+          <p className="text-xs font-semibold tracking-wider text-(--accent-text) uppercase">
+            Exercice {context.roundNumber} · {context.teamName} · niveau domaine
           </p>
-          <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">Organisation</h1>
-          <p className="mt-3 max-w-3xl text-(--foreground-muted)">
-            Chaque domaine d’activité se structure séparément : un métier industriel et un métier
-            de compétences ne se pilotent pas de la même façon. Ces choix pèsent{' '}
-            <strong>35 % de votre indice d’alignement</strong>, et donc sur votre chiffre
-            d’affaires.
-          </p>
-          {das.inheritedFromRound !== null && das.inheritedFromRound < context.roundNumber ? (
-            <p className="mt-3 rounded-lg border border-(--border) px-4 py-2.5 text-sm text-(--foreground-muted)">
-              Organisation héritée de l’exercice {das.inheritedFromRound}. Elle reste en vigueur
-              tant que vous ne la modifiez pas — comme dans une entreprise réelle.
+          <h1 className="mt-1 flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight text-(--heading)">
+            Organisation &amp; RH
+            <InfoHint label="Organisation et RH">
+              Chaque domaine d’activité se structure séparément : un métier industriel et un
+              métier de compétences ne se pilotent pas de la même façon. Ces choix pèsent{' '}
+              <strong>35 % de votre indice d’alignement</strong>, et donc sur votre chiffre
+              d’affaires. La forme de structure, la vision et la mission se décident au niveau
+              Groupe, dans{' '}
+              <a href="/strategie" className="font-medium text-(--accent-text) underline">
+                Stratégie du Groupe
+              </a>.
+            </InfoHint>
+          </h1>
+          {inherited ? (
+            <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-(--surface) px-3 py-1 text-sm text-(--foreground-muted) ring-1 ring-(--border)">
+              Organisation héritée de l’exercice {das.inheritedFromRound}
+              <InfoHint label="Organisation héritée">
+                Elle reste en vigueur tant que vous ne la modifiez pas — comme dans une entreprise
+                réelle.
+              </InfoHint>
             </p>
           ) : null}
         </header>
 
-        {/* Le sélecteur de domaine n'est plus ici : il vit dans la barre de
-            navigation, où il suit l'équipe d'un écran à l'autre. En garder une
-            copie sur cette page donnait deux commandes pour une seule question,
-            et rien ne disait laquelle faisait foi. */}
+        <div className="space-y-4">
+          {cards.length > 0 ? (
+            <div className={`grid gap-4 sm:grid-cols-2 ${cards.length >= 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+              {cards}
+            </div>
+          ) : null}
 
-        {/* ── Directives du Groupe ─────────────────────────────────────── */}
-        {anyOn(modules, DIRECTIVES_KEYS) ? (
-        <Section
-          title="Ce DAS face aux directives du Groupe"
-          hint="Le groupe arbitre, ce DAS se situe. Suivre une directive inadaptée à votre métier dégrade votre cohérence propre ; s’en écarter dégrade celle du groupe. Les deux coûtent — c’est l’arbitrage."
-        >
-          {context.group === null ? (
-            <p className="rounded-lg border border-(--border) px-4 py-3 text-sm text-(--foreground-muted)">
-              Votre groupe n’a pas encore arrêté sa stratégie. Renseignez-la dans{' '}
-              <a href="/strategie" className="underline">Stratégie</a> : sans directive,
-              se positionner n’a pas de sens.
-            </p>
-          ) : (
-            <fieldset disabled={locked} className="space-y-6">
-              {isOn(modules, 'org.portfolio_role') ? (
-              <div>
-                <span className="text-sm font-medium">
-                  Rôle de ce DAS dans le portefeuille
-                </span>
-                <p className="mt-1 text-sm text-(--foreground-muted)">
-                  Ce n’est pas un titre honorifique : le rôle fixe l’intensité d’investissement
-                  attendue. Un « moteur » qu’on ne finance pas est une contradiction, et un
-                  portefeuille sans « soutien » ni « réserve » est un portefeuille qui n’arbitre pas.
+          {/* ── Directives du Groupe ─────────────────────────────────────── */}
+          {anyOn(modules, DIRECTIVES_KEYS) ? (
+            <Accordion
+              title="Directives du Groupe"
+              defaultOpen
+              summary={
+                context.group === null
+                  ? 'Groupe non arrêté'
+                  : `${role ? role[1] : 'rôle à choisir'}${divergences > 0 ? ` · ${divergences} divergence${divergences > 1 ? 's' : ''}` : ''}`
+              }
+              hint="Le groupe arbitre, ce DAS se situe. Suivre une directive inadaptée à votre métier dégrade votre cohérence propre ; s’en écarter dégrade celle du groupe. Les deux coûtent — c’est l’arbitrage."
+            >
+              {context.group === null ? (
+                <p className="text-sm text-(--foreground-muted)">
+                  Votre groupe n’a pas encore arrêté sa stratégie. Renseignez-la dans{' '}
+                  <a href="/strategie" className="font-medium text-(--accent-text) underline">Stratégie du Groupe</a>{' '}
+                  : sans directive, se positionner n’a pas de sens.
                 </p>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {PORTFOLIO_ROLES.map(([value, label, hint]) => (
-                    <button
-                      key={value} type="button" disabled={locked}
-                      onClick={() => {
-                        const directives = { ...das.directives, portfolioRole: value };
-                        update({ directives });
-                        push('directives', directives);
-                      }}
-                      className="rounded-lg border px-4 py-3 text-left text-sm"
-                      style={{
-                        borderColor: das.directives.portfolioRole === value
-                          ? 'var(--accent)' : 'var(--border)',
-                        background: das.directives.portfolioRole === value
-                          ? 'var(--surface-muted)' : undefined,
-                      }}
-                    >
-                      <span className="font-medium">{label}</span>
-                      <span className="mt-1 block text-(--foreground-muted)">{hint}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              ) : null}
-
-              {anyOn(modules, HQ_KEYS) ? (
-              <div>
-                <span className="text-sm font-medium">Fonctions déléguées au siège</span>
-                <p className="mt-1 text-sm text-(--foreground-muted)">
-                  Ce que le groupe a centralisé figure en regard. Refuser une centralisation
-                  décidée en haut brise l’économie d’échelle ; l’accepter quand votre métier
-                  exige de la réactivité vous coûte cette réactivité.
-                </p>
-                <div className="mt-3 space-y-2">
-                  {HQ_FUNCTIONS.filter(([, , moduleKey]) => isOn(modules, moduleKey)).map(([key, label]) => {
-                    const central = context.group![CENTRAL_OF[key]];
-                    const delegated = das.directives[key];
-                    return (
-                      <div
-                        key={key}
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-(--border) px-4 py-3"
-                      >
-                        <div className="min-w-0">
-                          <span className="text-sm font-medium">{label}</span>
-                          <span className="ml-2 text-sm text-(--foreground-muted)">
-                            {central ? 'centralisée par le groupe' : 'laissée aux DAS'}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          {central !== delegated ? (
-                            <span className="text-sm text-(--negative)">divergence</span>
-                          ) : null}
-                          <button
-                            type="button" disabled={locked}
-                            onClick={() => {
-                              const directives = { ...das.directives, [key]: !delegated };
+              ) : (
+                <div className="space-y-8">
+                  {isOn(modules, 'org.portfolio_role') ? (
+                    <fieldset disabled={locked}>
+                      <GroupLegend title="Rôle de ce DAS dans le portefeuille">
+                        <span className="block">
+                          Ce n’est pas un titre honorifique : le rôle fixe l’intensité
+                          d’investissement attendue. Un « moteur » qu’on ne finance pas est une
+                          contradiction, et un portefeuille sans « soutien » ni « réserve » est un
+                          portefeuille qui n’arbitre pas.
+                        </span>
+                        <span className="mt-3 block">
+                          <Definitions items={PORTFOLIO_ROLES.map(([, label, hint]) => [label, hint] as const)} />
+                        </span>
+                      </GroupLegend>
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        {PORTFOLIO_ROLES.map(([value, label]) => (
+                          <ChoiceCard
+                            key={value}
+                            title={label}
+                            selected={das.directives.portfolioRole === value}
+                            onSelect={() => {
+                              const directives = { ...das.directives, portfolioRole: value };
                               update({ directives });
                               push('directives', directives);
                             }}
-                            className="rounded-lg border px-3 py-1.5 text-sm"
-                            style={{
-                              borderColor: delegated ? 'var(--accent)' : 'var(--border)',
-                              background: delegated ? 'var(--surface-muted)' : undefined,
-                            }}
-                          >
-                            {delegated ? 'déléguée' : 'gardée ici'}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              ) : null}
-
-              {das.sharedOffers.length > 0 && isOn(modules, 'org.shared_resources') ? (
-                <div>
-                  <span className="text-sm font-medium">Ressources mutualisées ouvertes à ce DAS</span>
-                  <p className="mt-1 text-sm text-(--foreground-muted)">
-                    Mutualiser entre métiers proches produit des économies ; entre métiers
-                    étrangers, surtout de la coordination. La proximité indiquée est celle de
-                    ce DAS aux autres utilisateurs — en dessous de 40, s’abstenir est le bon choix.
-                    On ne standardise que ce qu’on a d’abord réellement adopté.
-                  </p>
-                  <div className="mt-3 space-y-3">
-                    {das.sharedOffers.map((offer, i) => (
-                      <div key={offer.resourceKey} className="rounded-lg border border-(--border) p-4">
-                        <div className="flex flex-wrap items-baseline justify-between gap-2">
-                          <span className="text-sm font-medium">{offer.label}</span>
-                          <span className="tabular text-sm text-(--foreground-muted)">
-                            proximité {Math.round(offer.proximity)}
-                          </span>
-                        </div>
-                        <label className="mt-3 block">
-                          <span className="text-sm text-(--foreground-muted)">
-                            Adhésion : {offer.adoptionLevel}
-                          </span>
-                          <input
-                            type="range" min={0} max={100} step={5}
-                            value={offer.adoptionLevel} disabled={locked}
-                            onChange={(e) => {
-                              const level = Number(e.target.value);
-                              const next = das.sharedOffers.map((o, j) =>
-                                j === i
-                                  ? { ...o, adoptionLevel: level,
-                                      standardised: o.standardised && level >= 50 }
-                                  : o,
-                              );
-                              update({ sharedOffers: next });
-                              push('mutualisation', {
-                                resources: next.map((o) => ({
-                                  resourceKey: o.resourceKey,
-                                  adoptionLevel: o.adoptionLevel,
-                                  standardised: o.standardised,
-                                })),
-                              });
-                            }}
-                            className="mt-2 w-full"
                           />
-                        </label>
-                        <label className="mt-2 flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox" checked={offer.standardised}
-                            disabled={locked || offer.adoptionLevel < 50}
-                            onChange={(e) => {
-                              const next = das.sharedOffers.map((o, j) =>
-                                j === i ? { ...o, standardised: e.target.checked } : o,
-                              );
-                              update({ sharedOffers: next });
-                              push('mutualisation', {
-                                resources: next.map((o) => ({
-                                  resourceKey: o.resourceKey,
-                                  adoptionLevel: o.adoptionLevel,
-                                  standardised: o.standardised,
-                                })),
-                              });
-                            }}
-                          />
-                          <span className={offer.adoptionLevel < 50 ? 'text-(--foreground-muted)' : ''}>
-                            Standardiser sur cette plateforme
-                            {offer.adoptionLevel < 50 ? ' — exige au moins 50 d’adhésion' : ''}
-                          </span>
-                        </label>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </fieldset>
-          )}
-        </Section>
-        ) : null}
+                    </fieldset>
+                  ) : null}
 
-        {/* ── Ressources humaines ──────────────────────────────────────── */}
-        {anyOn(modules, HR_KEYS) ? (
-        <Section
-          title="Ressources humaines de ce domaine"
-          hint="Chaque métier a sa pyramide et sa sensibilité à la formation. Les indicateurs du dernier exercice figurent en tête : on décide en regardant d’où l’on part."
-        >
-          <HrSection
-            hr={das.hr}
-            state={das.hrState}
-            locked={locked}
-            modules={modules}
-            previous={das.hrPrevious}
-            scales={scales}
-            basis={basisFor(das, context)}
-            onChange={(hr) => {
-              update({ hr });
-              push('hr', { ...hr });
-            }}
-          />
-        </Section>
-        ) : null}
+                  {anyOn(modules, HQ_KEYS) ? (
+                    <fieldset disabled={locked}>
+                      <GroupLegend title="Fonctions déléguées au siège">
+                        Ce que le groupe a centralisé figure en regard. Refuser une centralisation
+                        décidée en haut brise l’économie d’échelle ; l’accepter quand votre métier
+                        exige de la réactivité vous coûte cette réactivité.
+                      </GroupLegend>
+                      <ul className="divide-y divide-(--border) rounded-lg border border-(--border)">
+                        {HQ_FUNCTIONS.filter(([, , moduleKey]) => isOn(modules, moduleKey)).map(([key, label]) => {
+                          const central = context.group![CENTRAL_OF[key]];
+                          const delegated = das.directives[key];
+                          return (
+                            <li key={key} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium">{label}</p>
+                                <p className="text-xs text-(--meta)">
+                                  Groupe : {central ? 'centralisée' : 'laissée aux DAS'}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-3">
+                                {central !== delegated ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-(--warning-subtle) px-2 py-0.5 text-xs font-semibold text-(--warning)">
+                                    <TriangleAlert aria-hidden className="h-3.5 w-3.5" />
+                                    divergence
+                                  </span>
+                                ) : null}
+                                <MetricToggle
+                                  variant="segmented"
+                                  size="sm"
+                                  label={`${label} : déléguée ou gardée`}
+                                  options={[
+                                    { key: 'delegated', label: 'Déléguée au siège' },
+                                    { key: 'kept', label: 'Gardée ici' },
+                                  ]}
+                                  value={delegated ? 'delegated' : 'kept'}
+                                  onChange={(choice) => {
+                                    if ((choice === 'delegated') === delegated) return;
+                                    const directives = { ...das.directives, [key]: choice === 'delegated' };
+                                    update({ directives });
+                                    push('directives', directives);
+                                  }}
+                                />
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </fieldset>
+                  ) : null}
 
-        {/* ── Axes stratégiques ────────────────────────────────────────────
-            La vision et la mission ont été retirées d'ici : elles étaient déjà
-            saisies au niveau Groupe, sur `/strategie`. Une entreprise a UNE
-            vision ; ce qu'un domaine déclare de spécifique, ce sont ses axes —
-            et eux, contrairement à un texte libre, pèsent sur l'alignement. */}
-        {isOn(modules, 'org.axes') ? (
-        <Section
-          title="Axes stratégiques"
-          hint="La vision et la mission du Groupe se déclarent dans l’écran Stratégie. Ici, ce domaine dit ce qu’il PRIORISE — et c’est cela qui est mesuré."
-        >
-          <fieldset disabled={locked}>
-            <legend className="mb-1 text-sm font-medium">
-              Vos trois axes stratégiques, par ordre de priorité
-            </legend>
-            <p className="mb-3 text-xs text-(--foreground-muted)">
-              L’ordre compte : le premier axe pèse trois fois plus que le troisième. Choisir trois
-              priorités n’est un arbitrage que si l’on en écarte d’autres.
-            </p>
-
-            <ol className="mb-3 space-y-2">
-              {[0, 1, 2].map((rank) => {
-                const key = das.axisKeys[rank];
-                const axis = context.axes.find((a) => a.key === key);
-                return (
-                  <li key={rank} className="flex flex-wrap items-center gap-3 rounded-lg border border-(--border) p-3">
-                    <span className="tabular w-6 font-semibold text-(--foreground-muted)">{rank + 1}</span>
-                    <select
-                      value={key ?? ''}
-                      onChange={(e) => {
-                        const next = [...das.axisKeys];
-                        next[rank] = e.target.value;
-                        // Trois axes DISTINCTS : sélectionner deux fois le même
-                        // reviendrait à n'en choisir que deux.
-                        if (new Set(next.filter(Boolean)).size !== next.filter(Boolean).length) return;
-                        update({ axisKeys: next });
-                        if (next.filter(Boolean).length === 3) push('axes', { axisKeys: next });
-                      }}
-                      className="min-w-0 flex-1 rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
-                    >
-                      <option value="">— choisir un axe —</option>
-                      {context.axes.map((a) => (
-                        <option key={a.key} value={a.key}>{a.name}</option>
-                      ))}
-                    </select>
-                    {axis ? (
-                      <span className="w-full text-xs text-(--foreground-muted)">{axis.description}</span>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ol>
-          </fieldset>
-        </Section>
-        ) : null}
-
-        {/* ── Délégation ───────────────────────────────────────────────────
-            La FORME de structure a été retirée d'ici : elle se décide au niveau
-            Groupe, sur `/strategie`. Le moteur la juge en la comparant au NOMBRE
-            de domaines — « fonctionnelle au-delà de quatre métiers », « matricielle
-            pour un seul » — ce qui n'a de sens qu'à l'échelle de l'entreprise. La
-            copie par domaine n'était lue par aucun calcul : deux commandes pour
-            une seule question, dont une sans effet. */}
-        {isOn(modules, 'org.delegation') ? (
-        <Section
-          title="Délégation"
-          hint="La forme de structure se décide au niveau Groupe, dans l’écran Stratégie. Ce qui se règle ici est le degré d’autonomie laissé à CE métier — et ni le sommet ni le terrain n’ont raison dans l’absolu : standardiser sert les coûts, décider vite sert une niche exigeante."
-        >
-          <fieldset disabled={locked}>
-            <legend className="mb-2 text-sm font-medium">
-              Niveau de délégation : <span className="tabular">{das.delegationLevel}</span>
-            </legend>
-            <input
-              type="range" min={0} max={100} step={5} value={das.delegationLevel}
-              onChange={(e) => {
-                const delegationLevel = Number(e.target.value);
-                update({ delegationLevel });
-                push('design', { delegationLevel });
-              }}
-              className="w-full"
-            />
-            <div className="mt-1 flex justify-between text-xs text-(--foreground-muted)">
-              <span>0 — toute décision remonte au sommet</span>
-              <span>100 — le terrain décide seul</span>
-            </div>
-          </fieldset>
-        </Section>
-        ) : null}
-
-        {/* ── Organigramme ─────────────────────────────────────────────── */}
-        {isOn(modules, 'org.positions') ? (
-        <Section
-          title="Organigramme"
-          hint={`Déclarer un poste CLÉ, c'est y concentrer l'attention et les moyens. Au-delà de trois, « clé » cesse de vouloir dire quelque chose — vous en avez ${keyCount}.`}
-        >
-          <PositionEditor
-            positions={das.positions}
-            inheritedHeadcount={das.inheritedHeadcount}
-            directions={context.directions}
-            locked={locked}
-            onChange={(positions) => {
-              update({ positions });
-              push('positions', { positions });
-            }}
-          />
-        </Section>
-        ) : null}
-
-        {/* ── Pilotage ─────────────────────────────────────────────────── */}
-        {isOn(modules, 'org.kpis') ? (
-        <Section
-          title="Indicateurs de pilotage"
-          hint="Choisir un indicateur, c'est décider de ce que la direction va optimiser — donc de ce qu'elle va sacrifier. Un responsable de production suivi sur le coût unitaire et un autre suivi sur le taux de rebut ne prendront pas les mêmes décisions."
-        >
-          <div className="space-y-3">
-            {context.directions.map((direction) => {
-              const current = das.kpis.find((k) => k.directionKey === direction.key);
-              const options = context.kpis.filter((k) => k.directionKey === direction.key);
-              const chosen = options.find((o) => o.key === current?.kpiKey);
-
-              return (
-                <div key={direction.key} className="rounded-lg border border-(--border) p-3">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="min-w-0 flex-1 text-sm font-medium">{direction.name}</span>
-                    <select
-                      disabled={locked}
-                      value={current?.kpiKey ?? ''}
-                      onChange={(e) => {
-                        const kpis = das.kpis.filter((k) => k.directionKey !== direction.key);
-                        if (e.target.value) {
-                          kpis.push({ directionKey: direction.key, kpiKey: e.target.value });
-                        }
-                        update({ kpis });
-                        push('kpis', {
-                          kpis: kpis.map((k) => ({ ...k, targetValue: null })),
-                        });
-                      }}
-                      className="w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm sm:w-80"
-                    >
-                      <option value="">— aucun indicateur —</option>
-                      {options.map((o) => (
-                        <option key={o.key} value={o.key}>{o.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {chosen ? (
-                    <p className="mt-2 text-xs text-(--foreground-muted)">{chosen.description}</p>
+                  {das.sharedOffers.length > 0 && isOn(modules, 'org.shared_resources') ? (
+                    <fieldset disabled={locked}>
+                      <GroupLegend title="Ressources mutualisées ouvertes à ce DAS">
+                        Mutualiser entre métiers proches produit des économies ; entre métiers
+                        étrangers, surtout de la coordination. La proximité indiquée est celle de
+                        ce DAS aux autres utilisateurs — en dessous de 40, s’abstenir est le bon
+                        choix. On ne standardise que ce qu’on a d’abord réellement adopté.
+                      </GroupLegend>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {das.sharedOffers.map((offer, i) => {
+                          const send = (next: typeof das.sharedOffers) => {
+                            update({ sharedOffers: next });
+                            push('mutualisation', {
+                              resources: next.map((o) => ({
+                                resourceKey: o.resourceKey,
+                                adoptionLevel: o.adoptionLevel,
+                                standardised: o.standardised,
+                              })),
+                            });
+                          };
+                          return (
+                            <div key={offer.resourceKey} className="rounded-lg border border-(--border) p-4">
+                              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                <span className="text-sm font-medium">{offer.label}</span>
+                                <span
+                                  className={`tabular text-xs font-semibold ${offer.proximity < 40 ? 'text-(--warning)' : 'text-(--foreground-muted)'}`}
+                                >
+                                  proximité {Math.round(offer.proximity)}
+                                  {offer.proximity < 40 ? ' · faible' : ''}
+                                </span>
+                              </div>
+                              <label className="mt-3 block">
+                                <span className="tabular text-sm text-(--foreground-muted)">
+                                  Adhésion : <strong className="text-(--foreground)">{offer.adoptionLevel}</strong>
+                                </span>
+                                <input
+                                  type="range" min={0} max={100} step={5}
+                                  value={offer.adoptionLevel}
+                                  onChange={(e) => {
+                                    const level = Number(e.target.value);
+                                    send(das.sharedOffers.map((o, j) =>
+                                      j === i
+                                        ? { ...o, adoptionLevel: level, standardised: o.standardised && level >= 50 }
+                                        : o,
+                                    ));
+                                  }}
+                                  className="mt-2 w-full accent-(--accent)"
+                                />
+                              </label>
+                              <label className="mt-2 flex items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox" checked={offer.standardised}
+                                  disabled={offer.adoptionLevel < 50}
+                                  onChange={(e) =>
+                                    send(das.sharedOffers.map((o, j) =>
+                                      j === i ? { ...o, standardised: e.target.checked } : o,
+                                    ))
+                                  }
+                                  className="accent-(--accent)"
+                                />
+                                <span className={offer.adoptionLevel < 50 ? 'text-(--foreground-muted)' : ''}>
+                                  Standardiser sur cette plateforme
+                                  {offer.adoptionLevel < 50 ? ' — exige 50 d’adhésion' : ''}
+                                </span>
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
                   ) : null}
                 </div>
-              );
-            })}
-          </div>
-        </Section>
-        ) : null}
-
-        {/* ── Budgets ──────────────────────────────────────────────────── */}
-        {isOn(modules, 'org.budgets') ? (
-        <Section
-          title="Répartition des moyens"
-          hint="Là où va l'argent dit ce que vous faites vraiment. Déclarer une différenciation en finançant la production comme une usine low-cost est l'incohérence que le moteur relève le plus sûrement."
-        >
-          {/* ── L'assiette, en permanence sous les yeux ──────────────────
-              On répartit un pourcentage d'un total : sans ce total affiché,
-              « 12 % à la production » ne dit pas si c'est 200 M ou 2 Md, et la
-              répartition se fait à l'aveugle. */}
-          <dl className="tabular mb-4 flex flex-wrap gap-x-8 gap-y-2 rounded-lg border border-(--border) bg-(--surface-muted) px-4 py-3 text-sm">
-            <div>
-              <dt className="text-xs text-(--foreground-muted)">Budget total à répartir</dt>
-              <dd className="font-semibold">{formatMadCompact(context.operatingBudgetMad)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-(--foreground-muted)">Réparti</dt>
-              <dd
-                className="font-semibold"
-                style={{ color: overBudget ? 'var(--negative)' : undefined }}
-              >
-                {formatMadCompact(budgetTotal)}
-                {' · '}
-                {formatPct(budgetShare, 0)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-(--foreground-muted)">
-                {overBudget ? 'Dépassement' : 'Non affecté'}
-              </dt>
-              <dd
-                className="font-semibold"
-                style={{ color: overBudget ? 'var(--negative)' : undefined }}
-              >
-                {formatMadCompact(Math.abs(context.operatingBudgetMad - budgetTotal))}
-              </dd>
-            </div>
-          </dl>
-
-          {overBudget ? (
-            <p role="alert" className="mb-4 text-sm text-(--negative)">
-              Vous répartissez plus que votre marge brute attendue. Le moteur ne créera pas
-              l’argent manquant : l’écart se paiera en trésorerie.
-            </p>
+              )}
+            </Accordion>
           ) : null}
 
-          <div className="space-y-2">
-            {context.directions.map((direction) => {
-              const budget = das.budgets.find((b) => b.directionKey === direction.key)?.budgetMad ?? 0;
-              // Le pourcentage porte sur l'ASSIETTE, pas sur ce qui est déjà
-              // réparti : sinon déplacer un curseur changerait le libellé de
-              // tous les autres sans que personne y ait touché.
-              const pct = context.operatingBudgetMad > 0
-                ? (budget / context.operatingBudgetMad) * 100
-                : 0;
+          {/* ── Ressources humaines ──────────────────────────────────────── */}
+          {anyOn(modules, HR_KEYS) ? (
+            <Accordion
+              title="Ressources humaines"
+              summary={`effectif ${formatUnits(headcountTarget)}`}
+              hint="Chaque métier a sa pyramide et sa sensibilité à la formation. Les indicateurs du dernier exercice figurent en tête du bloc : on décide en regardant d’où l’on part."
+            >
+              <HrSection
+                hr={das.hr}
+                state={das.hrState}
+                locked={locked}
+                modules={modules}
+                previous={das.hrPrevious}
+                scales={scales}
+                basis={basisFor(das, context)}
+                onChange={(hr) => {
+                  update({ hr });
+                  push('hr', { ...hr });
+                }}
+              />
+            </Accordion>
+          ) : null}
 
-              const setPct = (next: number) => {
-                const budgets = das.budgets.filter((b) => b.directionKey !== direction.key);
-                budgets.push({
-                  directionKey: direction.key,
-                  budgetMad: Math.round((next / 100) * context.operatingBudgetMad),
-                });
-                update({ budgets });
-                push('budgets', { budgets });
-              };
+          {/* ── Axes stratégiques ────────────────────────────────────────────
+              La vision et la mission ont été retirées d'ici : elles étaient déjà
+              saisies au niveau Groupe, sur `/strategie`. Une entreprise a UNE
+              vision ; ce qu'un domaine déclare de spécifique, ce sont ses axes —
+              et eux, contrairement à un texte libre, pèsent sur l'alignement. */}
+          {isOn(modules, 'org.axes') ? (
+            <Accordion
+              title="Axes stratégiques"
+              summary={`${axesChosen} sur 3`}
+              hint="Ce domaine dit ce qu’il PRIORISE — et c’est cela qui est mesuré. L’ordre compte : le premier axe pèse trois fois plus que le troisième. Choisir trois priorités n’est un arbitrage que si l’on en écarte d’autres."
+            >
+              <fieldset disabled={locked}>
+                <legend className="sr-only">Vos trois axes stratégiques, par ordre de priorité</legend>
+                <ol className="space-y-2">
+                  {[0, 1, 2].map((rank) => {
+                    const key = das.axisKeys[rank];
+                    const axis = context.axes.find((a) => a.key === key);
+                    return (
+                      <li key={rank} className="flex items-center gap-3 rounded-lg border border-(--border) p-3">
+                        <span
+                          aria-hidden
+                          className="tabular flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-(--accent-subtle) font-mono text-sm font-semibold text-(--accent-text)"
+                        >
+                          {rank + 1}
+                        </span>
+                        <select
+                          aria-label={`Axe prioritaire n° ${rank + 1}`}
+                          value={key ?? ''}
+                          onChange={(e) => {
+                            const next = [...das.axisKeys];
+                            next[rank] = e.target.value;
+                            // Trois axes DISTINCTS : sélectionner deux fois le même
+                            // reviendrait à n'en choisir que deux.
+                            if (new Set(next.filter(Boolean)).size !== next.filter(Boolean).length) return;
+                            update({ axisKeys: next });
+                            if (next.filter(Boolean).length === 3) push('axes', { axisKeys: next });
+                          }}
+                          className="min-w-0 flex-1 rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
+                        >
+                          <option value="">— choisir un axe —</option>
+                          {context.axes.map((a) => (
+                            <option key={a.key} value={a.key}>{a.name}</option>
+                          ))}
+                        </select>
+                        {axis ? <InfoHint label={axis.name}>{axis.description}</InfoHint> : null}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </fieldset>
+            </Accordion>
+          ) : null}
 
-              return (
-                <div
-                  key={direction.key}
-                  className="rounded-lg border border-(--border) p-3"
-                >
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                    <span className="text-sm font-medium">{direction.name}</span>
-                    <span className="tabular text-sm">
-                      {formatPct(pct / 100, 1)}
-                      <span className="ml-2 text-(--foreground-muted)">
-                        {formatMadCompact(budget)}
-                      </span>
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={1}
-                    disabled={locked}
-                    value={Math.round(pct)}
-                    aria-label={`Part du budget allouée à ${direction.name}`}
-                    onChange={(event) => setPct(Number(event.target.value))}
-                    className="mt-2 w-full"
-                  />
+          {/* ── Délégation ───────────────────────────────────────────────────
+              La FORME de structure a été retirée d'ici : elle se décide au niveau
+              Groupe, sur `/strategie`. Le moteur la juge en la comparant au NOMBRE
+              de domaines — « fonctionnelle au-delà de quatre métiers », « matricielle
+              pour un seul » — ce qui n'a de sens qu'à l'échelle de l'entreprise. La
+              copie par domaine n'était lue par aucun calcul : deux commandes pour
+              une seule question, dont une sans effet. */}
+          {isOn(modules, 'org.delegation') ? (
+            <Accordion
+              title="Délégation"
+              summary={`${das.delegationLevel} / 100`}
+              hint="Le degré d’autonomie laissé à CE métier. Ni le sommet ni le terrain n’ont raison dans l’absolu : standardiser sert les coûts, décider vite sert une niche exigeante. La forme de structure, elle, se décide dans Stratégie du Groupe."
+            >
+              <fieldset disabled={locked}>
+                <legend className="sr-only">Niveau de délégation</legend>
+                <p className="tabular font-mono text-2xl font-medium">{das.delegationLevel}</p>
+                <input
+                  type="range" min={0} max={100} step={5} value={das.delegationLevel}
+                  aria-label="Niveau de délégation, de 0 (tout remonte au sommet) à 100 (le terrain décide seul)"
+                  onChange={(e) => {
+                    const delegationLevel = Number(e.target.value);
+                    update({ delegationLevel });
+                    push('design', { delegationLevel });
+                  }}
+                  className="mt-3 w-full accent-(--accent)"
+                />
+                <div className="mt-1 flex justify-between text-xs text-(--foreground-muted)">
+                  <span>0 — tout remonte au sommet</span>
+                  <span>100 — le terrain décide seul</span>
                 </div>
-              );
-            })}
-          </div>
-        </Section>
-        ) : null}
+              </fieldset>
+            </Accordion>
+          ) : null}
+
+          {/* ── Organigramme ─────────────────────────────────────────────── */}
+          {isOn(modules, 'org.positions') ? (
+            <Accordion
+              title="Organigramme"
+              summary={`${das.positions.length} poste${das.positions.length > 1 ? 's' : ''} · ${keyCount} clé${keyCount > 1 ? 's' : ''}`}
+              hint="Déclarer un poste CLÉ, c’est y concentrer l’attention et les moyens. Au-delà de trois, « clé » cesse de vouloir dire quelque chose."
+            >
+              {keyCount > 3 ? (
+                <p className="mb-4 inline-flex items-center gap-2 rounded-lg bg-(--warning-subtle) px-3 py-2 text-sm font-medium text-(--warning)">
+                  <TriangleAlert aria-hidden className="h-4 w-4" />
+                  {keyCount} postes clés : au-delà de trois, plus aucun ne l’est vraiment.
+                </p>
+              ) : null}
+              <PositionEditor
+                positions={das.positions}
+                inheritedHeadcount={das.inheritedHeadcount}
+                directions={context.directions}
+                locked={locked}
+                onChange={(positions) => {
+                  update({ positions });
+                  push('positions', { positions });
+                }}
+              />
+            </Accordion>
+          ) : null}
+
+          {/* ── Pilotage ─────────────────────────────────────────────────── */}
+          {isOn(modules, 'org.kpis') ? (
+            <Accordion
+              title="Indicateurs de pilotage"
+              summary={`${kpisChosen} sur ${context.directions.length}`}
+              hint="Choisir un indicateur, c’est décider de ce que la direction va optimiser — donc de ce qu’elle va sacrifier. Un responsable de production suivi sur le coût unitaire et un autre suivi sur le taux de rebut ne prendront pas les mêmes décisions."
+            >
+              <fieldset disabled={locked}>
+                <legend className="sr-only">Un indicateur par direction</legend>
+                <ul className="divide-y divide-(--border) rounded-lg border border-(--border)">
+                  {context.directions.map((direction) => {
+                    const current = das.kpis.find((k) => k.directionKey === direction.key);
+                    const options = context.kpis.filter((k) => k.directionKey === direction.key);
+                    const chosen = options.find((o) => o.key === current?.kpiKey);
+
+                    return (
+                      <li key={direction.key} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                        <span className="min-w-0 flex-1 text-sm font-medium">{direction.name}</span>
+                        <span className="flex w-full items-center gap-2 sm:w-auto">
+                          <select
+                            aria-label={`Indicateur de la direction ${direction.name}`}
+                            value={current?.kpiKey ?? ''}
+                            onChange={(e) => {
+                              const kpis = das.kpis.filter((k) => k.directionKey !== direction.key);
+                              if (e.target.value) {
+                                kpis.push({ directionKey: direction.key, kpiKey: e.target.value });
+                              }
+                              update({ kpis });
+                              push('kpis', {
+                                kpis: kpis.map((k) => ({ ...k, targetValue: null })),
+                              });
+                            }}
+                            className="w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm sm:w-80"
+                          >
+                            <option value="">— aucun indicateur —</option>
+                            {options.map((o) => (
+                              <option key={o.key} value={o.key}>{o.name}</option>
+                            ))}
+                          </select>
+                          {chosen ? <InfoHint label={chosen.name}>{chosen.description}</InfoHint> : null}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </fieldset>
+            </Accordion>
+          ) : null}
+
+          {/* ── Budgets ──────────────────────────────────────────────────── */}
+          {isOn(modules, 'org.budgets') ? (
+            <Accordion
+              title="Répartition des moyens"
+              summary={overBudget ? `dépassement ${formatMadCompact(budgetTotal - context.operatingBudgetMad)}` : `${formatPct(budgetShare, 0)} réparti`}
+              hint="Là où va l’argent dit ce que vous faites vraiment. Déclarer une différenciation en finançant la production comme une usine low-cost est l’incohérence que le moteur relève le plus sûrement."
+            >
+              {/* ── L'assiette, en permanence sous les yeux ──────────────────
+                  On répartit un pourcentage d'un total : sans ce total affiché,
+                  « 12 % à la production » ne dit pas si c'est 200 M ou 2 Md, et la
+                  répartition se fait à l'aveugle. */}
+              <dl className="tabular mb-4 grid gap-4 rounded-lg bg-(--surface-muted) p-4 text-sm sm:grid-cols-3">
+                <div>
+                  <dt className="text-xs text-(--foreground-muted)">Budget total à répartir</dt>
+                  <dd className="font-mono text-base font-semibold">{formatMadCompact(context.operatingBudgetMad)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-(--foreground-muted)">Réparti</dt>
+                  <dd className={`font-mono text-base font-semibold ${overBudget ? 'text-(--negative)' : ''}`}>
+                    {formatMadCompact(budgetTotal)} · {formatPct(budgetShare, 0)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-(--foreground-muted)">{overBudget ? 'Dépassement' : 'Non affecté'}</dt>
+                  <dd className={`font-mono text-base font-semibold ${overBudget ? 'text-(--negative)' : ''}`}>
+                    {overBudget ? '− ' : ''}{formatMadCompact(Math.abs(context.operatingBudgetMad - budgetTotal))}
+                  </dd>
+                </div>
+              </dl>
+
+              {overBudget ? (
+                <p role="alert" className="mb-4 flex items-start gap-2 rounded-lg bg-(--negative-subtle) px-3 py-2 text-sm text-(--negative)">
+                  <TriangleAlert aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+                  Vous répartissez plus que votre marge brute attendue. Le moteur ne créera pas
+                  l’argent manquant : l’écart se paiera en trésorerie.
+                </p>
+              ) : null}
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {context.directions.map((direction) => {
+                  const budget = das.budgets.find((b) => b.directionKey === direction.key)?.budgetMad ?? 0;
+                  // Le pourcentage porte sur l'ASSIETTE, pas sur ce qui est déjà
+                  // réparti : sinon déplacer un curseur changerait le libellé de
+                  // tous les autres sans que personne y ait touché.
+                  const pct = context.operatingBudgetMad > 0
+                    ? (budget / context.operatingBudgetMad) * 100
+                    : 0;
+
+                  const setPct = (next: number) => {
+                    const budgets = das.budgets.filter((b) => b.directionKey !== direction.key);
+                    budgets.push({
+                      directionKey: direction.key,
+                      budgetMad: Math.round((next / 100) * context.operatingBudgetMad),
+                    });
+                    update({ budgets });
+                    push('budgets', { budgets });
+                  };
+
+                  return (
+                    <div key={direction.key} className="rounded-lg border border-(--border) p-3">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                        <span className="text-sm font-medium">{direction.name}</span>
+                        <span className="tabular font-mono text-sm">
+                          {formatPct(pct / 100, 1)}
+                          <span className="ml-2 text-(--foreground-muted)">{formatMadCompact(budget)}</span>
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        disabled={locked}
+                        value={Math.round(pct)}
+                        aria-label={`Part du budget allouée à ${direction.name}`}
+                        onChange={(event) => setPct(Number(event.target.value))}
+                        className="mt-2 w-full accent-(--accent)"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </Accordion>
+          ) : null}
+        </div>
       </main>
 
-      <div className="sticky bottom-0 border-t border-(--border) bg-(--surface)">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-6 py-4">
-          <SaveIndicator
-            state={autosave.state} pending={autosave.pending} lastError={autosave.lastError}
-          />
+      <div className="sticky bottom-0 z-10 border-t border-(--border) bg-(--surface)">
+        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-4">
+          <div className="flex items-center gap-2">
+            <SaveIndicator
+              state={autosave.state} pending={autosave.pending} lastError={autosave.lastError}
+            />
+            <InfoHint label="Enregistrement de vos saisies">
+              Vos saisies sont enregistrées au fil de la frappe. « Terminer la conception » envoie
+              ce qui reste en file et recharge l’écran avec les valeurs enregistrées.
+            </InfoHint>
+          </div>
           <button
             type="button" disabled={pending || locked}
             onClick={async () => {
@@ -673,18 +768,6 @@ function basisFor(das: OrgContext['das'][number], context: OrgContext): Variatio
  */
 const SMIG_MAD = 3111;
 
-function Section({
-  title, hint, children,
-}: { title: string; hint: string; children: React.ReactNode }) {
-  return (
-    <section className="mb-8 rounded-xl border border-(--border) bg-(--surface) p-6">
-      <h2 className="text-xl font-medium">{title}</h2>
-      <p className="mt-1 mb-5 max-w-3xl text-sm text-(--foreground-muted)">{hint}</p>
-      {children}
-    </section>
-  );
-}
-
 /**
  * L'écart d'effectif d'un poste par rapport à l'organigramme hérité.
  *
@@ -705,8 +788,8 @@ function HeadcountDelta({
     );
   }
 
-  const delta = current - inherited;
-  if (delta === 0) {
+  const diff = current - inherited;
+  if (diff === 0) {
     return (
       <span className="tabular text-xs text-(--foreground-muted)">
         = hérité ({inherited})
@@ -715,13 +798,10 @@ function HeadcountDelta({
   }
 
   return (
-    <span
-      className="tabular text-xs"
-      style={{ color: delta > 0 ? 'var(--positive)' : 'var(--negative)' }}
-    >
-      {delta > 0 ? '↑ +' : '↓ −'}
-      {Math.abs(delta)}
-      <span className="ml-1 text-(--foreground-muted)">vs {inherited} hérité</span>
+    <span className="tabular text-xs font-medium text-(--foreground)">
+      {diff > 0 ? '↑ +' : '↓ −'}
+      {Math.abs(diff)}
+      <span className="ml-1 font-normal text-(--foreground-muted)">vs {inherited} hérité</span>
     </span>
   );
 }
@@ -749,30 +829,30 @@ function PositionEditor({
           .map(({ position, index }) => (
             <div
               key={`${position.directionKey}-${position.title}-${index}`}
-              className="rounded-lg border p-3"
-              style={{
-                borderColor: position.isKeyPosition ? 'var(--accent)' : 'var(--border)',
-                // Le retrait visuel matérialise la profondeur hiérarchique.
-                marginLeft: `${(position.hierarchyLevel - 1) * 16}px`,
-              }}
+              className={`rounded-lg border p-3 ${position.isKeyPosition ? 'border-(--accent) bg-(--accent-subtle)/40' : 'border-(--border)'}`}
+              // Le retrait visuel matérialise la profondeur hiérarchique.
+              style={{ marginLeft: `${(position.hierarchyLevel - 1) * 16}px` }}
             >
               <div className="flex flex-wrap items-center gap-2">
                 <input
+                  aria-label="Intitulé du poste"
                   disabled={locked} value={position.title}
                   onChange={(e) => patch(index, { title: e.target.value })}
-                  className="min-w-0 flex-1 rounded border border-(--border) bg-(--surface) px-2.5 py-1.5 text-sm font-medium"
+                  className="min-w-0 flex-1 rounded-md border border-(--border) bg-(--surface) px-2.5 py-1.5 text-sm font-medium"
                 />
                 <select
+                  aria-label="Direction"
                   disabled={locked} value={position.directionKey}
                   onChange={(e) => patch(index, { directionKey: e.target.value })}
-                  className="rounded border border-(--border) bg-(--surface) px-2.5 py-1.5 text-sm"
+                  className="rounded-md border border-(--border) bg-(--surface) px-2.5 py-1.5 text-sm"
                 >
                   {directions.map((d) => <option key={d.key} value={d.key}>{d.name}</option>)}
                 </select>
                 <select
+                  aria-label="Niveau hiérarchique"
                   disabled={locked} value={position.hierarchyLevel}
                   onChange={(e) => patch(index, { hierarchyLevel: Number(e.target.value) })}
-                  className="rounded border border-(--border) bg-(--surface) px-2.5 py-1.5 text-sm"
+                  className="rounded-md border border-(--border) bg-(--surface) px-2.5 py-1.5 text-sm"
                 >
                   {LEVELS.map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
@@ -796,18 +876,19 @@ function PositionEditor({
                 <button
                   type="button" disabled={locked} aria-pressed={position.isKeyPosition}
                   onClick={() => patch(index, { isKeyPosition: !position.isKeyPosition })}
-                  className="rounded border px-2.5 py-1.5 text-sm"
-                  style={{
-                    borderColor: position.isKeyPosition ? 'var(--accent)' : 'var(--border)',
-                    fontWeight: position.isKeyPosition ? 600 : 400,
-                  }}
+                  className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm transition-colors disabled:opacity-50 ${
+                    position.isKeyPosition
+                      ? 'border-(--accent) font-semibold text-(--accent-text)'
+                      : 'border-(--border) text-(--foreground-muted) enabled:hover:border-(--border-strong)'
+                  }`}
                 >
-                  {position.isKeyPosition ? '★ poste clé' : '☆ poste clé'}
+                  <Star aria-hidden className="h-3.5 w-3.5" fill={position.isKeyPosition ? 'currentColor' : 'none'} />
+                  poste clé
                 </button>
                 <button
                   type="button" disabled={locked}
                   onClick={() => onChange(positions.filter((_, i) => i !== index))}
-                  className="rounded border border-(--border) px-2.5 py-1.5 text-sm text-(--foreground-muted)"
+                  className="rounded-md px-2.5 py-1.5 text-sm text-(--foreground-muted) enabled:hover:bg-(--negative-subtle) enabled:hover:text-(--negative) disabled:opacity-50"
                 >
                   Retirer
                 </button>
@@ -828,9 +909,9 @@ function PositionEditor({
             },
           ])
         }
-        className="mt-3 rounded-lg border border-(--border) px-4 py-2 text-sm"
+        className="mt-3 rounded-lg border border-dashed border-(--border-strong) px-4 py-2 text-sm font-medium text-(--accent-text) enabled:hover:bg-(--accent-subtle) disabled:opacity-50"
       >
-        Ajouter un poste
+        + Ajouter un poste
       </button>
     </div>
   );

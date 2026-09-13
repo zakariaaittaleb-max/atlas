@@ -35,7 +35,6 @@
  * montre ce qui se décide, le « + » dit pourquoi.
  */
 
-import { Check } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -46,6 +45,7 @@ import {
 } from '@/components/decision-shell';
 import { GlossaryButton } from '@/components/glossary-modal';
 import { Accordion } from '@/components/ui/accordion';
+import { ChipToggle, ChoiceCard, Definitions, GroupLegend } from '@/components/ui/form-controls';
 import { InfoHint } from '@/components/ui/info-hint';
 import { StatCard } from '@/components/ui/stat-card';
 import { delta, formatMadCompact, formatScore, strategyLabel } from '@/lib/format';
@@ -194,12 +194,12 @@ export function StrategieGroupeView({
         <section className="rounded-xl border border-(--border) bg-(--surface) p-6">
           {isOn(modules, 'strategie.corporate_strategy') ? (
           <fieldset disabled={locked}>
-            <Legend title="Votre logique de portefeuille">
-              <Definitions items={CORPORATE} />
-            </Legend>
+            <GroupLegend title="Votre logique de portefeuille">
+              <Definitions items={labelled(CORPORATE)} />
+            </GroupLegend>
             <div className="grid gap-2 sm:grid-cols-2">
               {CORPORATE.map(([value]) => (
-                <Choice
+                <ChoiceCard
                   key={value}
                   selected={corporate.corporateStrategy === value}
                   title={strategyLabel(value)}
@@ -212,13 +212,13 @@ export function StrategieGroupeView({
 
           {isOn(modules, 'strategie.structure_type') ? (
           <fieldset disabled={locked} className="mt-6">
-            <Legend title="Structure organisationnelle">
+            <GroupLegend title="Structure organisationnelle">
               <span className="block">Elle doit suivre votre portefeuille, pas l’inverse.</span>
-              <span className="mt-2 block"><Definitions items={STRUCTURES} /></span>
-            </Legend>
+              <span className="mt-2 block"><Definitions items={labelled(STRUCTURES)} /></span>
+            </GroupLegend>
             <div className="grid gap-2 sm:grid-cols-3">
               {STRUCTURES.map(([value]) => (
-                <Choice
+                <ChoiceCard
                   key={value}
                   selected={corporate.structureType === value}
                   title={strategyLabel(value)}
@@ -231,14 +231,14 @@ export function StrategieGroupeView({
 
           {anyOn(modules, CENTRALISATION_KEYS) ? (
           <fieldset disabled={locked} className="mt-6">
-            <Legend title="Fonctions pilotées au siège">
+            <GroupLegend title="Fonctions pilotées au siège">
               Centraliser mutualise les coûts et ralentit les divisions. Sur des métiers
               étrangers, cela produit surtout de la coordination.
-            </Legend>
+            </GroupLegend>
             <div className="flex flex-wrap gap-2">
               {FUNCTIONS.filter(([, , moduleKey]) => isOn(modules, moduleKey)).map(
                 ([key, label]) => (
-                  <Toggle
+                  <ChipToggle
                     key={key}
                     label={label}
                     on={corporate[key] as boolean}
@@ -252,17 +252,17 @@ export function StrategieGroupeView({
 
           {anyOn(modules, ['strategie.shared_production', 'strategie.shared_rd']) ? (
           <fieldset disabled={locked} className="mt-6">
-            <Legend title="Mutualisation effective">
+            <GroupLegend title="Mutualisation effective">
               Distincte de la centralisation : on peut centraliser les achats sans que les
               métiers achètent les mêmes choses. Seul le partage réel compte.
-            </Legend>
+            </GroupLegend>
             <div className="flex flex-wrap gap-2">
               {isOn(modules, 'strategie.shared_production') ? (
-                <Toggle label="Production partagée" on={corporate.sharedProduction}
+                <ChipToggle label="Production partagée" on={corporate.sharedProduction}
                   onToggle={() => pushCorporate({ ...corporate, sharedProduction: !corporate.sharedProduction })} />
               ) : null}
               {isOn(modules, 'strategie.shared_rd') ? (
-                <Toggle label="R&D mutualisée" on={corporate.sharedRd}
+                <ChipToggle label="R&D mutualisée" on={corporate.sharedRd}
                   onToggle={() => pushCorporate({ ...corporate, sharedRd: !corporate.sharedRd })} />
               ) : null}
             </div>
@@ -271,10 +271,10 @@ export function StrategieGroupeView({
 
           {anyOn(modules, ['strategie.value1', 'strategie.value2']) ? (
           <fieldset disabled={locked} className="mt-6">
-            <Legend title="Vos deux valeurs communiquées">
+            <GroupLegend title="Vos deux valeurs communiquées">
               Elles ne coûtent rien et pèsent sur votre alignement. Annoncer l’excellence en
               jouant le prix bas est une contradiction que le moteur relève.
-            </Legend>
+            </GroupLegend>
             <div className="grid gap-3 sm:grid-cols-2">
               {isOn(modules, 'strategie.value1') ? (
                 <ValueSelect
@@ -296,12 +296,12 @@ export function StrategieGroupeView({
 
           {anyOn(modules, ['strategie.vision', 'strategie.mission']) ? (
           <fieldset disabled={locked} className="mt-6">
-            <Legend title="Vision et mission du Groupe">
+            <GroupLegend title="Vision et mission du Groupe">
               L’entreprise n’en a qu’une, et elle se déclare ici — les domaines ne la
               réécrivent pas, ils la déclinent en axes dans l’écran Organisation. Ces énoncés
               ne sont PAS notés : un score tiré de mots-clés serait arbitraire. C’est la
               déclinaison en axes, elle, qui pèse sur votre alignement.
-            </Legend>
+            </GroupLegend>
             <div className="grid gap-4 sm:grid-cols-2">
               {isOn(modules, 'strategie.vision') ? (
                 <label className="block">
@@ -534,14 +534,14 @@ export function StrategieDasView({
             <Accordion
               title="Stratégie générique"
               summary={strategyLabel(d.genericStrategy)}
-              hint={<Definitions items={GENERIC} />}
+              hint={<Definitions items={labelled(GENERIC)} />}
               defaultOpen
             >
               <fieldset disabled={locked}>
                 <legend className="sr-only">Stratégie générique</legend>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {GENERIC.map(([value]) => (
-                    <Choice
+                    <ChoiceCard
                       key={value}
                       selected={d.genericStrategy === value}
                       title={strategyLabel(value)}
@@ -597,7 +597,7 @@ export function StrategieDasView({
                   {das.segments.map((seg) => {
                     const on = d.servedSegments.includes(seg.key);
                     return (
-                      <Toggle
+                      <ChipToggle
                         key={seg.key}
                         label={seg.name}
                         on={on}
@@ -664,7 +664,7 @@ export function StrategieDasView({
               >
                 <fieldset disabled={locked}>
                   <legend className="sr-only">Océan bleu</legend>
-                  <Toggle
+                  <ChipToggle
                     label="Déclarer un océan bleu sur ce domaine"
                     on={d.declareBlueOcean}
                     onToggle={() => pushDas(das.dasId, { ...d, declareBlueOcean: !d.declareBlueOcean })}
@@ -736,77 +736,6 @@ export function checklistOf(das: DasEntry) {
   ];
 }
 
-/**
- * Titre d'un groupe de champs, avec son explication sous le « + ».
- *
- * Posé dans la `<legend>` : c'est le seul descendant d'un fieldset désactivé qui
- * reste actif, si bien que l'aide se lit encore quand le tour est verrouillé.
- */
-function Legend({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <legend className="mb-3 flex items-center gap-2 text-sm font-semibold text-(--heading)">
-      {title}
-      <InfoHint label={title}>{children}</InfoHint>
-    </legend>
-  );
-}
-
-/** Les options d'un choix et leur définition, pour la bulle du « + ». */
-function Definitions({ items }: { items: readonly (readonly [string, string])[] }) {
-  return (
-    <>
-      {items.map(([value, description]) => (
-        <span key={value} className="mt-2 block first:mt-0">
-          <strong className="font-semibold">{strategyLabel(value)}</strong> — {description}
-        </span>
-      ))}
-    </>
-  );
-}
-
-function Choice({
-  selected, title, onSelect,
-}: { selected: boolean; title: string; onSelect: () => void }) {
-  return (
-    <button
-      type="button" onClick={onSelect} aria-pressed={selected}
-      className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-colors duration-150 disabled:opacity-50 ${
-        selected
-          ? 'border-(--accent) bg-(--accent-subtle) font-semibold text-(--accent-text)'
-          : 'border-(--border) bg-(--surface) font-medium text-(--foreground) enabled:hover:border-(--border-strong)'
-      }`}
-    >
-      <span>{title}</span>
-      {/* La coche double la couleur : l'état ne repose jamais sur la seule teinte. */}
-      <span
-        aria-hidden
-        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-          selected ? 'border-(--accent) bg-(--accent) text-(--on-accent)' : 'border-(--border-strong)'
-        }`}
-      >
-        {selected ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : null}
-      </span>
-    </button>
-  );
-}
-
-function Toggle({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
-  return (
-    <button
-      type="button" onClick={onToggle} aria-pressed={on}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm transition-colors duration-150 disabled:opacity-50 ${
-        on
-          ? 'border-(--accent) bg-(--accent-subtle) font-semibold text-(--accent-text)'
-          : 'border-(--border) bg-(--surface) text-(--foreground) enabled:hover:border-(--border-strong)'
-      }`}
-    >
-      {/* La coche double la couleur : l'état ne repose jamais sur la seule teinte. */}
-      {on ? <Check aria-hidden className="h-3.5 w-3.5" strokeWidth={3} /> : null}
-      {label}
-    </button>
-  );
-}
-
 function ValueSelect({
   label, value, exclude, onChange,
 }: { label: string; value: string; exclude: string; onChange: (v: string) => void }) {
@@ -823,6 +752,11 @@ function ValueSelect({
       </select>
     </label>
   );
+}
+
+/** Des options du moteur, avec leur libellé lisible, pour la bulle d'aide. */
+function labelled(items: readonly (readonly [string, string])[]) {
+  return items.map(([value, description]) => [strategyLabel(value), description] as const);
 }
 
 /**
