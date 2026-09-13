@@ -216,9 +216,15 @@ export function CabinetView({
               {orders.map((o) => (
                 <li key={o.orderId} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium">
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium">
                       {o.studyName}
-                      <span className="ml-2 font-normal text-(--foreground-muted)">
+                      {/* Le périmètre fait partie de l'identité de l'étude : une
+                          concurrentielle sur l'agro-industrie ne dit rien du
+                          textile, et deux lignes au même nom se confondaient. */}
+                      <span className="rounded-full bg-(--accent-subtle) px-2 py-0.5 text-xs font-semibold text-(--accent-text)">
+                        {scopeOf(o, das, targets)}
+                      </span>
+                      <span className="font-normal text-(--foreground-muted)">
                         {TIER_NAMES[o.tier] ?? o.tier}
                       </span>
                     </p>
@@ -366,6 +372,25 @@ export function CabinetView({
       </div>
     </main>
   );
+}
+
+/**
+ * Ce que l'étude couvre, en clair — la même règle que l'en-tête du rapport :
+ * la cible d'une due diligence (avec son secteur), sinon le domaine étudié,
+ * sinon le niveau Groupe pour une étude transversale.
+ */
+function scopeOf(
+  order: OrderedStudy,
+  das: { id: string; name: string }[],
+  targets: { id: string; name: string; dasId: string }[],
+): string {
+  const dasName = (id: string | null) => (id ? das.find((d) => d.id === id)?.name : undefined);
+  if (order.targetActorId) {
+    const target = targets.find((t) => t.id === order.targetActorId);
+    const sector = dasName(target?.dasId ?? order.dasId);
+    if (target) return sector ? `${target.name} · ${sector}` : target.name;
+  }
+  return dasName(order.dasId) ?? 'Niveau Groupe';
 }
 
 function Alert({ tone, children }: { tone: 'negative' | 'warning'; children: React.ReactNode }) {
