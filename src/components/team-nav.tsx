@@ -45,6 +45,7 @@ const SHARED_LINKS = [
   { href: '/war-room', label: 'War Room' },
   { href: '/cabinet', label: 'Cabinet' },
   { href: '/revelation', label: 'Révélation' },
+  { href: '/sus', label: 'Questionnaire de satisfaction' },
 ] as const;
 
 const STATUS_LABELS: Record<string, string> = {

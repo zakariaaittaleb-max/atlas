@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { CockpitView } from './cockpit-view';
 import { getRoundState, requireTeam } from '@/lib/dal';
 import { loadDashboardContext } from '@/lib/server/dashboard-context';
@@ -25,11 +27,21 @@ export default async function CockpitPage() {
           </p>
         </div>
 
-        {context.treasuryStatus && context.treasuryStatus !== 'sain' ? (
-          <p className="rounded-lg border border-(--warning) px-4 py-2 text-sm font-medium text-(--warning)">
-            Trésorerie {treasuryLabel(context.treasuryStatus).toLowerCase()}
-          </p>
-        ) : null}
+        <div className="flex items-center gap-3">
+          {context.treasuryStatus && context.treasuryStatus !== 'sain' ? (
+            <p className="rounded-lg border border-(--warning) px-4 py-2 text-sm font-medium text-(--warning)">
+              Trésorerie {treasuryLabel(context.treasuryStatus).toLowerCase()}
+            </p>
+          ) : null}
+          {/* Apporté par le protocole de test d'utilisabilité : le participant
+              doit trouver le questionnaire SUS sans qu'on le lui montre. */}
+          <Link
+            href="/sus"
+            className="rounded-lg border border-(--border) px-4 py-2 text-sm font-medium text-(--foreground-muted) hover:bg-(--surface-muted)"
+          >
+            Donner mon avis sur Atlas
+          </Link>
+        </div>
       </header>
 
       <CockpitView context={context} />

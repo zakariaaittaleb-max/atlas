@@ -263,6 +263,19 @@ export function FacilitatorView({
           </span>
         </div>
 
+        {/* ── Test d'utilisabilité ────────────────────────────────────────
+            Un protocole séparé de la conduite de partie : on ne l'ouvre pas
+            pendant que la salle joue, mais avant (préparation) et après
+            (débriefing, score SUS du panel). */}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Link
+            href={`/facilitateur/${sessionId}/protocole`}
+            className="rounded-lg border border-(--border) px-4 py-2 text-sm"
+          >
+            Protocole de test d’utilisabilité
+          </Link>
+        </div>
+
         {runs.length > 0 ? (
           <div className="mt-6 border-t border-(--border) pt-5">
             <h3 className="mb-2 text-sm font-medium">Dernières résolutions</h3>

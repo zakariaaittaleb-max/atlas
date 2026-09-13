@@ -427,26 +427,31 @@ export function StrategieDasView({
     <>
       <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-10">
         <header className="mb-8">
-          <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
-            Tour {context.roundNumber} · niveau domaine
-          </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-            {das ? (
-              <>
-                Stratégie de{' '}
-                {/* Le domaine EST une marque : c'est ici qu'on la nomme, dans
-                    le titre de l'écran qui la pilote. */}
-                <BrandName
-                  dasId={das.dasId}
-                  brandName={das.brandName}
-                  activityName={das.activityName}
-                  renameAction={renameBrandAction}
-                />
-              </>
-            ) : (
-              'Stratégie du domaine'
-            )}
-          </h1>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
+                Tour {context.roundNumber} · niveau domaine
+              </p>
+              <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+                {das ? (
+                  <>
+                    Stratégie de{' '}
+                    {/* Le domaine EST une marque : c'est ici qu'on la nomme, dans
+                        le titre de l'écran qui la pilote. */}
+                    <BrandName
+                      dasId={das.dasId}
+                      brandName={das.brandName}
+                      activityName={das.activityName}
+                      renameAction={renameBrandAction}
+                    />
+                  </>
+                ) : (
+                  'Stratégie du domaine'
+                )}
+              </h1>
+            </div>
+            <GlossaryButton />
+          </div>
           <p className="mt-3 max-w-3xl text-(--foreground-muted)">
             Ces choix ne concernent que le domaine piloté. Changez de domaine dans la barre du
             haut pour renseigner les autres. Ce qui vaut pour l’entreprise entière se règle
