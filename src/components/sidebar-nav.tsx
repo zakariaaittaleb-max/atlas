@@ -234,15 +234,10 @@ function NavBody({
                     {group.links.map((link) => (
                       <li key={link.href}>
                         <NavLink href={link.href} active={link.href === activeHref} onNavigate={onNavigate} indent>
+                          {/* Plus d'étiquette « DAS » par lien : le groupe porte
+                              désormais ce nom, et le sélecteur de domaine
+                              apparaît sur chaque écran qu'il gouverne. */}
                           <span className="min-w-0 flex-1 truncate">{link.label}</span>
-                          {link.dasScoped ? (
-                            <span
-                              title="Porte sur le domaine piloté"
-                              className="rounded bg-(--surface-muted) px-1.5 py-0.5 text-[0.6875rem] font-semibold text-(--foreground-muted) ring-1 ring-(--border)"
-                            >
-                              DAS
-                            </span>
-                          ) : null}
                         </NavLink>
                       </li>
                     ))}

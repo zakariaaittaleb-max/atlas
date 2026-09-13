@@ -43,14 +43,16 @@ const GROUPS: NavGroup[] = [
       { href: '/strategie', label: 'Stratégie du Groupe' },
       { href: '/finance', label: 'Finance du Groupe' },
       { href: '/cession', label: 'Cession & acquisitions' },
-      { href: '/strategie/das', label: 'Stratégie du DAS', dasScoped: true },
     ],
   },
   {
-    id: 'operations',
-    label: 'Opérations',
+    // Tout ce qui se décide domaine par domaine, stratégie comprise : le groupe
+    // porte le nom du niveau de décision, comme « Stratégie » porte le Groupe.
+    id: 'das',
+    label: 'DAS',
     icon: 'operations',
     links: [
+      { href: '/strategie/das', label: 'Stratégie du DAS', dasScoped: true },
       { href: '/organisation', label: 'Organisation & RH', dasScoped: true },
       { href: '/marches', label: 'Achats & distribution', dasScoped: true },
       { href: '/war-room', label: 'War Room' },
