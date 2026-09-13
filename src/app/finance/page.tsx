@@ -10,7 +10,7 @@ import { createServerClient } from '@/lib/supabase/server';
 import type { FinancialLever } from './levers-section';
 import { FinanceView } from './finance-view';
 
-export const metadata = { title: 'Atlas — Organisation & finance' };
+export const metadata = { title: 'Atlas — Finance du Groupe' };
 export const dynamic = 'force-dynamic';
 
 export default async function FinancePage() {

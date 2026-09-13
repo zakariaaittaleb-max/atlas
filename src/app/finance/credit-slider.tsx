@@ -25,6 +25,7 @@
 
 import { useId, useState } from 'react';
 
+import { InfoHint } from '@/components/ui/info-hint';
 import { formatMadCompact } from '@/lib/format';
 import type { FinanceLimits } from '@/lib/decision-types';
 
@@ -85,7 +86,40 @@ export function CreditSlider({
   return (
     <div>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <label htmlFor={id} className="text-sm font-medium">Crédit net du tour</label>
+        <span className="flex items-center gap-2">
+          <label htmlFor={id} className="text-sm font-medium">Crédit net du tour</label>
+          {/* La capacité se détaille à la demande : c'est le chiffre que l'équipe
+              contestera, et elle doit pouvoir voir lequel des deux critères la
+              bloque — c'est celui-là qu'il faut desserrer. */}
+          <InfoHint label="Comment la banque calcule votre capacité">
+            <span className="block">
+              Deux fois vos fonds propres :{' '}
+              <strong className="font-mono">{formatMadCompact(limits.capacityByEquityMad)}</strong>{' '}
+              sur {formatMadCompact(limits.equityMad)} de capitaux propres
+              {limits.capacityBinding === 'fonds_propres' ? ' — c’est lui qui bloque.' : '.'}
+            </span>
+            <span className="mt-1 block">
+              40 % de votre activité :{' '}
+              <strong className="font-mono">{formatMadCompact(limits.capacityByRevenueMad)}</strong>{' '}
+              sur {formatMadCompact(limits.lastRevenueMad)} de chiffre d’affaires
+              {limits.capacityBinding === 'activite' ? ' — c’est lui qui bloque.' : '.'}
+            </span>
+            <span className="mt-1 block">
+              Encours accepté :{' '}
+              <strong className="font-mono">{formatMadCompact(limits.capacityTotalMad)}</strong>, le plus
+              contraignant des deux. Déjà utilisé : {debt > 0 ? `−${formatMadCompact(debt)}` : 'rien'}.
+            </span>
+            <span className="mt-2 block text-(--foreground-muted)">
+              {bloque && limits.lastRevenueMad <= 0
+                ? 'Sans exercice clos, la banque n’a rien à regarder : votre ligne s’ouvrira après le premier tour résolu.'
+                : bloque && limits.equityMad <= 0
+                  ? 'Vos fonds propres sont nuls : aucune banque ne prête sans assise. Une levée de capital rouvrirait votre ligne.'
+                  : limits.capacityBinding === 'activite'
+                    ? 'C’est votre volume d’activité qui fixe le plafond : une ligne de crédit suit le chiffre d’affaires qu’elle finance. Reconquérir des parts de marché l’élargit.'
+                    : 'C’est votre assise en fonds propres qui bloque : une levée de capital élargirait directement ce plafond.'}
+            </span>
+          </InfoHint>
+        </span>
         <span
           className="tabular text-sm font-medium"
           style={{
@@ -119,7 +153,7 @@ export function CreditSlider({
             : Math.round(raw / step) * step;
           commit(snapped);
         }}
-        className="mt-2 w-full"
+        className="mt-2 w-full accent-(--accent)"
         aria-describedby={`${id}-bornes`}
       />
 
@@ -152,7 +186,7 @@ export function CreditSlider({
           }}
           onBlur={() => setDraft(null)}
           placeholder="0"
-          className="tabular w-48 rounded-lg border border-(--border) bg-(--background) px-3 py-2 text-sm"
+          className="tabular w-48 rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
         />
         <span className="text-sm text-(--foreground-muted)">DH</span>
         <span className="text-xs text-(--foreground-muted)">
@@ -163,54 +197,6 @@ export function CreditSlider({
         <p className="mt-1.5 mb-0 text-xs" style={{ color: 'var(--warning)' }}>{clipped}</p>
       ) : null}
 
-      {/* La capacité se détaille à la demande : c'est le chiffre que l'équipe
-          contestera, et elle doit pouvoir voir lequel des deux critères la
-          bloque — c'est celui-là qu'il faut desserrer. */}
-      <details className="mt-3">
-        <summary className="cursor-pointer text-sm text-(--foreground-muted)">
-          + Comment la banque calcule votre capacité
-        </summary>
-        <dl className="tabular mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr]">
-          <dt className={limits.capacityBinding === 'fonds_propres' ? 'font-semibold' : ''}>
-            Deux fois vos fonds propres
-          </dt>
-          <dd className="m-0">
-            {formatMadCompact(limits.capacityByEquityMad)}
-            <span className="ml-2 text-(--foreground-muted)">
-              sur {formatMadCompact(limits.equityMad)} de capitaux propres
-            </span>
-          </dd>
-
-          <dt className={limits.capacityBinding === 'activite' ? 'font-semibold' : ''}>
-            40 % de votre activité
-          </dt>
-          <dd className="m-0">
-            {formatMadCompact(limits.capacityByRevenueMad)}
-            <span className="ml-2 text-(--foreground-muted)">
-              sur {formatMadCompact(limits.lastRevenueMad)} de chiffre d’affaires
-            </span>
-          </dd>
-
-          <dt className="font-semibold">Encours accepté</dt>
-          <dd className="m-0">
-            {formatMadCompact(limits.capacityTotalMad)}
-            <span className="ml-2 text-(--foreground-muted)">le plus contraignant des deux</span>
-          </dd>
-
-          <dt>Déjà utilisé</dt>
-          <dd className="m-0">{debt > 0 ? `−${formatMadCompact(debt)}` : 'rien'}</dd>
-        </dl>
-
-        <p className="mt-3 text-sm text-(--foreground-muted)">
-          {bloque && limits.lastRevenueMad <= 0
-            ? 'Sans exercice clos, la banque n’a rien à regarder : votre ligne s’ouvrira après le premier tour résolu.'
-            : bloque && limits.equityMad <= 0
-              ? 'Vos fonds propres sont nuls : aucune banque ne prête sans assise. Une levée de capital rouvrirait votre ligne.'
-              : limits.capacityBinding === 'activite'
-                ? 'C’est votre volume d’activité qui fixe le plafond : une ligne de crédit suit le chiffre d’affaires qu’elle finance. Reconquérir des parts de marché l’élargit.'
-                : 'C’est votre assise en fonds propres qui bloque : une levée de capital élargirait directement ce plafond.'}
-        </p>
-      </details>
     </div>
   );
 }

@@ -6,15 +6,18 @@
  * ── POURQUOI À LA DEMANDE ──────────────────────────────────────────────────
  * Un ratio qu'on ne sait pas lire est un ratio qui ne sert à rien, et douze
  * ratios affichés d'un coup ne se lisent pas. Chaque ligne montre donc le
- * CHIFFRE, et déplie sur demande son calcul AVEC LES PROPRES NOMBRES de
- * l'équipe : « CAF = résultat net (−4,45 Md) + amortissements (1,20 Md) ».
- * C'est la différence entre un tableau de bord et un cours.
+ * CHIFFRE, et son « + » ouvre le calcul AVEC LES PROPRES NOMBRES de l'équipe :
+ * « CAF = résultat net (−4,45 Md) + amortissements (1,20 Md) ». C'est la
+ * différence entre un tableau de bord et un cours.
  *
  * Le régime d'imposition a quitté l'écran : il proposait trois options dont
  * deux calculaient le même impôt. Ces indicateurs prennent sa place, et ils
  * portent de vraies décisions.
  */
 
+import { TriangleAlert } from 'lucide-react';
+
+import { InfoHint } from '@/components/ui/info-hint';
 import { formatMadCompact, formatScore } from '@/lib/format';
 import type { GroupResult } from '@/lib/results-types';
 import type { FinanceLimits } from '@/lib/decision-types';
@@ -120,42 +123,31 @@ export function IndicatorsSection({
   ];
 
   return (
-    <section className="mt-8 rounded-xl border border-(--border) bg-(--surface) p-6">
-      <h2 className="text-xl font-medium">Vos indicateurs financiers</h2>
-      <p className="mt-1 mb-5 max-w-3xl text-sm text-(--foreground-muted)">
-        Les grandeurs sur lesquelles un comité de crédit et un actionnaire vous jugeront.
-        Dépliez-en une pour voir son calcul avec vos propres chiffres.
-      </p>
-
-      <ul className="flex flex-col gap-1 p-0 m-0 list-none">
-        {lignes.map((l) => (
-          <li key={l.terme} className="border-b border-(--border) last:border-0">
-            <details>
-              <summary className="flex cursor-pointer list-none flex-wrap items-baseline justify-between gap-3 py-2.5">
-                <span className="flex items-baseline gap-2">
-                  <span aria-hidden className="text-(--foreground-muted)">+</span>
-                  <span>{l.terme}</span>
-                </span>
-                <span
-                  className="tabular font-medium"
-                  style={{
-                    color:
-                      l.ton === 'positive' ? 'var(--positive)'
-                      : l.ton === 'negative' ? 'var(--negative)'
-                      : undefined,
-                  }}
-                >
-                  {l.valeur}
-                </span>
-              </summary>
-              <div className="pb-3.5 pl-6">
-                <p className="tabular m-0 text-sm text-(--foreground-muted)">{l.calcul}</p>
-                <p className="mt-1.5 mb-0 text-sm">{l.lecture}</p>
-              </div>
-            </details>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
+      {lignes.map((l) => (
+        <li
+          key={l.terme}
+          className={`flex items-center justify-between gap-3 rounded-lg px-4 py-3 ${
+            l.ton === 'negative' ? 'bg-(--negative-subtle)' : 'bg-(--surface-muted)'
+          }`}
+        >
+          <span className="flex min-w-0 items-center gap-2 text-sm">
+            {l.terme}
+            <InfoHint label={l.terme}>
+              <span className="block font-mono text-xs text-(--foreground-muted)">{l.calcul}</span>
+              <span className="mt-2 block">{l.lecture}</span>
+            </InfoHint>
+          </span>
+          <span
+            className={`tabular inline-flex shrink-0 items-center gap-1.5 font-mono font-semibold ${
+              l.ton === 'positive' ? 'text-(--positive)' : l.ton === 'negative' ? 'text-(--negative)' : ''
+            }`}
+          >
+            {l.ton === 'negative' ? <TriangleAlert aria-hidden className="h-4 w-4" /> : null}
+            {l.valeur}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }

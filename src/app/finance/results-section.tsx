@@ -27,7 +27,9 @@
  *
  * Les phrases d'interprétation — celles qui commentent un ratio plutôt que de
  * le nommer — viennent toujours du moteur (`indicators.ts`) et non de la vue,
- * pour qu'un export Excel dise exactement la même chose.
+ * pour qu'un export Excel dise exactement la même chose. Elles sont rangées
+ * sous les « + » ; l'état qu'elles commentent (levier favorable ou non) reste
+ * visible.
  *
  * ── L'HONNÊTETÉ DU LIBELLÉ ─────────────────────────────────────────────────
  * La marge affichée PAR DAS est une marge d'exploitation : elle ignore les
@@ -37,153 +39,124 @@
  */
 
 import { Term } from '@/components/term';
+import { GroupLegend } from '@/components/ui/form-controls';
+import { InfoHint } from '@/components/ui/info-hint';
 import { formatMadCompact } from '@/lib/format';
 import type { ResultsContext } from '@/lib/results-types';
 
 export function ResultsSection({ results }: { results: ResultsContext }) {
   if (results.roundNumber === null || results.group === null) {
     return (
-      <section className="mt-8 rounded-xl border border-(--border) bg-(--surface) p-6">
-        <h2 className="text-xl font-medium">Vos résultats</h2>
-        <p className="mt-2 text-sm text-(--foreground-muted)">
-          Aucun exercice n’est encore clos. Vos résultats apparaîtront ici dès la première
-          publication.
-        </p>
-      </section>
+      <p className="text-sm text-(--foreground-muted)">
+        Aucun exercice n’est encore clos. Vos résultats apparaîtront ici dès la première
+        publication.
+      </p>
     );
   }
 
   const g = results.group;
 
   return (
-    <section className="mt-8 rounded-xl border border-(--border) bg-(--surface) p-6">
-      <h2 className="text-xl font-medium">Vos résultats — exercice {results.roundNumber}</h2>
-      <p className="mt-1 mb-5 max-w-3xl text-sm text-(--foreground-muted)">
-        Les termes sont ceux de la discipline — ceux que vous emploierez en soutenance et que
-        vous retrouverez dans un manuel. <strong>Survolez-en un</strong> pour sa définition et un
-        exemple chiffré.
-      </p>
-
+    <div className="space-y-8">
       {/* ── Groupe ─────────────────────────────────────────────────────── */}
-      <h3 className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
-        Le Groupe
-      </h3>
-
-      <dl className="tabular mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Figure
-          term="Chiffre d'affaires"
-          value={formatMadCompact(g.revenueMad)}
-        />
-        <Figure
-          term="Charges d'exploitation"
-          value={formatMadCompact(g.totalCostsMad)}
-          note={`${g.profitMarginPct >= 0 ? '' : '−'}${Math.abs(100 - g.profitMarginPct).toFixed(0)} DH de coûts pour 100 DH vendus`}
-        />
-        <Figure
-          term="Résultat net"
-          value={formatMadCompact(g.netIncomeMad)}
-          tone={g.netIncomeMad >= 0 ? 'positive' : 'negative'}
-        />
-        <Figure
-          term="Flux de trésorerie d'exploitation"
-          value={formatMadCompact(g.cashGeneratedMad)}
-          tone={g.cashGeneratedMad >= 0 ? 'positive' : 'negative'}
-          note="Le résultat, moins ce que vous avez réinvesti."
-        />
-      </dl>
-
-      <p className="mt-4 rounded-lg border border-(--border) px-4 py-3 text-sm">
-        {g.marginNote}
-      </p>
+      <div>
+        <GroupLegend as="p" title={`Le Groupe — exercice ${results.roundNumber}`}>
+          {g.marginNote}
+        </GroupLegend>
+        <dl className="tabular grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <Figure term="Chiffre d'affaires" value={formatMadCompact(g.revenueMad)} />
+          <Figure
+            term="Charges d'exploitation"
+            value={formatMadCompact(g.totalCostsMad)}
+            note={`${g.profitMarginPct >= 0 ? '' : '−'}${Math.abs(100 - g.profitMarginPct).toFixed(0)} DH de coûts pour 100 DH vendus.`}
+          />
+          <Figure
+            term="Résultat net"
+            value={formatMadCompact(g.netIncomeMad)}
+            tone={g.netIncomeMad >= 0 ? 'positive' : 'negative'}
+          />
+          <Figure
+            term="Flux de trésorerie d'exploitation"
+            value={formatMadCompact(g.cashGeneratedMad)}
+            tone={g.cashGeneratedMad >= 0 ? 'positive' : 'negative'}
+            note="Le résultat, moins ce que vous avez réinvesti."
+          />
+        </dl>
+      </div>
 
       {/* ── Crédit et levier ───────────────────────────────────────────── */}
-      <h3 className="mt-8 text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
-        Votre crédit
-      </h3>
+      <div>
+        <GroupLegend as="p" title="Votre crédit" />
+        <dl className="tabular grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <Figure term="Dette financière" value={formatMadCompact(g.debtOutstandingMad)} />
+          <Figure
+            term="Ratio d'endettement"
+            value={`${g.debtRatioPct.toFixed(0)} %`}
+            note="Dette rapportée à l’argent de vos actionnaires."
+          />
+          <Figure term="Coût de la dette" value={`${g.costOfDebtPct.toFixed(1)} %`} />
+          <Figure
+            term="Rentabilité économique"
+            value={`${g.returnOnAssetsPct.toFixed(1)} %`}
+            tone={g.leverageFavourable ? 'positive' : 'negative'}
+          />
+        </dl>
 
-      <dl className="tabular mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Figure term="Dette financière" value={formatMadCompact(g.debtOutstandingMad)} />
-        <Figure
-          term="Ratio d'endettement"
-          value={`${g.debtRatioPct.toFixed(0)} %`}
-          note="Dette rapportée à l’argent de vos actionnaires."
-        />
-        <Figure
-          term="Coût de la dette"
-          value={`${g.costOfDebtPct.toFixed(1)} %`}
-        />
-        <Figure
-          term="Rentabilité économique"
-          value={`${g.returnOnAssetsPct.toFixed(1)} %`}
-          tone={g.leverageFavourable ? 'positive' : 'negative'}
-        />
-      </dl>
-
-      <p
-        className="mt-4 rounded-lg border px-4 py-3 text-sm"
-        style={{
-          borderColor: g.leverageFavourable ? 'var(--positive)' : 'var(--negative)',
-        }}
-      >
-        <strong>L’effet de levier.</strong> {g.leverageNote}
-      </p>
+        <p className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+              g.leverageFavourable
+                ? 'bg-(--positive-subtle) text-(--positive)'
+                : 'bg-(--negative-subtle) text-(--negative)'
+            }`}
+          >
+            {g.leverageFavourable ? '↑ Effet de levier favorable' : '↓ Effet de levier défavorable'}
+          </span>
+          <InfoHint label="Effet de levier">{g.leverageNote}</InfoHint>
+        </p>
+      </div>
 
       {/* ── Par domaine d'activité ─────────────────────────────────────── */}
       {results.das.length > 0 ? (
-        // Replié : au niveau Groupe, la comparaison domaine par domaine est une
-        // lecture de second rang — un tableau de huit colonnes sous les quatre
-        // chiffres qui, eux, commandent la décision du tour.
-        <details className="mt-8">
-          <summary className="cursor-pointer list-none text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
-            Domaine par domaine
-            <span className="ml-2 normal-case">({results.das.length})</span>
-          </summary>
-          <p className="mt-3 mb-3 max-w-3xl text-sm text-(--foreground-muted)">
+        <div>
+          <GroupLegend as="p" title={`Domaine par domaine (${results.das.length})`}>
             Ces marges sont calculées <strong>avant</strong> les charges de siège, l’impôt et les
             intérêts — qui ne se répartissent qu’au niveau du Groupe. Elles servent à comparer vos
             domaines entre eux, pas à mesurer votre bénéfice.
-          </p>
+          </GroupLegend>
 
-          <div className="min-w-0 overflow-x-auto">
+          <div className="min-w-0 overflow-x-auto rounded-lg border border-(--border)">
             <table className="tabular w-full min-w-[46rem] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-(--border) text-left">
-                  <th className="py-2 pr-4 font-medium">Domaine</th>
-                  <th className="py-2 pr-4 font-medium"><Term>Chiffre d’affaires</Term></th>
-                  <th className="py-2 pr-4 font-medium"><Term>Charges d’exploitation</Term></th>
-                  <th className="py-2 pr-4 font-medium"><Term>Marge d’exploitation</Term></th>
-                  <th className="py-2 pr-4 font-medium"><Term>Rentabilité économique</Term></th>
-                  <th className="py-2 pr-4 font-medium"><Term>Flux de trésorerie d’exploitation</Term></th>
-                  <th className="py-2 font-medium">Seuil de rentabilité</th>
+                <tr className="bg-(--surface-muted) text-left text-xs text-(--foreground-muted)">
+                  <th className="px-3 py-2 font-semibold">Domaine</th>
+                  <th className="px-3 py-2 font-semibold"><Term>Chiffre d’affaires</Term></th>
+                  <th className="px-3 py-2 font-semibold"><Term>Charges d’exploitation</Term></th>
+                  <th className="px-3 py-2 font-semibold"><Term>Marge d’exploitation</Term></th>
+                  <th className="px-3 py-2 font-semibold"><Term>Rentabilité économique</Term></th>
+                  <th className="px-3 py-2 font-semibold"><Term>Flux de trésorerie d’exploitation</Term></th>
+                  <th className="px-3 py-2 font-semibold">Seuil de rentabilité</th>
                 </tr>
               </thead>
               <tbody>
                 {results.das.map((d) => (
-                  <tr key={d.dasId} className="border-b border-(--border)">
-                    <td className="py-2.5 pr-4">{d.dasName}</td>
-                    <td className="py-2.5 pr-4">{formatMadCompact(d.revenueMad)}</td>
-                    <td className="py-2.5 pr-4">{formatMadCompact(d.totalCostsMad)}</td>
-                    <td
-                      className="py-2.5 pr-4"
-                      style={{ color: d.profitMarginPct < 0 ? 'var(--negative)' : undefined }}
-                    >
+                  <tr key={d.dasId} className="border-t border-(--border)">
+                    <td className="px-3 py-2.5 font-medium">{d.dasName}</td>
+                    <td className="px-3 py-2.5 font-mono">{formatMadCompact(d.revenueMad)}</td>
+                    <td className="px-3 py-2.5 font-mono">{formatMadCompact(d.totalCostsMad)}</td>
+                    <td className={`px-3 py-2.5 font-mono ${d.profitMarginPct < 0 ? 'text-(--negative)' : ''}`}>
                       {d.profitMarginPct.toFixed(1)} %
                     </td>
-                    <td className="py-2.5 pr-4">{d.roiPct.toFixed(1)} %</td>
-                    <td
-                      className="py-2.5 pr-4"
-                      style={{ color: d.cashGeneratedMad < 0 ? 'var(--negative)' : undefined }}
-                    >
+                    <td className="px-3 py-2.5 font-mono">{d.roiPct.toFixed(1)} %</td>
+                    <td className={`px-3 py-2.5 font-mono ${d.cashGeneratedMad < 0 ? 'text-(--negative)' : ''}`}>
                       {formatMadCompact(d.cashGeneratedMad)}
                     </td>
-                    <td className="py-2.5">
+                    <td className="px-3 py-2.5">
                       {d.breakEvenUnits === null ? (
-                        <span style={{ color: 'var(--negative)' }}>
-                          aucun — chaque vente perd de l’argent
-                        </span>
+                        <span className="text-(--negative)">aucun — chaque vente perd de l’argent</span>
                       ) : (
                         <>
-                          {Math.round(d.breakEvenUnits).toLocaleString('fr-FR')} u.
+                          <span className="font-mono">{Math.round(d.breakEvenUnits).toLocaleString('fr-FR')} u.</span>
                           {d.volumeSold > 0 ? (
                             <span className="text-(--foreground-muted)">
                               {' '}· vendu {Math.round(d.volumeSold).toLocaleString('fr-FR')}
@@ -197,9 +170,9 @@ export function ResultsSection({ results }: { results: ResultsContext }) {
               </tbody>
             </table>
           </div>
-        </details>
+        </div>
       ) : null}
-    </section>
+    </div>
   );
 }
 
@@ -212,20 +185,18 @@ function Figure({
   tone?: 'positive' | 'negative';
 }) {
   return (
-    <div>
-      <dt className="text-sm text-(--foreground-muted)"><Term>{term}</Term></dt>
+    <div className="rounded-lg bg-(--surface-muted) px-3 py-2.5">
+      <dt className="flex items-center gap-1.5 text-xs text-(--foreground-muted)">
+        <Term>{term}</Term>
+        {note ? <InfoHint label={term}>{note}</InfoHint> : null}
+      </dt>
       <dd
-        className="mt-0.5 text-lg font-semibold"
-        style={{
-          color:
-            tone === 'negative' ? 'var(--negative)'
-            : tone === 'positive' ? 'var(--positive)'
-            : undefined,
-        }}
+        className={`mt-0.5 font-mono text-lg font-semibold ${
+          tone === 'negative' ? 'text-(--negative)' : tone === 'positive' ? 'text-(--positive)' : ''
+        }`}
       >
         {value}
       </dd>
-      {note ? <p className="mt-1 text-xs text-(--foreground-muted)">{note}</p> : null}
     </div>
   );
 }

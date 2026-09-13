@@ -8,12 +8,14 @@
  * facilitateur discutera en salle, et c'est pour cela qu'il vit en base et non
  * dans le code — une promotion peut en retoucher la formulation.
  *
- * Replié par défaut : une équipe qui sait déjà ce qu'elle fait ne relit pas six
- * fiches à chaque tour, et celle qui hésite les trouve au même endroit que la
- * décision.
+ * Une ligne par levier, sa fiche sous le « + » : une équipe qui sait déjà ce
+ * qu'elle fait ne relit pas six fiches à chaque tour, et celle qui hésite les
+ * trouve au même endroit que la décision.
  */
 
 import Link from 'next/link';
+
+import { InfoHint } from '@/components/ui/info-hint';
 
 export interface FinancialLever {
   key: string;
@@ -31,59 +33,36 @@ export function LeversSection({ levers }: { levers: FinancialLever[] }) {
   if (levers.length === 0) return null;
 
   return (
-    <section className="mt-8 rounded-xl border border-(--border) bg-(--surface) p-6">
-      <h2 className="text-xl font-medium">Les leviers financiers du Groupe</h2>
-      <p className="mt-1 mb-4 max-w-3xl text-sm text-(--foreground-muted)">
-        Six façons de faire travailler l’argent du groupe. Chacune a un bénéfice, un risque
-        majeur, et une raison financière d’exister. Dépliez-en une avant de l’actionner.
-      </p>
-
-      <ul className="flex flex-col gap-1 p-0 m-0 list-none">
-        {levers.map((l) => (
-          <li key={l.key} className="border-b border-(--border) last:border-0">
-            <details>
-              <summary className="flex cursor-pointer list-none flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5">
-                <span aria-hidden className="text-(--foreground-muted)">+</span>
-                <span
-                  className="rounded px-1.5 py-0.5 text-xs font-semibold tracking-wide uppercase"
-                  style={{ background: 'var(--surface-muted)', color: 'var(--accent)' }}
-                >
-                  {l.category}
-                </span>
-                <span className="flex-1 text-sm">{l.actionLabel}</span>
-                {!l.available ? (
-                  <span className="text-xs text-(--foreground-muted)">
-                    fermé par le facilitateur
-                  </span>
-                ) : null}
-              </summary>
-
-              <dl className="mb-3 ml-6 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[10rem_1fr]">
-                <dt className="font-medium" style={{ color: 'var(--positive)' }}>
-                  Si ça réussit
-                </dt>
-                <dd className="m-0">{l.successNote}</dd>
-
-                <dt className="font-medium" style={{ color: 'var(--negative)' }}>
-                  Le risque majeur
-                </dt>
-                <dd className="m-0">{l.riskNote}</dd>
-
-                <dt className="font-medium text-(--foreground-muted)">Pourquoi ça marche</dt>
-                <dd className="m-0 text-(--foreground-muted)">{l.rationaleNote}</dd>
-              </dl>
-
-              {l.screen && l.screen !== '/finance' ? (
-                <p className="mb-3 ml-6 text-sm">
-                  <Link href={l.screen} className="underline">
-                    Ce levier se décide sur un autre écran →
-                  </Link>
-                </p>
-              ) : null}
-            </details>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <ul className="m-0 list-none divide-y divide-(--border) rounded-lg border border-(--border) p-0">
+      {levers.map((l) => (
+        <li key={l.key} className="flex flex-wrap items-center gap-3 px-4 py-3">
+          <span className="rounded bg-(--accent-subtle) px-1.5 py-0.5 text-xs font-semibold tracking-wide text-(--accent-text) uppercase">
+            {l.category}
+          </span>
+          <span className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+            {l.actionLabel}
+            <InfoHint label={l.actionLabel}>
+              <span className="block">
+                <strong className="font-semibold text-(--positive)">Si ça réussit</strong> — {l.successNote}
+              </span>
+              <span className="mt-2 block">
+                <strong className="font-semibold text-(--negative)">Le risque majeur</strong> — {l.riskNote}
+              </span>
+              <span className="mt-2 block text-(--foreground-muted)">
+                <strong className="font-semibold">Pourquoi ça marche</strong> — {l.rationaleNote}
+              </span>
+            </InfoHint>
+          </span>
+          {!l.available ? (
+            <span className="text-xs text-(--meta)">fermé par le facilitateur</span>
+          ) : null}
+          {l.screen && l.screen !== '/finance' ? (
+            <Link href={l.screen} className="text-sm font-medium text-(--accent-text) hover:underline">
+              Se décide sur un autre écran →
+            </Link>
+          ) : null}
+        </li>
+      ))}
+    </ul>
   );
 }
