@@ -4,6 +4,7 @@ import { ChartLine, Download, Maximize2, Minimize2, Table2, TriangleAlert } from
 import { Component, useState, useSyncExternalStore } from 'react';
 
 import { DataTable, downloadCsv, type DataColumn, type DataRow } from './data-table';
+import { InfoHint } from './info-hint';
 
 /**
  * Cadre commun à tous les graphiques du cockpit.
@@ -66,10 +67,8 @@ export function ChartContainer({
                 {source}
               </span>
             ) : null}
+            {description ? <InfoHint label={title}>{description}</InfoHint> : null}
           </p>
-          {description ? (
-            <p className="mt-0.5 max-w-3xl text-sm text-(--foreground-muted)">{description}</p>
-          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 print:hidden">

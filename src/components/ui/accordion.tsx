@@ -1,11 +1,20 @@
+'use client';
+
 import { ChevronDown } from 'lucide-react';
+import { useId, useState } from 'react';
+
+import { InfoHint } from './info-hint';
 
 /**
  * Section repliable : un titre, une statistique de synthèse, le détail dessous.
  *
  * Fermée par défaut : la statistique du titre suffit souvent à décider s'il
- * faut ouvrir. Bâtie sur `<details>` — clavier, lecteur d'écran et absence de
- * JavaScript fonctionnent sans rien ajouter.
+ * faut ouvrir. L'explication du titre est rangée derrière un « + », qui
+ * s'ouvre sans replier ni déplier la section.
+ *
+ * Tout l'en-tête se clique ; au clavier, c'est le bouton du titre qui porte
+ * `aria-expanded`. Le contenu fermé reste dans le DOM (masqué) : l'impression
+ * le déplie, et un champ en cours de saisie ne perd pas son état.
  */
 export function Accordion({
   title,
@@ -17,22 +26,37 @@ export function Accordion({
   title: string;
   /** La statistique qui résume le contenu, lisible sans ouvrir. */
   summary?: React.ReactNode;
-  hint?: string;
+  /** Explication du titre, affichée sous le « + ». Texte en ligne uniquement. */
+  hint?: React.ReactNode;
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const id = useId();
+
   return (
-    <details
-      open={defaultOpen}
-      className="accordion group rounded-xl border border-(--border) bg-(--surface) [&_summary::-webkit-details-marker]:hidden"
-    >
-      <summary className="flex cursor-pointer list-none items-center gap-4 rounded-xl px-5 py-4 transition-colors duration-150 hover:bg-(--surface-muted)">
-        <span className="min-w-0 flex-1">
-          <span className="block text-base font-semibold text-(--heading)">{title}</span>
-          {hint ? (
-            <span className="mt-0.5 block max-w-3xl text-sm text-(--foreground-muted)">{hint}</span>
-          ) : null}
-        </span>
+    <section className="accordion rounded-xl border border-(--border) bg-(--surface)">
+      <div
+        onClick={() => setOpen((value) => !value)}
+        className={`flex cursor-pointer items-center gap-4 px-5 py-4 transition-colors duration-150 hover:bg-(--surface-muted) ${
+          open ? 'rounded-t-xl' : 'rounded-xl'
+        }`}
+      >
+        <h3 className="flex min-w-0 flex-1 items-center gap-2">
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={id}
+            onClick={(event) => {
+              event.stopPropagation();
+              setOpen((value) => !value);
+            }}
+            className="text-left text-base font-semibold text-(--heading)"
+          >
+            {title}
+          </button>
+          {hint ? <InfoHint label={title}>{hint}</InfoHint> : null}
+        </h3>
         {summary ? (
           <span className="tabular shrink-0 text-right font-mono text-sm font-medium text-(--foreground)">
             {summary}
@@ -40,10 +64,15 @@ export function Accordion({
         ) : null}
         <ChevronDown
           aria-hidden
-          className="h-5 w-5 shrink-0 text-(--foreground-muted) transition-transform duration-200 group-open:rotate-180"
+          className={`h-5 w-5 shrink-0 text-(--foreground-muted) transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
         />
-      </summary>
-      <div className="accordion-body border-t border-(--border) px-5 py-5">{children}</div>
-    </details>
+      </div>
+      <div
+        id={id}
+        className={`accordion-body border-t border-(--border) px-5 py-5 ${open ? 'is-open' : 'hidden'}`}
+      >
+        {children}
+      </div>
+    </section>
   );
 }

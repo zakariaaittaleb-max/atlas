@@ -2,7 +2,10 @@ import { ArrowDown, ArrowUp, Equal } from 'lucide-react';
 
 import type { Delta } from '@/lib/format';
 
+import { InfoHint } from './info-hint';
 import { Sparkline } from './sparkline';
+
+type Polarity = 'normal' | 'inverted' | 'neutral';
 
 /**
  * Carte d'indicateur : une valeur, son libellé, sa variation.
@@ -13,6 +16,8 @@ import { Sparkline } from './sparkline';
  *
  * La direction est portée par une icône, un signe ET une couleur : jamais par
  * la seule teinte, y compris sur un vidéoprojecteur qui délave les contrastes.
+ * Une DÉCISION (un prix, un budget) n'est ni bonne ni mauvaise en soi : elle se
+ * montre en `neutral`, sans vert ni rouge.
  */
 export function StatCard({
   label,
@@ -21,19 +26,30 @@ export function StatCard({
   hint,
   trend,
   source,
+  note,
+  size = 'md',
+  polarity,
   /** Pour un indicateur où la baisse est une bonne nouvelle (coût, pression). */
   invertPolarity = false,
 }: {
   label: string;
   value: string;
   delta?: Delta | null;
-  hint?: string;
+  /** Explication de l'indicateur, sous le « + ». */
+  hint?: React.ReactNode;
   /** Valeurs de tous les tours, pour la ligne de tendance. */
   trend?: number[];
   /** Provenance quand la valeur n'est pas la vôtre, ex. « cabinet ±5 % ». */
   source?: string;
+  /** Remplace « Premier tour — pas de comparaison » quand il n'y a pas d'écart chiffrable. */
+  note?: string;
+  /** `sm` pour une valeur en mots plutôt qu'en chiffres. */
+  size?: 'md' | 'sm';
+  polarity?: Polarity;
   invertPolarity?: boolean;
 }) {
+  const resolvedPolarity: Polarity = polarity ?? (invertPolarity ? 'inverted' : 'normal');
+
   return (
     <div className="stat-card flex min-w-0 flex-col rounded-xl border border-(--border) bg-(--surface) p-5">
       <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-(--foreground-muted)">
@@ -43,47 +59,53 @@ export function StatCard({
             {source}
           </span>
         ) : null}
+        {hint ? <InfoHint label={label}>{hint}</InfoHint> : null}
       </p>
-      <p className="tabular mt-2 font-mono text-[1.75rem] leading-9 font-medium tracking-tight text-(--foreground)">
+      <p
+        className={
+          size === 'sm'
+            ? 'mt-2 text-lg leading-7 font-semibold text-(--foreground)'
+            : 'tabular mt-2 font-mono text-[1.75rem] leading-9 font-medium tracking-tight text-(--foreground)'
+        }
+      >
         {value}
       </p>
 
       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
         {delta ? (
           <>
-            <TrendBadge delta={delta} invertPolarity={invertPolarity} />
+            <TrendBadge delta={delta} polarity={resolvedPolarity} />
             <span className="text-xs text-(--meta)">vs tour précédent</span>
           </>
         ) : (
-          <span className="text-xs text-(--meta)">Premier tour — pas de comparaison</span>
+          <span className="text-xs text-(--meta)">{note ?? 'Premier tour — pas de comparaison'}</span>
         )}
       </div>
 
       {trend && trend.length > 1 ? (
         <Sparkline values={trend} className="mt-4" label={`Trajectoire : ${label}`} />
       ) : null}
-      {hint ? <p className="mt-3 text-sm text-(--foreground-muted)">{hint}</p> : null}
     </div>
   );
 }
 
 export function TrendBadge({
   delta,
-  invertPolarity = false,
+  polarity = 'normal',
 }: {
   delta: Delta;
-  invertPolarity?: boolean;
+  polarity?: Polarity;
 }) {
   const favourable =
-    delta.direction === 'flat'
+    delta.direction === 'flat' || polarity === 'neutral'
       ? null
-      : invertPolarity
+      : polarity === 'inverted'
         ? delta.direction === 'down'
         : delta.direction === 'up';
 
   const tone =
     favourable === null
-      ? 'bg-(--surface-muted) text-(--foreground-muted)'
+      ? 'bg-(--surface-muted) text-(--foreground-muted) ring-1 ring-(--border) ring-inset'
       : favourable
         ? 'bg-(--positive-subtle) text-(--positive)'
         : 'bg-(--negative-subtle) text-(--negative)';

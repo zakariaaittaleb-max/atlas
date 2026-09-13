@@ -34,6 +34,7 @@
 
 import { useState } from 'react';
 
+import { InfoHint } from '@/components/ui/info-hint';
 import { formatMadCompact, formatScore, formatUnits } from '@/lib/format';
 import { SAVE_LABELS, type SaveState } from '@/lib/use-autosave';
 
@@ -138,12 +139,22 @@ export function SectionActions({
       )}
 
       {!confirming ? (
-        <span className="text-sm text-(--foreground-muted)" role="status">
-          {validated
-            ? '✓ Validé — vos valeurs sont enregistrées.'
-            : recorded
-              ? 'Déjà enregistré ce tour. Valider à nouveau écrase par les valeurs affichées.'
-              : 'Non enregistré pour ce tour. Valider écrit les valeurs affichées, même inchangées.'}
+        <span className="flex items-center gap-2 text-sm text-(--foreground-muted)">
+          <span role="status">
+            {validated
+              ? '✓ Validé — vos valeurs sont enregistrées.'
+              : recorded
+                ? 'Déjà enregistré ce tour'
+                : 'Pas encore enregistré ce tour'}
+          </span>
+          <InfoHint label={`Valider ${what}`}>
+            {recorded
+              ? 'Valider à nouveau écrase l’enregistrement par les valeurs affichées.'
+              : 'Valider écrit les valeurs affichées, même si vous n’y avez pas touché : c’est ainsi qu’on reconduit sciemment les choix du tour précédent.'}
+            <span className="mt-2 block">
+              « Réinitialiser » ramène le bloc à son état d’ouverture du tour.
+            </span>
+          </InfoHint>
         </span>
       ) : null}
     </div>
@@ -159,12 +170,12 @@ export function SectionActions({
  * n'avait jamais ouvert l'écran des achats.
  */
 export function DasChecklist({
-  items,
-}: { items: { label: string; href: string; done: boolean }[] }) {
+  items, className = 'mb-8',
+}: { items: { label: string; href: string; done: boolean }[]; className?: string }) {
   const left = items.filter((i) => !i.done).length;
 
   return (
-    <div className="mb-8 rounded-xl border border-(--border) bg-(--surface-muted) p-4">
+    <div className={`rounded-xl border border-(--border) bg-(--surface) p-4 ${className}`}>
       <p className="text-sm font-medium">
         {left === 0
           ? '✓ Ce domaine est renseigné sur tous les volets.'
@@ -207,7 +218,13 @@ export function DecisionBar({
     <div className="sticky bottom-0 z-10 border-t border-(--border) bg-(--surface)">
       <div className="mx-auto flex w-full min-w-0 max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-4">
         <div className="min-w-0">
-          <SaveIndicator state={state} pending={pending} lastError={lastError} />
+          <div className="flex items-center gap-2">
+            <SaveIndicator state={state} pending={pending} lastError={lastError} />
+            <InfoHint label="Enregistrement de vos saisies">
+              Vos saisies sont enregistrées au fil de la frappe : le bouton de droite ne
+              sauvegarde rien, il déclare votre tour prêt.
+            </InfoHint>
+          </div>
           {missing.length > 0 ? (
             <p className="mt-1 text-sm text-(--foreground-muted)">
               Manquant :{' '}
@@ -235,10 +252,6 @@ export function DecisionBar({
         </button>
       </div>
 
-      <p className="mx-auto w-full max-w-5xl px-6 pb-3 text-xs text-(--foreground-muted)">
-        Vos saisies sont enregistrées au fil de la frappe : ce bouton ne sauvegarde rien, il
-        déclare votre tour prêt.
-      </p>
     </div>
   );
 }
@@ -262,13 +275,15 @@ export function MoneyField({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium">{label}</span>
+      <span className="flex items-center gap-2 text-sm font-medium">
+        {label}
+        {hint ? <InfoHint label={label}>{hint}</InfoHint> : null}
+      </span>
       <NumberInput
         value={value} onChange={onChange} max={max} disabled={disabled}
         className="mt-1.5 w-full"
       />
       <Reference value={value} previous={previous} shareOf={shareOf} shareLabel={shareLabel} />
-      {hint ? <p className="mt-1 text-xs text-(--foreground-muted)">{hint}</p> : null}
     </label>
   );
 }
@@ -419,7 +434,10 @@ export function HeadcountStepper({
 
   return (
     <div className="block">
-      <span className="text-sm font-medium">{label}</span>
+      <span className="flex items-center gap-2 text-sm font-medium">
+        {label}
+        {hint ? <InfoHint label={label}>{hint}</InfoHint> : null}
+      </span>
       <div className="mt-1.5 flex items-stretch gap-1.5">
         <button
           type="button" disabled={disabled} aria-label={`Baisser ${label}`}
@@ -454,7 +472,6 @@ export function HeadcountStepper({
           </>
         ) : ' · inchangé'}
       </p>
-      {hint ? <p className="mt-1 text-xs text-(--foreground-muted)">{hint}</p> : null}
     </div>
   );
 }

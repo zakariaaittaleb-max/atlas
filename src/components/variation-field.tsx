@@ -24,6 +24,7 @@
 
 import { useState } from 'react';
 
+import { InfoHint } from '@/components/ui/info-hint';
 import { formatMadCompact, formatUnits } from '@/lib/format';
 import {
   clampVariation,
@@ -90,7 +91,10 @@ export function VariationField({
   return (
     <div>
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-        <span className="text-sm font-medium">{label}</span>
+        <span className="flex items-center gap-2 text-sm font-medium">
+          {label}
+          {hint ? <InfoHint label={label}>{hint}</InfoHint> : null}
+        </span>
         <span
           className="tabular text-sm"
           style={{
@@ -175,7 +179,6 @@ export function VariationField({
         </p>
       ) : null}
 
-      {hint ? <p className="mt-1 text-xs text-(--foreground-muted)">{hint}</p> : null}
     </div>
   );
 }

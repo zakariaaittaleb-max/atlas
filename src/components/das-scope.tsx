@@ -22,6 +22,7 @@
 import { usePathname } from 'next/navigation';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
+import { InfoHint } from '@/components/ui/info-hint';
 import {
   DAS_COOKIE, DAS_COOKIE_MAX_AGE, resolveActiveDas,
   type DasOption, type DasScope,
@@ -113,8 +114,13 @@ export function DasSwitcher() {
   return (
     <div className="border-t border-(--border) bg-(--surface)">
       <div className="mx-auto flex w-full min-w-0 max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-6 py-2.5">
-        <span className="text-sm font-medium text-(--foreground-muted)">
+        <span className="flex items-center gap-2 text-sm font-medium text-(--foreground-muted)">
           Domaine piloté
+          <InfoHint label="Domaine piloté">
+            {das.length > 1
+              ? 'Stratégie du DAS, achats, distribution, organisation et RH portent sur le domaine choisi ici. Renseignez-le partout, puis passez au suivant.'
+              : 'Votre unique domaine. Un rachat sur le marché des acquisitions en ajoutera d’autres ici.'}
+          </InfoHint>
         </span>
 
         <div role="group" aria-label="Domaine d'activité piloté" className="flex flex-wrap gap-2">
@@ -143,11 +149,6 @@ export function DasSwitcher() {
           })}
         </div>
 
-        <span className="ml-auto text-xs text-(--foreground-muted)">
-          {das.length > 1
-            ? 'Stratégie, achats, organisation et RH portent sur ce domaine.'
-            : 'Votre unique domaine. Un rachat en ajoutera d’autres ici.'}
-        </span>
       </div>
     </div>
   );

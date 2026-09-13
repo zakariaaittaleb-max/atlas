@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react';
 
+import { InfoHint } from '@/components/ui/info-hint';
 import { MetricToggle } from '@/components/ui/metric-toggle';
 import type {
   DashboardSectionKey,
@@ -204,8 +205,10 @@ function SwitchRow({
   return (
     <div className="flex items-start justify-between gap-4 rounded-xl border border-(--border) bg-(--surface) p-5">
       <div className="min-w-0">
-        <p className="font-medium">{label}</p>
-        <p className="mt-1 text-sm text-(--foreground-muted)">{description}</p>
+        <p className="flex items-center gap-2 font-medium">
+          {label}
+          <InfoHint label={label}>{description}</InfoHint>
+        </p>
       </div>
       <div className="flex shrink-0 items-center gap-3">
         {/* L'état est écrit en toutes lettres : la position du curseur ne

@@ -199,7 +199,7 @@ body {
   }
 }
 
-.accordion[open] > .accordion-body,
+.accordion-body.is-open,
 .reveal {
   animation: atlas-reveal 200ms ease-out;
 }
@@ -285,7 +285,8 @@ body[data-anti-select="on"] svg {
     display: block !important;
   }
 
-  details > div {
+  details > div,
+  .accordion-body {
     display: block !important;
   }
 

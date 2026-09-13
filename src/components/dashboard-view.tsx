@@ -55,6 +55,7 @@ import { useId, useRef, useState } from 'react';
 import { Accordion } from '@/components/ui/accordion';
 import { ChartContainer } from '@/components/ui/chart-container';
 import { DataTable, downloadCsv, type DataColumn, type DataRow } from '@/components/ui/data-table';
+import { InfoHint } from '@/components/ui/info-hint';
 import { MetricToggle } from '@/components/ui/metric-toggle';
 import { StatCard } from '@/components/ui/stat-card';
 import type { FieldDisclosure } from '@/lib/consulting-types';
@@ -155,8 +156,18 @@ export function DashboardView({
             value={view}
             onChange={chooseView}
           />
+          <InfoHint label="Niveaux de lecture">
+            {VIEW_LEVELS.map((level) => (
+              <span key={level.key} className="mt-2 block first:mt-0">
+                <strong className="font-semibold">{level.label}</strong> — {level.description}
+              </span>
+            ))}
+            <span className="mt-2 block text-(--foreground-muted)">
+              Les trois niveaux montrent les mêmes données, rangées différemment. Votre choix est
+              retenu sur cet appareil.
+            </span>
+          </InfoHint>
         </div>
-        <p className="text-sm text-(--meta)">{VIEW_LEVELS.find((v) => v.key === view)?.description}</p>
       </div>
 
       {view === 'pilote' ? (
@@ -287,7 +298,13 @@ function PilotView({
 
       <div className="grid gap-4 lg:grid-cols-5">
         <section aria-labelledby="watch-title" className="rounded-xl border border-(--border) bg-(--surface) p-5 lg:col-span-3">
-          <h2 id="watch-title" className="text-lg font-semibold text-(--heading)">À surveiller</h2>
+          <h2 id="watch-title" className="flex items-center gap-2 text-lg font-semibold text-(--heading)">
+            À surveiller
+            <InfoHint label="À surveiller">
+              Ce qui mérite un regard avant la prochaine décision. Chaque signal reprend une
+              information déjà présente dans les vues Gestionnaire et Analyste.
+            </InfoHint>
+          </h2>
           {signals.length === 0 ? (
             <p className="mt-3 flex items-center gap-2 text-sm text-(--positive)">
               <CircleCheck aria-hidden className="h-4 w-4" />
@@ -323,8 +340,13 @@ function PilotView({
 
         {sections.portefeuille && context.das.length > 0 ? (
           <section aria-labelledby="portfolio-title" className="rounded-xl border border-(--border) bg-(--surface) p-5 lg:col-span-2">
-            <h2 id="portfolio-title" className="text-lg font-semibold text-(--heading)">Portefeuille</h2>
-            <p className="mt-0.5 text-sm text-(--meta)">Poids de chaque domaine dans le chiffre d’affaires.</p>
+            <h2 id="portfolio-title" className="flex items-center gap-2 text-lg font-semibold text-(--heading)">
+              Portefeuille
+              <InfoHint label="Portefeuille">
+                Poids de chaque domaine dans le chiffre d’affaires du Groupe, et sa marge brute, au
+                dernier exercice clos.
+              </InfoHint>
+            </h2>
             <ul className="mt-4 space-y-3">
               {context.das.map((d, index) => (
                 <li key={d.dasId}>
@@ -563,7 +585,7 @@ function Portfolio({ das }: { das: DasSeries[] }) {
   return (
     <Accordion
       title="Poids et marge par domaine"
-      hint="Quel métier fait vivre l’entreprise, et lequel la fait vivre bien."
+      hint="Quel métier fait vivre l’entreprise, et lequel la fait vivre bien. L’écart entre les deux classements est souvent la révélation : un domaine peut faire le volume sans faire la marge."
       summary={`${das.length} domaine${das.length > 1 ? 's' : ''}`}
     >
       {/* Deux graphiques, jamais deux axes : une part en % et une marge en DH
@@ -610,10 +632,6 @@ function Portfolio({ das }: { das: DasSeries[] }) {
           </ResponsiveContainer>
         </ChartContainer>
       </div>
-      <p className="mt-4 text-sm text-(--foreground-muted)">
-        L’écart entre les deux classements est souvent la révélation : un domaine peut faire le
-        volume sans faire la marge.
-      </p>
     </Accordion>
   );
 }
@@ -735,13 +753,13 @@ function Alignment({ context }: { context: DashboardContext }) {
         >
           {alert ? <TriangleAlert aria-hidden className="mt-0.5 h-5 w-5 shrink-0 text-(--warning)" /> : null}
           <div>
-            <p className="text-xs font-semibold tracking-wider text-(--foreground-muted) uppercase">
+            <p className="flex items-center gap-2 text-xs font-semibold tracking-wider text-(--foreground-muted) uppercase">
               {alert ? (alignment.stuckInTheMiddle ? 'Enlisé au milieu' : 'Dérive stratégique') : 'Diagnostic'}
+              <InfoHint label="Cohérence stratégique">
+                Une entreprise cohérente exécute mieux : la prime d’alignement joue sur la marge.
+              </InfoHint>
             </p>
             <p className="mt-1">{alignment.sentence}</p>
-            <p className="mt-2 text-sm text-(--foreground-muted)">
-              Une entreprise cohérente exécute mieux : la prime joue sur la marge.
-            </p>
           </div>
         </div>
       </div>
@@ -1611,9 +1629,9 @@ function CabinetFact({
         <span className="rounded bg-(--surface) px-1.5 py-0.5 text-[0.6875rem] ring-1 ring-(--border)">
           cabinet {errorMargin > 0 ? `±${Math.round(errorMargin * 100)} %` : 'exact'}
         </span>
+        {hint ? <InfoHint label={label}>{hint}</InfoHint> : null}
       </dt>
       <dd className="mt-0.5 font-mono text-lg font-semibold">{value}</dd>
-      {hint ? <dd className="text-xs text-(--foreground-muted)">{hint}</dd> : null}
     </div>
   );
 }
@@ -1643,15 +1661,14 @@ function Unavailable({
       <p className="text-xs font-semibold tracking-wider text-(--foreground-muted) uppercase">
         {toBuy ? 'Données à acheter' : 'Données à venir'}
       </p>
-      <p className="mt-1 font-semibold text-(--heading)">{what} n’est pas encore disponible.</p>
-      <ul className="mt-3 max-w-3xl space-y-1.5 text-sm text-(--foreground-muted)">
-        {reasons.map((reason, index) => (
-          <li key={index} className="flex gap-2">
-            <span aria-hidden>—</span>
-            <span>{reason}</span>
-          </li>
-        ))}
-      </ul>
+      <p className="mt-1 flex flex-wrap items-center gap-2 font-semibold text-(--heading)">
+        {what} n’est pas encore disponible.
+        <InfoHint label={`Pourquoi : ${what}`}>
+          {reasons.map((reason, index) => (
+            <span key={index} className="mt-2 block first:mt-0">{reason}</span>
+          ))}
+        </InfoHint>
+      </p>
 
       {toBuy ? (
         <div className="mt-4 flex flex-wrap items-center gap-3">
