@@ -9,8 +9,24 @@
 import { useDasScope } from '@/components/das-scope';
 import { DashboardView } from '@/components/dashboard-view';
 import type { DashboardContext } from '@/lib/dashboard-types';
+import type { DashboardSectionKey, ViewLevel } from '@/lib/display-config-types';
 
-export function CockpitView({ context }: { context: DashboardContext }) {
+export function CockpitView({
+  context,
+  sections,
+  initialView,
+}: {
+  context: DashboardContext;
+  sections: Record<DashboardSectionKey, boolean>;
+  initialView: ViewLevel;
+}) {
   const { activeDasId } = useDasScope();
-  return <DashboardView context={context} activeDasId={activeDasId} />;
+  return (
+    <DashboardView
+      context={context}
+      activeDasId={activeDasId}
+      sections={sections}
+      initialView={initialView}
+    />
+  );
 }

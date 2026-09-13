@@ -7,37 +7,140 @@
  *  • l'interface est projetée en salle : contrastes élevés, corps de texte
  *    généreux, aucune information portée par la seule couleur ;
  *  • les montants s'affichent en DH avec l'espace comme séparateur de milliers.
+ *
+ * Les valeurs sont celles du système de design « Atlas - UX/UI Redesign »
+ * (Figma, collections Primitives / Color / Color Dark). Chaque couleur de
+ * texte a été vérifiée à 4,5:1 minimum contre le fond où elle a le droit
+ * d'apparaître :
+ *  • #059669 (vert de marque) ne fait que 3,8:1 sur blanc → texte en #047857,
+ *    le vert vif reste aux icônes et aux aplats ;
+ *  • #6B7280 tombe à 4,4:1 sur le fond d'application → texte secondaire en
+ *    #4B5563 ; #6B7280 est réservé aux légendes posées sur une surface blanche.
  */
 
 :root {
-  --background: #f7f7f5;
+  --background: #f3f4f6;
   --surface: #ffffff;
-  --surface-muted: #f0efec;
-  --border: #dddbd5;
-  --foreground: #1a1a17;
-  --foreground-muted: #5c5a53;
+  --surface-muted: #f9fafb;
+  --border: #e5e7eb;
+  --border-strong: #6b7280;
+  --foreground: #111827;
+  --foreground-muted: #4b5563;
+  --meta: #6b7280;
+  --heading: #1e3a8a;
+
+  --accent: #1e3a8a;
+  --accent-hover: #1e40af;
+  --accent-text: #1e40af;
+  --accent-subtle: #eff6ff;
+  --on-accent: #ffffff;
+  --focus: #1d4ed8;
 
   /* Vert et rouge ne portent JAMAIS seuls une information : ils accompagnent
      toujours une flèche ou un signe, pour rester lisibles en daltonisme. */
-  --positive: #1a6b3c;
-  --negative: #a32b1f;
-  --accent: #1d4e6b;
-  --warning: #8a5a00;
+  --positive: #047857;
+  --positive-icon: #059669;
+  --positive-subtle: #d1fae5;
+  --negative: #b91c1c;
+  --negative-icon: #dc2626;
+  --negative-subtle: #fee2e2;
+  --warning: #b45309;
+  --warning-subtle: #fef3c7;
+
+  /* Séries de données : l'identité d'un domaine, jamais un sens. Ordre fixe,
+     validé en vision daltonienne (ΔE ≥ 16 entre voisines). Les séries 4 et 5
+     passent sous 3:1 : elles vont toujours avec une étiquette ou un tableau. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #4a3aa7;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --grid: #e5e7eb;
+
+  --sidebar-width: 16rem;
+  --sidebar-rail: 4.25rem;
 }
 
+/* Thème sombre : suit le système, sauf si /admin/config impose un thème. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #14140f;
-    --surface: #1e1e19;
-    --surface-muted: #26261f;
-    --border: #3a382f;
-    --foreground: #f2f0e9;
-    --foreground-muted: #a6a294;
-    --positive: #5fbe86;
-    --negative: #e8836f;
-    --accent: #79b6d8;
-    --warning: #d9a441;
+  :root:not([data-theme="light"]) {
+    --background: #030712;
+    --surface: #111827;
+    --surface-muted: #1f2937;
+    --border: #374151;
+    --border-strong: #6b7280;
+    --foreground: #f9fafb;
+    --foreground-muted: #9ca3af;
+    --meta: #9ca3af;
+    --heading: #bfdbfe;
+    --accent: #60a5fa;
+    --accent-hover: #93c5fd;
+    --accent-text: #93c5fd;
+    --accent-subtle: #172554;
+    --on-accent: #030712;
+    --focus: #60a5fa;
+    --positive: #34d399;
+    --positive-icon: #34d399;
+    --positive-subtle: #022c22;
+    --negative: #f87171;
+    --negative-icon: #f87171;
+    --negative-subtle: #450a0a;
+    --warning: #fbbf24;
+    --warning-subtle: #451a03;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #9085e9;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --grid: #1f2937;
   }
+}
+
+:root[data-theme="dark"] {
+  --background: #030712;
+  --surface: #111827;
+  --surface-muted: #1f2937;
+  --border: #374151;
+  --border-strong: #6b7280;
+  --foreground: #f9fafb;
+  --foreground-muted: #9ca3af;
+  --meta: #9ca3af;
+  --heading: #bfdbfe;
+  --accent: #60a5fa;
+  --accent-hover: #93c5fd;
+  --accent-text: #93c5fd;
+  --accent-subtle: #172554;
+  --on-accent: #030712;
+  --focus: #60a5fa;
+  --positive: #34d399;
+  --positive-icon: #34d399;
+  --positive-subtle: #022c22;
+  --negative: #f87171;
+  --negative-icon: #f87171;
+  --negative-subtle: #450a0a;
+  --warning: #fbbf24;
+  --warning-subtle: #451a03;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #9085e9;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --grid: #1f2937;
+}
+
+:root[data-theme="dark"],
+:root:not([data-theme="light"]) {
+  color-scheme: light dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* Taille de police « grand », pour la projection en salle. Tailwind compte en
+   rem : tout l'écran grandit d'un bloc, espacements compris. */
+:root[data-font-scale="grand"] {
+  font-size: 112.5%;
 }
 
 @theme inline {
@@ -47,9 +150,12 @@
   --color-border-subtle: var(--border);
   --color-foreground: var(--foreground);
   --color-foreground-muted: var(--foreground-muted);
+  --color-heading: var(--heading);
+  --color-meta: var(--meta);
   --color-positive: var(--positive);
   --color-negative: var(--negative);
   --color-accent: var(--accent);
+  --color-accent-subtle: var(--accent-subtle);
   --color-warning: var(--warning);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
@@ -61,10 +167,57 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
+/* Le focus clavier se voit toujours, sur tous les fonds. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 /* Les chiffres d'un tableau doivent s'aligner colonne par colonne, sinon on ne
    compare pas des ordres de grandeur d'un coup d'œil. */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Micro-interactions ─────────────────────────────────────────────────────
+   Brèves et réversibles : elles confirment un geste, elles ne l'annoncent pas.
+   Toutes disparaissent sous `prefers-reduced-motion`. */
+@keyframes atlas-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.accordion[open] > .accordion-body,
+.reveal {
+  animation: atlas-reveal 200ms ease-out;
+}
+
+.stat-card {
+  transition: box-shadow 150ms ease-out, transform 150ms ease-out;
+}
+
+.stat-card:hover {
+  box-shadow: 0 1px 2px rgb(17 24 39 / 0.06), 0 4px 12px rgb(17 24 39 / 0.08);
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+
+  .stat-card:hover {
+    transform: none;
+  }
 }
 
 /* Mesure « anti-sélection CSS », activée depuis /admin/security. L'attribut
@@ -100,6 +253,7 @@ body[data-anti-select="on"] svg {
    les courbes et les remplissages des radars — l'information du rapport. */
 @media print {
   nav,
+  aside,
   .print\:hidden {
     display: none !important;
   }

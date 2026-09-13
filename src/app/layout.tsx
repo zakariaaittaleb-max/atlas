@@ -11,7 +11,8 @@ import {
 import { DasScopeProvider } from "@/components/das-scope";
 import { FacilitatorPlayBanner } from "@/components/facilitator-play-banner";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
-import { TeamNav } from "@/components/team-nav";
+import { TeamShell } from "@/components/team-nav";
+import { readDisplayConfig } from "@/lib/display-config";
 import {
   FACILITATOR_PLAY_COOKIE,
   parseFacilitatorPlayCookie,
@@ -40,9 +41,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   // Le domaine piloté est arrêté ICI, une fois, et vaut pour la barre de
   // navigation comme pour la page : les deux lisent le même contexte, donc
   // l'onglet actif et le contenu ne peuvent pas diverger.
-  const scope = await loadDasScope();
-  const securityConfig = await readSecurityConfig();
-  const jar = await cookies();
+  const [scope, securityConfig, displayConfig, jar] = await Promise.all([
+    loadDasScope(),
+    readSecurityConfig(),
+    readDisplayConfig(),
+    cookies(),
+  ]);
   const impersonationLabel = jar.get(IMPERSONATION_LABEL_COOKIE)?.value ?? null;
   const facilitatorPlay = parseFacilitatorPlayCookie(jar.get(FACILITATOR_PLAY_COOKIE)?.value);
 
@@ -50,6 +54,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="fr"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // Thème et taille de police viennent de /admin/config, lus côté serveur :
+      // la première image est déjà la bonne, sans script ni clignotement. En
+      // « système », aucun attribut — `prefers-color-scheme` décide.
+      data-theme={displayConfig.theme === "system" ? undefined : displayConfig.theme}
+      data-font-scale={displayConfig.fontScale === "grand" ? "grand" : undefined}
     >
       <body
         className="min-h-full flex flex-col"
@@ -71,10 +80,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           />
         ) : null}
         <DasScopeProvider scope={scope}>
-          {/* Rend `null` tant que l'utilisateur n'est rattaché à aucune équipe :
-              l'écran de connexion reste nu. */}
-          <TeamNav />
-          {children}
+          {/* Sans équipe (connexion, facilitateur, admin), la coque rend ses
+              enfants tels quels : ces écrans restent nus. */}
+          <TeamShell>{children}</TeamShell>
         </DasScopeProvider>
       </body>
     </html>

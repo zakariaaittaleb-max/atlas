@@ -10,6 +10,7 @@ const ADMIN_LINKS = [
   { href: '/admin/security', label: 'Sécurité' },
   { href: '/admin/facilitators', label: 'Facilitateurs' },
   { href: '/admin/sessions', label: 'Sessions' },
+  { href: '/admin/config', label: 'Affichage' },
 ] as const;
 
 /**
