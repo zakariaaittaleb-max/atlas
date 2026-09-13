@@ -181,6 +181,41 @@ footer{margin-top:56px;padding-top:20px;border-top:2px solid var(--ink);
     </fieldset>
 
     <fieldset>
+      <legend>Ressources humaines du domaine</legend>
+      <div class="ctl">
+        <label for="climat">Climat social hérité <output id="climatOut"></output></label>
+        <input type="range" id="climat" min="0" max="100" value="65">
+        <span class="hint">Celui de la clôture précédente. Sous 60, une part de l'outil cesse de
+        produire et chaque unité coûte plus cher.</span>
+      </div>
+      <div class="ctl">
+        <label for="skill">Compétence accumulée <output id="skillOut"></output></label>
+        <input type="range" id="skill" min="0" max="100" value="20">
+        <span class="hint">Niveau hérité : 20. Au-dessus, le coût baisse et la R&amp;D rend mieux ;
+        en dessous, l'inverse.</span>
+      </div>
+      <div class="ctl">
+        <label for="salary">Salaire brut moyen <output id="salaryOut"></output></label>
+        <input type="range" id="salary" min="100" max="400" step="5" value="170">
+      </div>
+      <div class="ctl">
+        <label for="training">Formation par tête <output id="trainingOut"></output></label>
+        <input type="range" id="training" min="0" max="16000" step="250" value="0">
+      </div>
+      <div class="ctl">
+        <label for="focus">Orientation de la formation</label>
+        <select id="focus" aria-label="Orientation de la formation">
+          <option value="technique">Geste métier</option>
+          <option value="management">Encadrement</option>
+          <option value="qualite">Normes et contrôle qualité</option>
+          <option value="polyvalence">Polyvalence</option>
+        </select>
+        <span class="hint">Ne joue qu'à proportion du budget engagé : sans formation, elle ne
+        forme personne.</span>
+      </div>
+    </fieldset>
+
+    <fieldset>
       <legend>Filière</legend>
       <div class="ctl">
         <label for="channel">Contrôle du canal <output id="channelOut"></output></label>
@@ -216,6 +251,22 @@ footer{margin-top:56px;padding-top:20px;border-top:2px solid var(--ink);
         <label for="shared">Mutualisation effective <output id="sharedOut"></output></label>
         <input type="range" id="shared" min="0" max="100" value="40">
       </div>
+      <div class="ctl">
+        <label for="hq">Siège financé <output id="hqOut"></output></label>
+        <input type="range" id="hq" min="40" max="150" step="5" value="100">
+        <span class="hint">Rapporté au siège de référence. Le plancher est à 40 % : un siège ne
+        peut pas être gratuit. Sous 100, ce qui est centralisé devient un goulot.</span>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Trésorerie</legend>
+      <div class="ctl">
+        <label for="drain">Trésorerie ponctionnée au domaine <output id="drainOut"></output></label>
+        <input type="range" id="drain" min="0" max="100" value="0">
+        <span class="hint">Cash pooling, en part du besoin en fonds de roulement du domaine. Ce
+        qu'on lui retire, il le perd en compétitivité.</span>
+      </div>
     </fieldset>
   </div>
 
@@ -234,11 +285,16 @@ footer{margin-top:56px;padding-top:20px;border-top:2px solid var(--ink);
 <footer>
   <span>Coefficients extraits du moteur, non ressaisis</span>
   <span>Un domaine, un tour, un pool de trois équipes de référence</span>
+  <span>RH, siège et cash pooling branchés le 13 septembre 2026</span>
 </footer>
 </div>
 
 <script>
 const E = {"comp": {"quality": 0.3, "notoriety": 0.25, "price": 0.2, "ia": 0.15, "pressure": -0.1}, "ia": {"sab": 0.44, "sag": 0.2, "sac": 0.28, "sat": 0.08}, "band": 0.1, "sat": 0.45, "exp": 1.5, "stuckT": 55.0, "stuckM": 12.0, "driftT": 15.0, "driftM": 6.0, "premMax": 0.08, "premPivot": 70.0, "priceFloor": 0.6, "priceSpan": 0.008, "shortfall": 2.0, "maxDiscount": 0.18, "ownedCapture": 0.26, "ownedOperating": 0.06, "contractEq": 0.5, "synergyMax": 0.12, "coordMax": 0.15, "hqPerDas": 0.004, "ansoff": {"developpement_marche": 0.12, "developpement_produit": 0.15, "diversification": 0.28, "penetration": 0.0}, "blue": {"mult": 2.5, "cost": 0.15, "fail": 0.35, "rounds": 2.0}, "targets": {"domination_couts": {"price_position": 22.0, "rd_intensity": 20.0, "mkt_intensity": 30.0, "quality": 55.0, "cost_efficiency": 88.0, "scale_index": 82.0, "automation_level": 78.0, "skill_intensity": 32.0, "segment_breadth": 80.0, "channel_control": 35.0, "org_delegation": 30.0, "org_layers": 68.0, "axis_fit": 100.0, "kpi_fit": 100.0, "budget_fit": 100.0, "key_roles_fit": 100.0}, "differenciation": {"price_position": 78.0, "rd_intensity": 80.0, "mkt_intensity": 75.0, "quality": 85.0, "cost_efficiency": 45.0, "scale_index": 55.0, "automation_level": 55.0, "skill_intensity": 82.0, "segment_breadth": 75.0, "channel_control": 70.0, "org_delegation": 62.0, "org_layers": 45.0, "axis_fit": 100.0, "kpi_fit": 100.0, "budget_fit": 100.0, "key_roles_fit": 100.0}, "focus_couts": {"price_position": 30.0, "rd_intensity": 20.0, "mkt_intensity": 25.0, "quality": 58.0, "cost_efficiency": 78.0, "scale_index": 30.0, "automation_level": 62.0, "skill_intensity": 38.0, "segment_breadth": 22.0, "channel_control": 45.0, "org_delegation": 42.0, "org_layers": 48.0, "axis_fit": 100.0, "kpi_fit": 100.0, "budget_fit": 100.0, "key_roles_fit": 100.0}, "focus_differenciation": {"price_position": 88.0, "rd_intensity": 85.0, "mkt_intensity": 60.0, "quality": 90.0, "cost_efficiency": 38.0, "scale_index": 22.0, "automation_level": 35.0, "skill_intensity": 88.0, "segment_breadth": 18.0, "channel_control": 85.0, "org_delegation": 78.0, "org_layers": 24.0, "axis_fit": 100.0, "kpi_fit": 100.0, "budget_fit": 100.0, "key_roles_fit": 100.0}}, "weights": {"domination_couts": {"price_position": 0.104, "rd_intensity": 0.052, "mkt_intensity": 0.0195, "quality": 0.0455, "cost_efficiency": 0.13, "scale_index": 0.117, "automation_level": 0.078, "skill_intensity": 0.052, "segment_breadth": 0.039, "channel_control": 0.013, "org_delegation": 0.05, "org_layers": 0.04, "axis_fit": 0.07, "kpi_fit": 0.09, "budget_fit": 0.07, "key_roles_fit": 0.03}, "differenciation": {"price_position": 0.091, "rd_intensity": 0.117, "mkt_intensity": 0.078, "quality": 0.13, "cost_efficiency": 0.039, "scale_index": 0.013, "automation_level": 0.026, "skill_intensity": 0.0845, "segment_breadth": 0.0195, "channel_control": 0.052, "org_delegation": 0.05, "org_layers": 0.04, "axis_fit": 0.08, "kpi_fit": 0.09, "budget_fit": 0.06, "key_roles_fit": 0.03}, "focus_couts": {"price_position": 0.0975, "rd_intensity": 0.039, "mkt_intensity": 0.013, "quality": 0.0585, "cost_efficiency": 0.117, "scale_index": 0.065, "automation_level": 0.065, "skill_intensity": 0.052, "segment_breadth": 0.117, "channel_control": 0.026, "org_delegation": 0.05, "org_layers": 0.04, "axis_fit": 0.07, "kpi_fit": 0.09, "budget_fit": 0.07, "key_roles_fit": 0.03}, "focus_differenciation": {"price_position": 0.091, "rd_intensity": 0.078, "mkt_intensity": 0.039, "quality": 0.117, "cost_efficiency": 0.026, "scale_index": 0.013, "automation_level": 0.0195, "skill_intensity": 0.0845, "segment_breadth": 0.117, "channel_control": 0.065, "org_delegation": 0.06, "org_layers": 0.05, "axis_fit": 0.07, "kpi_fit": 0.08, "budget_fit": 0.06, "key_roles_fit": 0.03}}, "corpT": {"specialisation": {"portfolio_breadth": 10.0, "portfolio_relatedness": 85.0, "centralisation_index": 75.0, "shared_resources_index": 60.0, "vertical_integration": 40.0, "talent_mix": 60.0, "values_fit": 75.0}, "integration_verticale": {"portfolio_breadth": 25.0, "portfolio_relatedness": 80.0, "centralisation_index": 80.0, "shared_resources_index": 70.0, "vertical_integration": 85.0, "talent_mix": 55.0, "values_fit": 70.0}, "diversification_liee": {"portfolio_breadth": 50.0, "portfolio_relatedness": 65.0, "centralisation_index": 55.0, "shared_resources_index": 80.0, "vertical_integration": 40.0, "talent_mix": 60.0, "values_fit": 70.0}, "diversification_conglomerale": {"portfolio_breadth": 75.0, "portfolio_relatedness": 20.0, "centralisation_index": 30.0, "shared_resources_index": 20.0, "vertical_integration": 20.0, "talent_mix": 45.0, "values_fit": 60.0}}, "corpW": {"specialisation": {"portfolio_breadth": 0.22, "portfolio_relatedness": 0.2, "centralisation_index": 0.14, "shared_resources_index": 0.14, "vertical_integration": 0.08, "talent_mix": 0.1, "values_fit": 0.12}, "integration_verticale": {"portfolio_breadth": 0.1, "portfolio_relatedness": 0.14, "centralisation_index": 0.16, "shared_resources_index": 0.16, "vertical_integration": 0.3, "talent_mix": 0.06, "values_fit": 0.08}, "diversification_liee": {"portfolio_breadth": 0.16, "portfolio_relatedness": 0.2, "centralisation_index": 0.12, "shared_resources_index": 0.26, "vertical_integration": 0.08, "talent_mix": 0.08, "values_fit": 0.1}, "diversification_conglomerale": {"portfolio_breadth": 0.18, "portfolio_relatedness": 0.18, "centralisation_index": 0.18, "shared_resources_index": 0.2, "vertical_integration": 0.06, "talent_mix": 0.08, "values_fit": 0.12}}};
+
+// Liaisons RH, siège et cash pooling : valeurs lues dans params.ts et hr.ts
+// au moment de la mise à jour, jamais ressaisies à la main.
+Object.assign(E, {"hr": {"capW": 0.3, "costLev": 0.15, "qualLev": 0.5, "inherited": 20, "turnFloor": 0.04, "trainRef": 8000, "smig": 3422.72, "avgSalary": 5800, "chargesPct": 0.2109, "fullEffort": 0.07, "focusQuality": {"technique": 1.15, "management": 0.9, "qualite": 1.4, "polyvalence": 0.95}, "costPenalty": 0.12}, "fin": {"drainMax": 0.25, "hqRef": 0.1, "hqFloor": 0.04}, "capShare": 0.95});
 
 const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -246,7 +302,8 @@ const c100 = (v) => clamp(v, 0, 100);
 const fr = (v, d = 0) => v.toFixed(d).replace('.', ',');
 
 const CTL = ['price','segments','quality','noto','rd','mkt','auto','cost','channel','integ',
-             'das','related','central','shared'];
+             'das','related','central','shared',
+             'climat','skill','salary','training','hq','drain'];
 const own = { supplier: false, distrib: false };
 
 const HINT = {
@@ -281,6 +338,34 @@ function compute() {
   const v = {};
   for (const id of CTL) v[id] = Number($(id).value);
   const strategy = $('strategy').value;
+  const focus = $('focus').value;
+
+  // ── RH héritée du tour précédent : les deux sorties de la boucle ─────────
+  // Climat : ce qui manque sous le pivot de 60 retire de la capacité ET
+  // renchérit chaque unité (absences couvertes en heures supplémentaires,
+  // reprises, rebuts). Les deux se paient, que l'outil soit saturé ou non.
+  const socialGap = Math.max(60 - c100(v.climat), 0) / 60;
+  const availability = Math.max(1 - E.hr.capW * socialGap, 0);
+  const socialCost = 1 + E.hr.costPenalty * Math.min(socialGap, 1);
+  // Compétence : mesurée en ÉCART au niveau hérité, pour que ne rien décider
+  // ne coûte ni ne rapporte.
+  const edge = (c100(v.skill) - E.hr.inherited) / 100;
+  const skillCost = Math.max(1 - E.hr.costLev * edge, 0.5);
+  // L'orientation de formation ne joue qu'à proportion de l'effort engagé.
+  const salaryMad = (v.salary / 100) * E.hr.smig;
+  const payrollPerHead = Math.max(salaryMad, E.hr.smig) * 12 * (1 + E.hr.chargesPct);
+  const trainingIntensity = v.training / payrollPerHead;
+  const focusEffort = Math.min(Math.max(trainingIntensity, 0) / E.hr.fullEffort, 1);
+  const focusFactor = 1 + (E.hr.focusQuality[focus] - 1) * focusEffort;
+  const rdYield = Math.max(1 + E.hr.qualLev * edge, 0) * Math.max(focusFactor, 0);
+  // Rotation qu'entraînerait ce climat : les plus qualifiés partent en premier.
+  const mobility = 0.6 + 0.8 * (c100(v.skill) / 100);
+  const turnover = Math.min(E.hr.turnFloor + socialGap * socialGap * 0.35 * mobility, 0.6);
+  // Intensité de compétence DU DOMAINE : son salaire, sa formation, sa compétence.
+  const skillIntensity = c100(100 * (
+    0.4 * clamp((v.salary / 100 - 1) / 2, 0, 1)
+    + 0.3 * clamp(v.training / E.hr.trainRef, 0, 1)
+    + 0.3 * (c100(v.skill) / 100)));
 
   // ── Vecteur observé, dans le vocabulaire du moteur ────────────────────────
   const channel = own.distrib ? c100(v.channel + 45) : v.channel;
@@ -292,6 +377,7 @@ function compute() {
     cost_efficiency: own.supplier
       ? c100(v.cost + 12 * (v.integ / 100)) : v.cost,
     automation_level: v.auto,
+    skill_intensity: skillIntensity,
     segment_breadth: ((v.segments - 1) / 4) * 100,
     channel_control: channel,
   };
@@ -336,15 +422,23 @@ function compute() {
   const gap = (1 - priceFactor / (E.priceFloor + E.priceSpan * 50));
   const priceComp = clamp(0.5 + 1.6 * gap, 0, 1);
 
+  // Un domaine ponctionné paie ses fournisseurs plus tard et le perd en
+  // compétitivité, à proportion du besoin en fonds de roulement qu'on lui retire.
+  const drainMalus = clamp(v.drain / 100, 0, 1) * E.fin.drainMax;
   const comp = Math.max(
-    E.comp.quality * (v.quality / 100) + E.comp.notoriety * (v.noto / 100)
+    (E.comp.quality * (v.quality / 100) + E.comp.notoriety * (v.noto / 100)
     + E.comp.price * priceComp + E.comp.ia * (ia / 100)
-    + E.comp.pressure * 0.4, 0.001);
+    + E.comp.pressure * 0.4) * (1 - drainMalus), 0.001);
 
   // Trois équipes de référence à compétitivité moyenne 0,46.
   const share = comp / (comp + 2 * 0.46);
   const addressable = (v.segments / 5) * (v.quality >= 55 ? 1 : 1 / E.shortfall);
   const volume = share * addressable;
+  // L'outil de départ vaut une part équitable du marché, un peu en dessous :
+  // la capacité est rare dès le premier tour. Le climat en retire sa part.
+  const capacity = (E.capShare / 3) * availability;
+  const sold = Math.min(volume, capacity);
+  const stockout = volume > 0 ? 1 - sold / volume : 0;
 
   const prem = clamp(E.premMax * ((ia - E.premPivot) / (100 - E.premPivot)), -E.premMax, E.premMax);
 
@@ -352,15 +446,24 @@ function compute() {
   const upstream = own.supplier ? E.ownedCapture * (v.integ / 100) : E.maxDiscount * 0.45;
   const downstream = own.distrib
     ? (0.22 - (0.22 - E.ownedOperating) * (v.integ / 100)) : 0.22;
-  const margin = (priceFactor - (1 - upstream) * (1.05 - 0.45 * (v.cost / 100))) / priceFactor
-    - downstream * (1 - channel / 100) + prem;
+  // Le coût variable porte les deux facteurs humains, qui se composent.
+  const humanCost = skillCost * socialCost;
+  const margin = (priceFactor - (1 - upstream) * (1.05 - 0.45 * (v.cost / 100)) * humanCost)
+    / priceFactor - downstream * (1 - channel / 100) + prem;
 
+  // Un service partagé qu'on ne dote pas ne produit pas d'économie : il
+  // produit un goulot, à proportion de ce qui est centralisé.
   const m = v.shared / 100, pr = v.related / 100;
-  const opex = Math.max(1 - m * pr * E.synergyMax + m * (1 - pr) * E.coordMax
-    + (v.central / 100) * v.das * E.hqPerDas, 0.5);
+  const hqShortfall = clamp(1 - v.hq / 100, 0, 1);
+  const saving = m * pr * E.synergyMax * (1 - hqShortfall);
+  const coord = m * (1 - pr) * E.coordMax + hqShortfall * (v.central / 100) * E.coordMax;
+  const opex = Math.max(1 - saving + coord + (v.central / 100) * v.das * E.hqPerDas, 0.5);
 
   return { sab, sac, ia, stuck, drift, best, comp, share, addressable, volume,
-           margin, prem, opex, priceFactor, corpStrat, corp, obs, v, strategy };
+           capacity, sold, stockout, availability, socialCost, skillCost, humanCost,
+           rdYield, focusFactor, focusEffort, turnover, skillIntensity, edge, drainMalus,
+           hqShortfall, saving, coord,
+           margin, prem, opex, priceFactor, corpStrat, corp, obs, v, strategy, focus };
 }
 
 // ── Rendu ───────────────────────────────────────────────────────────────────
@@ -389,8 +492,15 @@ function render() {
     + row('Compétitivité', 'Qualité, notoriété, prix relatif, alignement, pression', fr(r.comp * 100, 1), base === r ? null : (r.comp - base.comp) * 100, r.comp * 100)
     + row('Part de marché', 'À somme nulle, contre deux concurrents de référence', fr(r.share * 100, 1) + ' %', base === r ? null : (r.share - base.share) * 100, r.share * 100)
     + row('Marché adressable', 'Ce que vos segments servis vous ouvrent', fr(r.addressable * 100, 0) + ' %', base === r ? null : (r.addressable - base.addressable) * 100, r.addressable * 100)
-    + row('Volume relatif', 'Part de marché × marché adressable', fr(r.volume * 100, 1), base === r ? null : (r.volume - base.volume) * 100, r.volume * 100)
+    + row('Volume demandé', 'Part de marché × marché adressable', fr(r.volume * 100, 1), base === r ? null : (r.volume - base.volume) * 100, r.volume * 100)
+    + row('Capacité disponible', 'Outil de départ, amputé par le climat social hérité', fr(r.availability * 100, 1) + ' %', base === r ? null : (r.availability - base.availability) * 100, r.availability * 100)
+    + row('Volume vendu', 'On ne vend pas au-delà de ce que l’outil produit', fr(r.sold * 100, 1), base === r ? null : (r.sold - base.sold) * 100, r.sold * 100)
+    + row('Rupture', 'Demande non servie — elle coûtera de la notoriété au tour suivant', fr(r.stockout * 100, 1) + ' %', base === r ? null : (r.stockout - base.stockout) * 100, r.stockout * 100)
     + row("Marge d'exploitation", 'Prix, coûts, amont capté, marge cédée à l\'aval', fr(r.margin * 100, 1) + ' %', base === r ? null : (r.margin - base.margin) * 100, r.margin * 100)
+    + row('Coût variable humain', 'Compétence × climat, appliqués au coût unitaire', '×' + fr(r.humanCost, 3), base === r ? null : (r.humanCost - base.humanCost) * 100, (r.humanCost - 0.5) / 1 * 100)
+    + row('Rendement de la R&D', 'Même budget, plus ou moins de qualité selon qui l’exécute', '×' + fr(r.rdYield, 2), base === r ? null : (r.rdYield - base.rdYield) * 100, r.rdYield / 2 * 100)
+    + row('Intensité de compétence', 'Axe du domaine : salaire, formation, compétence', fr(r.skillIntensity, 0), base === r ? null : r.skillIntensity - base.skillIntensity, r.skillIntensity)
+    + row('Départs au tour suivant', 'Rotation qu’entraîne ce climat, plancher compris', fr(r.turnover * 100, 1) + ' %', base === r ? null : (r.turnover - base.turnover) * 100, r.turnover / 0.6 * 100)
     + row('Prime de marge', "Bonus accordé à une entreprise cohérente", (r.prem >= 0 ? '+' : '−') + fr(Math.abs(r.prem) * 100, 1) + ' pts', base === r ? null : (r.prem - base.prem) * 100, (r.prem + E.premMax) / (2 * E.premMax) * 100)
     + row('Charges de structure', 'Synergies moins coordination et frais de siège', '×' + fr(r.opex, 3), base === r ? null : (r.opex - base.opex) * 100, (r.opex - 0.5) / 1.2 * 100);
 
@@ -434,6 +544,36 @@ function render() {
       marché adressable à ${fr(r.addressable * 100, 0)} % du domaine, alors que votre stratégie
       vise un marché large.</p>`;
   }
+  if (r.v.climat < 60) {
+    v += `<p><span class="tag" style="color:var(--down)">Climat</span>
+      Un climat social à ${fr(r.v.climat, 0)} retire ${fr((1 - r.availability) * 100, 1)} % de votre
+      capacité et ajoute ${fr((r.socialCost - 1) * 100, 1)} % à chaque unité produite. La capacité
+      ne se paie que si l'outil est saturé ; le coût, lui, se paie toujours.</p>`;
+  }
+  if (r.edge < 0) {
+    v += `<p>Votre compétence est passée sous le niveau hérité : le coût variable monte de
+      ${fr((r.skillCost - 1) * 100, 1)} % et votre R&amp;D rend moins, à budget égal.</p>`;
+  } else if (r.edge >= 0.3) {
+    v += `<p>Une compétence de ${fr(r.v.skill, 0)} retire ${fr((1 - r.skillCost) * 100, 1)} % au coût
+      variable. C'est l'avantage le plus lent à construire, et le plus lent à perdre.</p>`;
+  }
+  if (r.focusEffort > 0 && Math.abs(r.focusFactor - 1) > 0.005) {
+    v += `<p>L'orientation « ${$('focus').selectedOptions[0].text.toLowerCase()} » porte le rendement
+      qualité de la R&amp;D à ×${fr(r.focusFactor, 2)}, à ${fr(r.focusEffort * 100, 0)} % de son
+      plein effet : il faudrait ${fr(E.hr.fullEffort * 100, 0)} % de la masse salariale en formation
+      pour l'atteindre.</p>`;
+  }
+  if (r.hqShortfall > 0 && r.v.central > 0) {
+    v += `<p><span class="tag" style="color:var(--warn)">Siège</span>
+      Doté à ${fr(r.v.hq, 0)} % de sa référence, votre siège ne tient plus ce que vous centralisez :
+      la synergie captée tombe à ${fr(r.saving * 100, 2)} % et la coordination coûte
+      ${fr(r.coord * 100, 2)} % des charges de structure.</p>`;
+  }
+  if (r.drainMalus > 0) {
+    v += `<p>Ponctionner ${fr(r.v.drain, 0)} % du BFR de ce domaine lui coûte
+      ${fr(r.drainMalus * 100, 1)} % de compétitivité. L'argent ne produit rien par lui-même là où
+      vous le versez : c'est ce que vous en investirez qui produira.</p>`;
+  }
   if (r.v.quality < 55) {
     v += `<p>Sous 55 de qualité perçue, les segments exigeants se ferment : votre marché
       adressable est divisé par ${fr(E.shortfall, 0)}.</p>`;
@@ -450,21 +590,31 @@ function render() {
     ['6', 'La compétitivité répartit le marché', 'à somme nulle, entre les équipes du pool'],
     ['7', 'Les segments servis plafonnent le volume', "on ne vend pas sur un segment qu'on ne sert pas"],
     ['8', 'Et il accorde une prime de marge', `jusqu'à ${fr(E.premMax * 100, 0)} points au-delà de ${fr(E.premPivot, 0)} d'indice`],
+    ['9', 'La RH du tour précédent pèse sur l’outil', `climat sous 60 : jusqu'à −${fr(E.hr.capW * 100, 0)} % de capacité et +${fr(E.hr.costPenalty * 100, 0)} % de coût`],
+    ['10', 'La compétence se lit en écart au niveau hérité', `±${fr(E.hr.costLev * 100, 0)} % de coût et ±${fr(E.hr.qualLev * 100, 0)} % de rendement R&D pour 100 points`],
+    ['11', 'Le siège conditionne la synergie', `sous sa référence, l'économie fond et la coordination monte, jusqu'à ${fr(E.coordMax * 100, 0)} %`],
+    ['12', 'Le cash pooling a un prix', `jusqu'à ${fr(E.fin.drainMax * 100, 0)} % de compétitivité pour le domaine ponctionné`],
   ].map(([n, t, e]) => `<li><b>${n}</b><span>${t} — <em>${e}</em></span></li>`).join('');
 }
 
 // ── Câblage ─────────────────────────────────────────────────────────────────
-const UNIT = { price: '', segments: '', integ: ' %', das: '', related: '', central: '', shared: '' };
+const UNIT = { price: '', segments: '', integ: ' %', das: '', related: '', central: '', shared: '',
+               hq: ' %', drain: ' %' };
+const FORMAT = {
+  salary: (x) => fr(x / 100, 2) + ' × SMIG',
+  training: (x) => Number(x).toLocaleString('fr-FR') + ' DH',
+};
 function sync() {
   for (const id of CTL) {
     const out = $(id + 'Out');
-    if (out) out.textContent = $(id).value + (UNIT[id] ?? '');
+    if (out) out.textContent = FORMAT[id] ? FORMAT[id]($(id).value) : $(id).value + (UNIT[id] ?? '');
   }
   $('strategyHint').textContent = HINT[$('strategy').value];
   render();
 }
 for (const id of CTL) $(id).addEventListener('input', sync);
 $('strategy').addEventListener('change', sync);
+$('focus').addEventListener('change', sync);
 for (const [id, key] of [['ownSupplier', 'supplier'], ['ownDistrib', 'distrib']]) {
   $(id).addEventListener('click', () => {
     own[key] = !own[key];
