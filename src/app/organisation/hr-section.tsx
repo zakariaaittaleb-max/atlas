@@ -25,6 +25,7 @@ import { endowmentReference, type VariationBasis } from '@/lib/variation-referen
 import { referenceOr, type VariationScale } from '@/lib/variation-scale';
 import { formatMadCompact } from '@/lib/format';
 import type { DasHr, DasHrState } from '@/lib/org-types';
+import { hiresOf, retargetHeadcount, type HireKey } from '@/lib/headcount-target';
 
 /**
  * Ce que chaque orientation sert RÉELLEMENT, dans l'ordre où le moteur la lit.
@@ -75,17 +76,20 @@ export function HrSection({
   const ref = (key: string, field: string) =>
     referenceOr(previous[field] ?? 0, endowmentReference(key, basis));
 
-  const hires =
-    hr.hireOperateurs + hr.hireTechniciens + hr.hireExperts + hr.hireCadres +
-    hr.internalTransfersIn;
+  const hires = hiresOf(hr);
+
+  // Le profil qui reçoit un recrutement ajouté depuis le compteur : le premier
+  // que la session ouvre. Aucun ouvert, l'effectif ne peut que baisser.
+  const openHireKey: HireKey | null =
+    HIRE_FIELDS.find(([key]) => isOn(modules, key))?.[1] ?? null;
 
   // L'effectif EN PLACE, relevé du dernier exercice clos, est le point d'appui
   // de toute la saisie. Sans lui — première session, domaine acquis ce tour —
   // on part de zéro, ce qui reste vrai : il n'y a effectivement personne.
   const current = state?.headcount ?? 0;
+  // L'effectif visé est la SOMME des décisions, jamais une saisie à part :
+  // c'est ce qui garantit que l'écran et le moteur lisent le même effectif.
   const target = Math.max(current + hires - hr.layoffs, 0);
-  // Ce qui manque encore pour que la composition rejoigne l'effectif visé.
-  const remainder = hr.layoffs > 0 ? 0 : target - current - hires;
 
   // Indemnités : barème de l'article 53, huit ans d'ancienneté moyenne,
   // deux mois de préavis. Le calcul exact est refait côté serveur.
@@ -206,24 +210,17 @@ export function HrSection({
             current={current}
             value={target}
             step={10}
+            max={openHireKey === null ? current + hires : undefined}
             disabled={locked}
-            onChange={(next) => {
-              const delta = next - current;
-              if (delta >= 0) {
-                // On monte : les départs n'ont plus lieu d'être, et l'écart
-                // reste à répartir entre les profils, juste en dessous.
-                patch({ layoffs: 0 });
-              } else {
-                // On descend : l'écart EST le nombre de départs, et aucun
-                // recrutement ne peut coexister avec lui sans se contredire.
-                patch({
-                  layoffs: -delta,
-                  hireOperateurs: 0, hireTechniciens: 0,
-                  hireExperts: 0, hireCadres: 0, internalTransfersIn: 0,
-                });
-              }
-            }}
-            hint="Les flèches vont de dix en dix ; le champ accepte n’importe quelle valeur."
+            // Le « + » remettait les départs à zéro sans créer de recrutement :
+            // l'effectif visé, recalculé, revenait à l'effectif en place. La
+            // règle complète vit dans `retargetHeadcount`, testée à part.
+            onChange={(next) => patch(retargetHeadcount(hr, current, next, openHireKey))}
+            hint={
+              openHireKey === null
+                ? 'Le recrutement est fermé pour cette session : l’effectif ne peut que baisser.'
+                : 'Les flèches vont de dix en dix ; le champ accepte n’importe quelle valeur. Ce que vous ajoutez va aux opérateurs : répartissez ensuite entre les profils.'
+            }
           />
 
           {isOn(modules, 'org.restructuring') ? (
@@ -246,7 +243,7 @@ export function HrSection({
       </fieldset>
 
       {/* ── Qui l'on recrute ───────────────────────────────────────────── */}
-      {hires > 0 || remainder !== 0 ? (
+      {hires > 0 ? (
         <fieldset disabled={locked}>
           <legend className="text-sm font-medium">Qui vous recrutez</legend>
           <p className="mt-1 mb-3 text-sm text-(--foreground-muted)">
@@ -279,34 +276,6 @@ export function HrSection({
                 hint="Ils connaissent déjà la maison : contrairement à un recrutement externe, ils ne diluent pas le niveau moyen."
               />
             </div>
-          ) : null}
-
-          {remainder !== 0 ? (
-            <p
-              className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border px-4 py-2.5 text-sm"
-              style={{ borderColor: remainder > 0 ? 'var(--warning)' : 'var(--negative)' }}
-            >
-              {remainder > 0 ? (
-                <>
-                  <span>
-                    Il reste <strong>{remainder.toLocaleString('fr-FR')}</strong> poste(s) à
-                    répartir pour atteindre l’effectif visé.
-                  </span>
-                  <button
-                    type="button" disabled={locked}
-                    onClick={() => patch({ hireOperateurs: hr.hireOperateurs + remainder })}
-                    className="rounded-lg border border-(--border) px-3 py-1.5"
-                  >
-                    Tout mettre en opérateurs
-                  </button>
-                </>
-              ) : (
-                <span>
-                  Vous avez réparti <strong>{(-remainder).toLocaleString('fr-FR')}</strong> poste(s)
-                  de plus que votre effectif visé. Remontez l’effectif, ou baissez ces nombres.
-                </span>
-              )}
-            </p>
           ) : null}
 
           {state !== null && state.headcount > 0 && hires / state.headcount > 0.2 ? (

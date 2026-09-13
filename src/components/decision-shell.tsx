@@ -400,7 +400,7 @@ function Reference({
  * l'écart est affiché en clair sous le champ.
  */
 export function HeadcountStepper({
-  label, current, value, onChange, hint, step = 10, disabled,
+  label, current, value, onChange, hint, step = 10, max, disabled,
 }: {
   label: string;
   /** Effectif en place, celui du dernier exercice clos. */
@@ -410,9 +410,12 @@ export function HeadcountStepper({
   onChange: (v: number) => void;
   hint?: string;
   step?: number;
+  /** Plafond, quand la session interdit de dépasser un effectif. */
+  max?: number;
   disabled?: boolean;
 }) {
   const diff = value - current;
+  const cap = (v: number) => (max === undefined ? v : Math.min(v, max));
 
   return (
     <div className="block">
@@ -426,13 +429,15 @@ export function HeadcountStepper({
           −
         </button>
         <input
-          type="number" min={0} step={step} value={value} disabled={disabled}
-          onChange={(e) => onChange(Math.max(Math.round(Number(e.target.value) || 0), 0))}
+          type="number" min={0} max={max} step={step} value={value} disabled={disabled}
+          onChange={(e) => onChange(cap(Math.max(Math.round(Number(e.target.value) || 0), 0)))}
           className="tabular min-w-0 flex-1 rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-center disabled:opacity-50"
         />
         <button
-          type="button" disabled={disabled} aria-label={`Augmenter ${label}`}
-          onClick={() => onChange(value + step)}
+          type="button"
+          disabled={disabled || (max !== undefined && value >= max)}
+          aria-label={`Augmenter ${label}`}
+          onClick={() => onChange(cap(value + step))}
           className="w-10 shrink-0 rounded-lg border border-(--border) text-lg leading-none disabled:opacity-40"
         >
           +
