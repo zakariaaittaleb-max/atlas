@@ -48,7 +48,7 @@ import { anyOn, isOn, type EnabledModules } from '@/lib/modules-state';
 import { BrandName } from '@/components/brand-name';
 import { VariationField } from '@/components/variation-field';
 import { endowmentReference } from '@/lib/variation-references';
-import { referenceOr, type VariationScale } from '@/lib/variation-scale';
+import { referenceOf, type VariationScale } from '@/lib/variation-scale';
 import { useAutosave } from '@/lib/use-autosave';
 
 const CORPORATE = [
@@ -546,7 +546,7 @@ export function StrategieDasView({
                       label={label}
                       hint={hint}
                       value={d[field]}
-                      reference={referenceOr(b[field], endowmentReference(key, basis))}
+                      reference={referenceOf(b[field], endowmentReference(key, basis))}
                       scale={scales[FAMILY_OF[key]]}
                       unset={!das.decisionRecorded}
                       onChange={(v) => pushDas(das.dasId, { ...d, [field]: v })}

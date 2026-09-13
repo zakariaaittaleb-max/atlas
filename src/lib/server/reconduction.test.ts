@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { reconductHrDecision } from './reconduction';
+
 import { latestAtMost, servedSegmentsOrDefault } from './reconduction';
 
 /**
@@ -74,5 +76,43 @@ describe('servedSegmentsOrDefault', () => {
     // Un domaine sans segment au catalogue est un défaut de référentiel, pas
     // une décision d'équipe : inventer une clé serait pire.
     expect(servedSegmentsOrDefault(['x'], [])).toEqual([]);
+  });
+});
+
+describe('reconduction des décisions RH', () => {
+  const tour1 = {
+    round_number: 1, das_id: 'a',
+    avg_salary_brut_mad: 7_000, training_budget_mad: 2_000_000, training_focus: 'qualite',
+    claim_ofppt: true, claim_giac: true,
+    hire_operateurs: 40, hire_techniciens: 3, hire_experts: 1, hire_cadres: 1,
+    layoffs: 12, internal_transfers_in: 5,
+    restructuring: 'fermeture_site', order_skills_audit: true,
+  };
+
+  it('reconduit les niveaux quand l’équipe ne rouvre pas l’écran', () => {
+    const r = reconductHrDecision([tour1], 2)!;
+    expect(r.round_number).toBe(2);
+    expect(r.avg_salary_brut_mad).toBe(7_000);
+    expect(r.training_budget_mad).toBe(2_000_000);
+    expect(r.training_focus).toBe('qualite');
+    expect(r.claim_ofppt).toBe(true);
+  });
+
+  it('ne reconduit jamais un geste : ni recrutement, ni départ, ni fermeture', () => {
+    const r = reconductHrDecision([tour1], 3)!;
+    expect(r.hire_operateurs).toBe(0);
+    expect(r.layoffs).toBe(0);
+    expect(r.internal_transfers_in).toBe(0);
+    expect(r.restructuring).toBe('aucune');
+    expect(r.order_skills_audit).toBe(false);
+  });
+
+  it('rend la saisie du tour telle quelle', () => {
+    const tour2 = { ...tour1, round_number: 2, avg_salary_brut_mad: 7_300, hire_operateurs: 10 };
+    expect(reconductHrDecision([tour1, tour2], 2)).toBe(tour2);
+  });
+
+  it('ne rend rien pour un domaine qui n’a jamais rien saisi', () => {
+    expect(reconductHrDecision([], 4)).toBeNull();
   });
 });

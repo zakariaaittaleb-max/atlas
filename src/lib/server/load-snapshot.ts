@@ -32,7 +32,8 @@ import {
   type OrgSnapshot,
 } from '@/lib/engine/organisation';
 import type { createAdminClient } from '@/lib/supabase/server';
-import { latestAtMost, servedSegmentsOrDefault } from './reconduction';
+import { latestAtMost, reconductHrDecision, servedSegmentsOrDefault } from './reconduction';
+import { computeHrRollup } from './hr-rollup';
 
 /**
  * Le client est typé sur le schéma `atlas`, pas sur `public` : reprendre le
@@ -298,8 +299,9 @@ export async function loadResolutionSnapshot(
     // rechanger, c'est reconduire la déclinaison de l'exercice précédent.
     admin.from('das_group_directives').select('*').in('team_id', teamIds).lte('round_number', roundNumber),
     admin.from('das_shared_resources').select('*').in('team_id', teamIds).lte('round_number', roundNumber),
-    // Décisions RH du tour ; état RH du tour précédent.
-    admin.from('das_hr_decisions').select('*').in('team_id', teamIds).eq('round_number', roundNumber),
+    // Décisions RH EN VIGUEUR — `lte` : les niveaux se reconduisent (voir
+    // `reconductHrDecision`) ; état RH du tour précédent.
+    admin.from('das_hr_decisions').select('*').in('team_id', teamIds).lte('round_number', roundNumber),
     admin.from('das_hr_state').select('*').in('team_id', teamIds).lt('round_number', roundNumber),
     admin.from('shared_platforms').select('*').in('team_id', teamIds).lte('round_number', roundNumber),
     admin.from('acquisition_offers').select('*')
@@ -597,7 +599,6 @@ export async function loadResolutionSnapshot(
   const teams: TeamSnapshot[] = (teamRows ?? []).map((teamRow: Row) => {
     const teamId = str(teamRow.id);
     const strategy = strategyByTeam.get(teamId);
-    const hr = hrByTeam.get(teamId);
     const budget = budgetByTeam.get(teamId);
     const current = currentBudgetByTeam.get(teamId);
     const state = stateByTeam.get(teamId);
@@ -605,6 +606,34 @@ export async function loadResolutionSnapshot(
     const previousAlignment = alignmentByTeam.get(teamId);
 
     const teamUnits = ((unitRows ?? []) as Row[]).filter((u) => str(u.team_id) === teamId);
+
+    // ── La RH en vigueur, domaine par domaine, puis consolidée ─────────────
+    //
+    // Les décisions RH n'étaient lues qu'au tour courant : un domaine dont
+    // l'équipe n'avait pas rouvert l'écran perdait son budget de formation, et
+    // la consolidation du groupe — lue dans `hr_metrics`, qui n'est réécrit
+    // qu'à la saisie — retombait sur un salaire de 5 800 DH dans le compte de
+    // résultat. Les deux lisent désormais la même décision reconduite.
+    const reconductedHrByDas = new Map<string, Row>();
+    for (const u of teamUnits) {
+      const dasId = str(u.das_id);
+      const row = reconductHrDecision(
+        ((dasHrRows ?? []) as Row[]).filter(
+          (r) => str(r.team_id) === teamId && str(r.das_id) === dasId,
+        ),
+        roundNumber,
+      );
+      if (row) reconductedHrByDas.set(dasId, row);
+    }
+    // Faute de toute décision par domaine — partie provisionnée avant le
+    // module RH par domaine — la projection historique reste le repli.
+    const hr = reconductedHrByDas.size > 0
+      ? computeHrRollup(
+          [...reconductedHrByDas.values()],
+          ((dasHrStateRows ?? []) as Row[]).filter((r) => str(r.team_id) === teamId),
+          num(stateByTeam.get(teamId)?.headcount),
+        )
+      : hrByTeam.get(teamId);
 
     const units: TeamDasSnapshot[] = teamUnits.map((unitRow) => {
       const dasId = str(unitRow.das_id);
@@ -733,9 +762,7 @@ export async function loadResolutionSnapshot(
         organisation: organisationFor(teamId, dasId),
         groupStance: groupStanceFor(teamId, dasId),
         hr: (() => {
-          const h = ((dasHrRows ?? []) as Row[]).find(
-            (r) => str(r.team_id) === teamId && str(r.das_id) === dasId,
-          );
+          const h = reconductedHrByDas.get(dasId) ?? null;
           if (!h) return null;
           return {
             hireOperateurs: num(h.hire_operateurs),

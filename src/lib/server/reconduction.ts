@@ -68,3 +68,47 @@ export function servedSegmentsOrDefault(
   if (known.length > 0) return known;
   return catalogueKeys.slice(0, 1);
 }
+
+/**
+ * Colonnes RH qui décrivent un GESTE du tour : elles ne se reconduisent jamais.
+ *
+ * Reconduire un recrutement, c'est recruter deux fois ; reconduire une
+ * fermeture de site, c'est infliger le même choc de climat chaque tour. Le
+ * bilan de compétences est une prestation commandée pour un exercice.
+ */
+const HR_GESTURES: Readonly<Record<string, number | string | boolean>> = {
+  hire_operateurs: 0,
+  hire_techniciens: 0,
+  hire_experts: 0,
+  hire_cadres: 0,
+  layoffs: 0,
+  internal_transfers_in: 0,
+  restructuring: 'aucune',
+  order_skills_audit: false,
+};
+
+/**
+ * La décision RH EN VIGUEUR d'un domaine à un tour.
+ *
+ * ── LE DÉFAUT CORRIGÉ ──────────────────────────────────────────────────────
+ * Les décisions RH n'étaient lues qu'au tour courant, à l'écran comme dans le
+ * moteur. Une équipe qui ne rouvrait pas l'écran d'organisation voyait son
+ * salaire revenir à 5 800 DH et son budget de formation à zéro — et le moteur
+ * résolvait bel et bien une formation nulle. « Ne rien changer » coûtait donc
+ * la politique sociale de l'exercice précédent.
+ *
+ * Saisie ce tour : la ligne telle quelle. Sinon : les NIVEAUX de la dernière
+ * décision connue — salaire, formation, orientation, demandes de financement —
+ * et aucun geste. `null` quand le domaine n'a jamais rien saisi.
+ *
+ * `rows` doit être filtré à une équipe et un domaine.
+ */
+export function reconductHrDecision<T extends Row>(
+  rows: T[] | null | undefined,
+  round: number,
+): Row | null {
+  const latest = latestAtMost(rows, round);
+  if (!latest) return null;
+  if (roundOf(latest) === round) return latest;
+  return { ...latest, ...HR_GESTURES, round_number: round };
+}

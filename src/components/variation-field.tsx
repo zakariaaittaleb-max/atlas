@@ -16,6 +16,10 @@
  *
  * Les deux voies mènent au même endroit : bouger le curseur recalcule le
  * montant, taper un montant replace le curseur.
+ *
+ * À l'ouverture de tout tour, le curseur est posé sur « Inchangé » : la valeur
+ * héritée, même nulle. Depuis zéro, il ne descend pas — il n'y a rien à
+ * baisser — et « +100 % » rend la dotation (voir `referenceOf`).
  */
 
 import { useState } from 'react';
@@ -23,9 +27,11 @@ import { useState } from 'react';
 import { formatMadCompact, formatUnits } from '@/lib/format';
 import {
   clampVariation,
+  floorOf,
   valueFromVariation,
   variationFromValue,
   variationLabel,
+  type VariationReference,
   type VariationScale,
 } from '@/lib/variation-scale';
 
@@ -44,8 +50,8 @@ export function VariationField({
 }: {
   label: string;
   value: number;
-  /** Valeur de référence : le tour précédent, ou la dotation à défaut. */
-  reference: number;
+  /** La valeur héritée et l'unité du pourcentage (voir `referenceOf`). */
+  reference: VariationReference;
   scale: VariationScale;
   onChange: (value: number) => void;
   disabled?: boolean;
@@ -53,11 +59,8 @@ export function VariationField({
   unit?: 'money' | 'count';
   referenceLabel?: string;
   /**
-   * Vrai quand l'équipe n'a encore rien décidé pour ce tour.
-   *
-   * Sans cette distinction, un poste à zéro parce qu'on ne l'a pas ouvert
-   * s'affichait « Supprimé » — l'écran accusait l'équipe d'avoir coupé un
-   * budget auquel elle n'avait pas touché.
+   * Vrai quand l'équipe n'a encore rien décidé pour ce tour : la valeur
+   * affichée est alors la valeur reconduite, et le mot le dit.
    */
   unset?: boolean;
 }) {
@@ -66,8 +69,10 @@ export function VariationField({
   const [draft, setDraft] = useState<string | null>(null);
 
   const rawPct = variationFromValue(reference, value);
-  const pct = clampVariation(rawPct, scale.bounds);
-  const pristine = unset && value === 0;
+  const pct = clampVariation(rawPct, scale.bounds, reference);
+  // « Non renseigné » a disparu : un poste auquel on n'a pas touché est un
+  // poste INCHANGÉ, et c'est désormais ce que le curseur montre à l'ouverture.
+  const pristine = unset && Math.abs(rawPct) < 0.5;
 
   /**
    * Le montant stocké peut sortir de la fourchette — le facilitateur a le droit
@@ -78,13 +83,9 @@ export function VariationField({
    */
   const outOfRange = !pristine && Math.abs(rawPct - pct) > 0.5;
 
-  const word = pristine
-    ? 'Non renseigné'
-    : outOfRange
-      ? 'Hors fourchette'
-      : variationLabel(pct, scale);
+  const word = outOfRange ? 'Hors fourchette' : variationLabel(pct, scale);
   const format = unit === 'money' ? formatMadCompact : formatUnits;
-  const floor = Math.max(scale.bounds.min, -100);
+  const floor = floorOf(reference, scale.bounds);
 
   return (
     <div>
@@ -101,6 +102,7 @@ export function VariationField({
           }}
         >
           {word}
+          {pristine ? <span className="ml-1.5 text-(--foreground-muted)">· reconduit</span> : null}
           {!pristine && Math.abs(outOfRange ? rawPct : pct) >= 1 ? (
             <span className="ml-1.5 text-(--foreground-muted)">
               {(outOfRange ? rawPct : pct) > 0 ? '+' : '−'}
@@ -126,9 +128,14 @@ export function VariationField({
 
       <div className="tabular mt-1 flex justify-between text-xs text-(--foreground-muted)">
         <span>
-          {floor <= -100 ? 'supprimé' : `${floor} %`}
+          {floor <= -100 ? 'supprimé' : floor === 0 ? '0 %' : `${floor} %`}
         </span>
-        <span>{referenceLabel} : {format(reference)}</span>
+        <span>
+          {referenceLabel} : {format(reference.anchor)}
+          {reference.anchor === 0 && reference.unit > 0
+            ? ` · +100 % = ${format(reference.unit)}`
+            : ''}
+        </span>
         <span>+{scale.bounds.max} %</span>
       </div>
 
@@ -148,8 +155,9 @@ export function VariationField({
             const bounded = clampVariation(
               variationFromValue(reference, asked),
               scale.bounds,
+              reference,
             );
-            onChange(reference > 0 ? valueFromVariation(reference, bounded) : asked);
+            onChange(reference.unit > 0 ? valueFromVariation(reference, bounded) : asked);
           }}
           onBlur={() => setDraft(null)}
           className="tabular w-40 rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm disabled:opacity-50"

@@ -14,7 +14,7 @@ import type {
   AxisRef, DasOrganisation, DirectionRef, KpiRef, OrgContext, PositionDraft,
 } from '@/lib/org-types';
 import { createServerClient } from '@/lib/supabase/server';
-import { latestAtMost } from './reconduction';
+import { latestAtMost, reconductHrDecision } from './reconduction';
 
 type Row = Record<string, unknown>;
 const num = (v: unknown, d = 0) => (typeof v === 'number' ? v : Number(v ?? d) || d);
@@ -192,7 +192,14 @@ export async function loadOrgContext(): Promise<OrgContext> {
         };
       })(),
       hr: (() => {
-        const h = ((hrRows ?? []) as Row[]).find((r) => str(r.das_id) === dasId);
+        // La décision EN VIGUEUR : la saisie du tour, sinon les niveaux de la
+        // dernière décision connue. Sans elle, le salaire s'ouvrait à 5 800 DH
+        // et la formation à zéro pour tout domaine qu'on ne rouvrait pas.
+        const h = reconductHrDecision(
+          [...((hrPreviousRows ?? []) as Row[]), ...((hrRows ?? []) as Row[])]
+            .filter((r) => str(r.das_id) === dasId),
+          roundNumber,
+        );
         return {
           hireOperateurs: num(h?.hire_operateurs),
           hireTechniciens: num(h?.hire_techniciens),
@@ -225,7 +232,9 @@ export async function loadOrgContext(): Promise<OrgContext> {
           hireCadres: num(h?.hire_cadres),
           layoffs: num(h?.layoffs),
           internalTransfersIn: num(h?.internal_transfers_in),
-          avgSalaryBrutMad: num(h?.avg_salary_brut_mad),
+          // Jamais saisi, un salaire vaut celui de la dotation — celui que le
+          // moteur applique. Zéro aurait posé le curseur à « +106 % ».
+          avgSalaryBrutMad: num(h?.avg_salary_brut_mad, 5800),
           trainingBudgetMad: num(h?.training_budget_mad),
         };
       })(),

@@ -33,7 +33,7 @@ import {
 import { createServerClient } from '@/lib/supabase/server';
 import { debtCapacity } from '@/lib/engine/finance';
 import { buildParams } from '@/lib/engine/params';
-import { latestAtMost, servedSegmentsOrDefault } from './reconduction';
+import { latestAtMost, reconductHrDecision, servedSegmentsOrDefault } from './reconduction';
 
 export type {
   ActorEntry, DasEntry, DecisionContext,
@@ -109,8 +109,10 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
     // pour le découvrir.
     supabase.from('das_org_design').select('das_id, round_number')
       .eq('team_id', team.teamId).lte('round_number', roundNumber),
+    // `lte` : les NIVEAUX RH se reconduisent (voir `reconductHrDecision`). Les
+    // lecteurs qui ne veulent que les saisies du tour filtrent eux-mêmes.
     supabase.from('das_hr_decisions').select('*')
-      .eq('team_id', team.teamId).eq('round_number', roundNumber),
+      .eq('team_id', team.teamId).lte('round_number', roundNumber),
     supabase.from('das_hr_state').select('das_id, round_number, headcount, payroll_mad')
       .eq('team_id', team.teamId).lte('round_number', roundNumber),
     // L'état d'approvisionnement du dernier exercice clos : ce qu'on a vendu,
@@ -170,6 +172,18 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
 
   const strategyRow = latestAtMost(strategies as Row[] | null, roundNumber);
   const previousStrategyRow = latestAtMost(strategies as Row[] | null, previous);
+
+  // Les décisions RH EN VIGUEUR des domaines détenus : saisies du tour, sinon
+  // niveaux reconduits. C'est elles qui disent le salaire moyen du groupe — un
+  // domaine non rouvert ne sort plus de la moyenne.
+  const hrInForce = (units ?? [])
+    .map((u) =>
+      reconductHrDecision(
+        ((dasHrDecisions ?? []) as Row[]).filter((d) => str(d.das_id) === str(u.das_id)),
+        roundNumber,
+      ),
+    )
+    .filter((r): r is Row => r !== null);
 
   const das: DasEntry[] = (units ?? []).map((u) => {
     const unit = u.strategic_units as unknown as { id: string; name: string; sector_key: string } | null;
@@ -233,7 +247,11 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
         organisation: ((orgDesigns ?? []) as Row[]).some((d) => str(d.das_id) === dasId),
         // Les RH, à l'inverse, sont des GESTES du tour : recruter, licencier,
         // former. Ne rien décider est un choix, mais il doit être posé.
-        hr: ((dasHrDecisions ?? []) as Row[]).some((d) => str(d.das_id) === dasId),
+        // La SAISIE du tour, et non la décision reconduite : c'est ce que
+        // « fait / à faire » veut dire ici.
+        hr: ((dasHrDecisions ?? []) as Row[]).some(
+          (d) => str(d.das_id) === dasId && num(d.round_number) === roundNumber,
+        ),
       },
       suppliers: (actors ?? [])
         .filter((a) => str(a.das_id) === dasId && str(a.actor_type) === 'fournisseur')
@@ -248,7 +266,11 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
     .sort((a, b) => a.launchedRound - b.launchedRound || a.name.localeCompare(b.name, 'fr'));
 
   const corporateBaseline = toCorporate(previousStrategyRow);
-  const financeBaseline = toFinance(previousBudget as Row | null);
+  // Au tour d'onboarding, aucun exercice ne précède : le bilan PROVISIONNÉ est
+  // la valeur en vigueur. Sans ce repli, le siège héritait de zéro et le curseur
+  // s'ouvrait « hors fourchette » sur une dotation que l'équipe n'avait pas
+  // touchée.
+  const financeBaseline = toFinance((previousBudget ?? openingBudget) as Row | null);
 
   return {
     team,
@@ -257,7 +279,7 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
     decisionsOpen: decisionsAreOpen(round?.status as string),
     treasuryMad: num(previousPnl?.treasury_end_mad),
     headcount: num(state?.headcount),
-    avgSalaryMad: averageSalary(dasHrDecisions as Row[] | null, dasHrStates as Row[] | null, roundNumber),
+    avgSalaryMad: averageSalary(hrInForce, dasHrStates as Row[] | null, roundNumber),
     debtOutstandingMad: num(previousBudget?.debt_outstanding_mad),
     corporate: toCorporate(strategyRow),
     corporateRecorded: Boolean(strategyRow) && num(strategyRow?.round_number) === roundNumber,
@@ -388,7 +410,15 @@ function rollupHr(
   das: DasEntry[], decisions: Row[] | null, states: Row[] | null,
   round: number, groupHeadcount: number,
 ): HrRollup {
-  const rows = decisions ?? [];
+  const all = decisions ?? [];
+  // Ce que l'équipe a SAISI ce tour : c'est lui qui dit quels domaines
+  // attendent encore une décision.
+  const saisies = all.filter((r) => num(r.round_number) === round);
+  // Ce qui est EN VIGUEUR : additionner les seules saisies faisait tomber la
+  // formation d'un domaine non rouvert à zéro dans le récapitulatif.
+  const rows = das
+    .map((d) => reconductHrDecision(all.filter((r) => str(r.das_id) === d.dasId), round))
+    .filter((r): r is Row => r !== null);
 
   // Faute d'état par domaine — première session, ou partie provisionnée avant
   // le module RH — on retombe sur l'effectif du groupe plutôt que sur zéro : un
@@ -411,7 +441,7 @@ function rollupHr(
   }
 
   const headcountEnd = Math.max(headcountStart + hires - layoffs, 0);
-  const avgSalaryBrutMad = averageSalary(decisions, states, round);
+  const avgSalaryBrutMad = averageSalary(rows, states, round);
 
   return {
     headcountStart,
@@ -422,7 +452,7 @@ function rollupHr(
     trainingBudgetMad,
     payrollMad: headcountEnd * avgSalaryBrutMad * 12 * (1 + CHARGES_PATRONALES_PCT),
     pendingDas: das
-      .filter((d) => !rows.some((r) => str(r.das_id) === d.dasId))
+      .filter((d) => !saisies.some((r) => str(r.das_id) === d.dasId))
       .map((d) => ({ dasId: d.dasId, name: d.name })),
   };
 }

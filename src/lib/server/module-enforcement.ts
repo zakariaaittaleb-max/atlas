@@ -28,7 +28,7 @@ import { isOn, type EnabledModules } from '../modules-state';
 import { endowmentReference, variationFamilyOf, type VariationBasis } from '../variation-references';
 import {
   clampVariation,
-  referenceOr,
+  referenceOf,
   valueFromVariation,
   variationFromValue,
   type VariationScale,
@@ -252,9 +252,11 @@ export async function enforceHr<T extends object>(
     .limit(1)
     .maybeSingle();
 
-  // Les FLUX (recrutements, départs, transferts) ne se reconduisent pas : ils
-  // décrivent un mouvement du tour, pas un état. Reconduire un départ, ce
-  // serait licencier deux fois. Les niveaux, eux, persistent.
+  // Les GESTES ne se reconduisent pas : recrutements, départs, transferts, mais
+  // aussi la restructuration et le bilan de compétences. Reconduire un départ,
+  // ce serait licencier deux fois ; reconduire une fermeture de site ferait
+  // subir le même choc de climat à chaque tour. Les niveaux, eux, persistent —
+  // la règle est celle de `reconductHrDecision`.
   const reference = {
     hireOperateurs: 0,
     hireTechniciens: 0,
@@ -267,8 +269,8 @@ export async function enforceHr<T extends object>(
     trainingFocus: String(data?.training_focus ?? 'technique'),
     claimOfppt: Boolean(data?.claim_ofppt ?? false),
     claimGiac: Boolean(data?.claim_giac ?? false),
-    orderSkillsAudit: Boolean(data?.order_skills_audit ?? false),
-    restructuring: String(data?.restructuring ?? 'aucune'),
+    orderSkillsAudit: false,
+    restructuring: 'aucune',
   };
 
   const kept = keepClosed(incoming, reference, modules, HR_FIELDS);
@@ -347,13 +349,13 @@ export function clampToScales<T extends object>(
     if (typeof asked !== 'number' || !Number.isFinite(asked)) continue;
 
     const before = previous[field];
-    const base = referenceOr(
+    const base = referenceOf(
       typeof before === 'number' ? before : 0,
       endowmentReference(moduleKey, basis),
     );
-    if (base <= 0) continue;
+    if (base.unit <= 0) continue;
 
-    const bounded = clampVariation(variationFromValue(base, asked), scale.bounds);
+    const bounded = clampVariation(variationFromValue(base, asked), scale.bounds, base);
     result[field] = valueFromVariation(base, bounded);
   }
 

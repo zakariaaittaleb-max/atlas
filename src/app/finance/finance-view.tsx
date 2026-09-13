@@ -44,7 +44,7 @@ import { ResultsSection } from './results-section';
 import { isOn, screenIsOpen, type EnabledModules } from '@/lib/modules-state';
 import { VariationField } from '@/components/variation-field';
 import { endowmentReference } from '@/lib/variation-references';
-import { referenceOr, type VariationScale } from '@/lib/variation-scale';
+import { referenceOf, type VariationScale } from '@/lib/variation-scale';
 import { useAutosave } from '@/lib/use-autosave';
 
 /**
@@ -239,7 +239,7 @@ export function FinanceView({
                   label={label}
                   hint={hint}
                   value={finance[field]}
-                  reference={referenceOr(
+                  reference={referenceOf(
                     context.financeBaseline[field],
                     endowmentReference(key, basis),
                   )}

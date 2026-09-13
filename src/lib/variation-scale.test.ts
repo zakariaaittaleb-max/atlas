@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SCALES,
   clampVariation,
-  referenceOr,
+  floorOf,
+  referenceOf,
   valueFromVariation,
   variationFromValue,
   variationLabel,
@@ -32,7 +33,7 @@ describe('échelle de variation', () => {
   it('ne descend jamais sous zéro, quelle que soit la borne demandée', () => {
     // Une borne à −200 % produirait un budget négatif : le plancher est dur.
     expect(clampVariation(-250, { min: -200, max: 300 })).toBe(-100);
-    expect(valueFromVariation(1000, -100)).toBe(0);
+    expect(valueFromVariation(referenceOf(1000, 0), -100)).toBe(0);
   });
 
   it('respecte les bornes de la famille', () => {
@@ -41,17 +42,41 @@ describe('échelle de variation', () => {
   });
 
   it('fait l’aller-retour entre montant et pourcentage', () => {
-    const reference = 4_000_000;
+    const reference = referenceOf(4_000_000, 0);
     const pct = 37.5;
     const amount = valueFromVariation(reference, pct);
     expect(amount).toBe(5_500_000);
     expect(variationFromValue(reference, amount)).toBeCloseTo(pct, 6);
   });
 
-  it('retombe sur la dotation quand le tour précédent était à zéro', () => {
-    // Sans ce repli, une équipe qui coupe un poste ne pourrait plus jamais y
-    // revenir : tout pourcentage de zéro vaut zéro.
-    expect(referenceOr(0, 250_000)).toBe(250_000);
-    expect(referenceOr(80_000, 250_000)).toBe(80_000);
+  // ── La valeur héritée est « Inchangé », même quand elle vaut zéro ──────
+  // Une seule référence servait de point « inchangé » ET d'unité : un poste
+  // coupé à zéro ne remontait plus, ou s'ouvrait sur « Supprimé » en désignant
+  // la dotation comme valeur inchangée.
+  it('pose le curseur sur « Inchangé » à la valeur héritée, même nulle', () => {
+    const coupe = referenceOf(0, 250_000);
+    expect(valueFromVariation(coupe, 0)).toBe(0);
+    expect(variationFromValue(coupe, 0)).toBe(0);
+    expect(variationLabel(variationFromValue(coupe, 0), DEFAULT_SCALES.marketing)).toBe('Inchangé');
+  });
+
+  it('permet de remonter depuis zéro : +100 % rend la dotation', () => {
+    const coupe = referenceOf(0, 250_000);
+    expect(valueFromVariation(coupe, 100)).toBe(250_000);
+    expect(valueFromVariation(coupe, 40)).toBe(100_000);
+    expect(variationFromValue(coupe, 100_000)).toBeCloseTo(40, 6);
+  });
+
+  it('ne propose aucune baisse depuis zéro : il n’y a rien à baisser', () => {
+    const coupe = referenceOf(0, 250_000);
+    expect(floorOf(coupe, DEFAULT_SCALES.marketing.bounds)).toBe(0);
+    expect(clampVariation(-60, DEFAULT_SCALES.marketing.bounds, coupe)).toBe(0);
+  });
+
+  it('calcule exactement comme avant quand la valeur héritée est positive', () => {
+    const herite = referenceOf(80_000, 250_000);
+    expect(valueFromVariation(herite, 50)).toBe(120_000);
+    expect(valueFromVariation(herite, -100)).toBe(0);
+    expect(floorOf(herite, DEFAULT_SCALES.marketing.bounds)).toBe(-100);
   });
 });

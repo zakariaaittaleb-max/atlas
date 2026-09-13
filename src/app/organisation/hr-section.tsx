@@ -22,7 +22,7 @@ import { Term } from '@/components/term';
 import { anyOn, isOn, type EnabledModules } from '@/lib/modules-state';
 import { VariationField } from '@/components/variation-field';
 import { endowmentReference, type VariationBasis } from '@/lib/variation-references';
-import { referenceOr, type VariationScale } from '@/lib/variation-scale';
+import { referenceOf, type VariationScale } from '@/lib/variation-scale';
 import { formatMadCompact } from '@/lib/format';
 import type { DasHr, DasHrState } from '@/lib/org-types';
 import { hiresOf, retargetHeadcount, type HireKey } from '@/lib/headcount-target';
@@ -73,8 +73,13 @@ export function HrSection({
   const patch = (values: Partial<DasHr>) => onChange({ ...hr, ...values });
 
   /** Référence d'un champ : le tour précédent, la dotation à défaut. */
-  const ref = (key: string, field: string) =>
-    referenceOr(previous[field] ?? 0, endowmentReference(key, basis));
+  //
+  // Un NIVEAU — salaire, formation — part de sa valeur en vigueur. Un FLUX —
+  // recrutements, transferts — part de ZÉRO : recruter autant qu'au tour
+  // dernier n'est pas « ne rien changer », c'est refaire le même geste. Le
+  // serveur borne les flux sur la même origine.
+  const ref = (key: string, field: string, flow = false) =>
+    referenceOf(flow ? 0 : (previous[field] ?? 0), endowmentReference(key, basis));
 
   const hires = hiresOf(hr);
 
@@ -257,7 +262,8 @@ export function HrSection({
                 label={label}
                 unit="count"
                 value={hr[field]}
-                reference={ref(key, field)}
+                reference={ref(key, field, true)}
+                referenceLabel="sans mouvement"
                 scale={scales.recrutement}
                 onChange={(v) => patch({ [field]: v })}
               />
@@ -270,7 +276,8 @@ export function HrSection({
                 label="Venus d’un autre domaine du groupe"
                 unit="count"
                 value={hr.internalTransfersIn}
-                reference={ref('org.internal_transfers', 'internalTransfersIn')}
+                reference={ref('org.internal_transfers', 'internalTransfersIn', true)}
+                referenceLabel="sans mouvement"
                 scale={scales.recrutement}
                 onChange={(v) => patch({ internalTransfersIn: v })}
                 hint="Ils connaissent déjà la maison : contrairement à un recrutement externe, ils ne diluent pas le niveau moyen."
