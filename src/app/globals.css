@@ -213,6 +213,26 @@ body {
   transform: translateY(-1px);
 }
 
+/* Une cible atteinte par lien (« Régler ce levier ») : sous la barre collante,
+   et surlignée le temps de la repérer. */
+.accordion,
+.lever-target {
+  scroll-margin-top: 7.5rem;
+}
+
+@keyframes atlas-flash {
+  0%, 60% {
+    box-shadow: 0 0 0 3px var(--focus);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
+.flash-target {
+  animation: atlas-flash 1.6s ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

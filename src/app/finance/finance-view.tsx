@@ -35,7 +35,6 @@ import {
 } from '@/components/decision-shell';
 import { Term } from '@/components/term';
 import { Accordion } from '@/components/ui/accordion';
-import { GroupLegend } from '@/components/ui/form-controls';
 import { InfoHint } from '@/components/ui/info-hint';
 import { StatCard } from '@/components/ui/stat-card';
 import { formatMadCompact } from '@/lib/format';
@@ -44,7 +43,7 @@ import { deepEqual } from '@/lib/deep-equal';
 import type { MoneyBar, ResultsContext } from '@/lib/results-types';
 import { CashPooling } from './cash-pooling';
 import { CreditSlider } from './credit-slider';
-import { LeversSection, type FinancialLever } from './levers-section';
+import { LeversSection, leverStates, type FinancialLever } from './levers-section';
 import { IndicatorsSection } from './indicators-section';
 import { ResultsSection } from './results-section';
 import { isOn, screenIsOpen, type EnabledModules } from '@/lib/modules-state';
@@ -121,6 +120,9 @@ export function FinanceView({
   // Les transferts entre domaines n'entrent PAS dans la jauge : ils déplacent
   // la trésorerie du groupe sans en créer ni en consommer. Leur coût est une
   // perte de compétitivité sur le domaine ponctionné, pas une sortie de cash.
+
+  const activeLevers = [...leverStates(levers, finance, context.financeLimits, context.das.length).values()]
+    .filter((state) => state.status === 'active').length;
 
   const creditSummary =
     finance.netCreditMad > 0 ? `tirage ${formatMadCompact(finance.netCreditMad)}`
@@ -204,10 +206,28 @@ export function FinanceView({
             </Accordion>
           ) : null}
 
+          {/* ── Les leviers, juste avant les champs qui les actionnent ────── */}
+          {levers.length > 0 ? (
+            <Accordion
+              title="Leviers financiers du Groupe"
+              defaultOpen
+              summary={`${activeLevers} actionné${activeLevers > 1 ? 's' : ''} sur ${levers.length}`}
+              hint="Six façons de faire travailler l’argent du groupe. Chaque carte dit si le levier est joué ce tour, s’il est jouable, et mène au champ qui l’actionne. Sa fiche — bénéfice, risque majeur, mécanisme — est sous son « + »."
+            >
+              <LeversSection
+                levers={levers}
+                finance={finance}
+                limits={context.financeLimits}
+                dasCount={context.das.length}
+              />
+            </Accordion>
+          ) : null}
+
           {/* ── Plan 7 : finance ──────────────────────────────────────────── */}
           {screenIsOpen(modules, 'finance') ? (
             <Accordion
               title="Vos décisions financières"
+              anchor="finance-decisions"
               defaultOpen
               summary={creditSummary}
               hint="Décisions de niveau Groupe, valables pour tous vos domaines. Une équipe déficitaire paie tout de même la cotisation minimale de 0,25 % du chiffre d’affaires : perdre de l’argent tranquillement n’est pas une stratégie."
@@ -233,22 +253,26 @@ export function FinanceView({
                 )}
 
                 {isOn(modules, 'finance.credit') ? (
-                  <CreditSlider
-                    value={finance.netCreditMad}
-                    limits={context.financeLimits}
-                    disabled={locked}
-                    onChange={(v) => pushFinance({ ...finance, netCreditMad: v })}
-                  />
+                  <div id="levier-credit" className="lever-target rounded-lg">
+                    <CreditSlider
+                      value={finance.netCreditMad}
+                      limits={context.financeLimits}
+                      disabled={locked}
+                      onChange={(v) => pushFinance({ ...finance, netCreditMad: v })}
+                    />
+                  </div>
                 ) : null}
               </fieldset>
 
               {isOn(modules, 'finance.cash_pooling') && context.das.length > 1 ? (
-                <CashPooling
-                  das={context.das}
-                  transfers={finance.cashTransfers}
-                  disabled={locked}
-                  onChange={(next) => pushFinance({ ...finance, cashTransfers: next })}
-                />
+                <div id="levier-cash-pooling" className="lever-target rounded-lg">
+                  <CashPooling
+                    das={context.das}
+                    transfers={finance.cashTransfers}
+                    disabled={locked}
+                    onChange={(next) => pushFinance({ ...finance, cashTransfers: next })}
+                  />
+                </div>
               ) : null}
 
               {MONEY_FIELDS.some(([key]) => isOn(modules, key)) ? (
@@ -259,7 +283,11 @@ export function FinanceView({
                       const ceiling =
                         field === 'dividendMad' ? context.financeLimits.dividendCeilingMad : null;
                       return (
-                        <div key={key}>
+                        <div
+                          key={key}
+                          id={field === 'dividendMad' ? 'levier-dividende' : 'levier-capital'}
+                          className="lever-target rounded-lg"
+                        >
                           <span className="flex items-center gap-2">
                             <label className="text-sm font-medium" htmlFor={`money-${field}`}>
                               {label}
@@ -391,16 +419,6 @@ export function FinanceView({
             )}
           </Accordion>
 
-          {levers.length > 0 ? (
-            <Accordion
-              title="Leviers financiers du Groupe"
-              summary={`${levers.length} leviers`}
-              hint="Six façons de faire travailler l’argent du groupe. Chacune a un bénéfice, un risque majeur et une raison financière d’exister : son « + » les détaille."
-            >
-              <GroupLegend as="p" title="Avant d’en actionner un" />
-              <LeversSection levers={levers} />
-            </Accordion>
-          ) : null}
         </div>
       </main>
 
