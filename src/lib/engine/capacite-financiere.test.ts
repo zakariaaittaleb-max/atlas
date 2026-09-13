@@ -70,3 +70,22 @@ describe('capacité d’autofinancement et flux libre', () => {
     expect(interestCoverage(500e6, 100e6)).toBeCloseTo(5, 6);
   });
 });
+
+/**
+ * Une dette d'ouverture négative — cicatrice d'une ancienne écriture qui
+ * déduisait deux fois le remboursement — ne doit jamais se lire comme une
+ * créance sur la banque qui élargirait la ligne de crédit.
+ */
+describe('capacité d’endettement et bilan abîmé', () => {
+  it('traite une dette négative comme nulle', () => {
+    const saine = debtCapacity(100e6, 2_000e6, 0, params);
+    const cicatrice = debtCapacity(100e6, 2_000e6, -50e6, params);
+    expect(cicatrice.availableMad).toBeCloseTo(saine.availableMad, 0);
+  });
+
+  it('ne prête rien sans fonds propres, quel que soit le chiffre d’affaires', () => {
+    const c = debtCapacity(0, 90_000e6, 0, params);
+    expect(c.availableMad).toBe(0);
+    expect(c.binding).toBe('fonds_propres');
+  });
+});

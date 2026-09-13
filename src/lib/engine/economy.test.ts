@@ -678,6 +678,21 @@ describe('compte de résultat et trésorerie', () => {
     expect(coordination.overheadMad).toBeCloseTo(9_200_000, 6);
     expect(synergie.ebitdaMad).toBeGreaterThan(coordination.ebitdaMad);
   });
+
+  // ── On ne rembourse pas plus qu'on ne doit ─────────────────────────────
+  // La clôture de la dette était bornée à zéro, mais la trésorerie débitait le
+  // remboursement BRUT : l'excédent sortait de la caisse vers personne.
+  it('ne débite jamais la caisse d’un remboursement au-delà de la dette', () => {
+    const juste = buildPnl({ ...baseInput, debtRepaidMad: 30_000_000 }, params);
+    const excessif = buildPnl({ ...baseInput, debtRepaidMad: 50_000_000 }, params);
+    expect(excessif.debtOutstandingEndMad).toBe(0);
+    expect(excessif.treasuryEndMad).toBeCloseTo(juste.treasuryEndMad, 2);
+  });
+
+  it('compte le tirage du tour dans ce qui peut être remboursé', () => {
+    const r = buildPnl({ ...baseInput, debtDrawnMad: 10_000_000, debtRepaidMad: 40_000_000 }, params);
+    expect(r.debtOutstandingEndMad).toBe(0);
+  });
 });
 
 describe('paliers de trésorerie', () => {

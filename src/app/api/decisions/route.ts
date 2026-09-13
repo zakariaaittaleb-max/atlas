@@ -406,7 +406,10 @@ async function write(admin: Admin, teamId: string, round: number, body: Body): P
   const opening = rows[rows.length - 1] ?? null;
 
   const equityMad = Number(opening?.equity_mad ?? 0);
-  const debtMad = Number(opening?.debt_outstanding_mad ?? 0);
+  // Plancher à zéro, comme à l'écran : avec une dette négative, la borne
+  // « on ne rembourse pas plus qu'on ne doit » devenait une borne POSITIVE, et
+  // aucun tirage ne passait plus.
+  const debtMad = Math.max(Number(opening?.debt_outstanding_mad ?? 0), 0);
 
   // ── Bornes du crédit ────────────────────────────────────────────────────
   //

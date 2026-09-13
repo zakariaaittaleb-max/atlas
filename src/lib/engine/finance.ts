@@ -212,6 +212,18 @@ export function buildPnl(input: PnlInput, params: EngineParams): PnlStatement {
   const capitalNetMad = capitalRaisedMad - equityIssueCostMad;
   const dividendMad = Math.max(input.dividendMad ?? 0, 0);
 
+  // ── On ne rembourse pas plus qu'on ne doit ─────────────────────────────
+  //
+  // La clôture de la dette était bornée à zéro, mais la trésorerie débitait le
+  // remboursement BRUT. Rembourser 3,4 Md sur une dette de 2 Md faisait donc
+  // sortir 1,4 Md de la caisse vers personne. Le remboursement est ramené à ce
+  // qui est dû — dette d'ouverture et tirage du tour compris — avant de toucher
+  // l'un comme l'autre.
+  const debtRepaidMad = Math.min(
+    Math.max(input.debtRepaidMad, 0),
+    Math.max(input.debtMad, 0) + Math.max(input.debtDrawnMad, 0),
+  );
+
   const selfFinancingMad = selfFinancingCapacity(netIncomeMad, input.depreciationMad);
   const freeCashFlowMad = freeCashFlow(selfFinancingMad, workingCapitalChangeMad, input.capexMad);
 
@@ -222,7 +234,7 @@ export function buildPnl(input: PnlInput, params: EngineParams): PnlStatement {
     input.capexMad -
     workingCapitalChangeMad +
     input.debtDrawnMad -
-    input.debtRepaidMad +
+    debtRepaidMad +
     capitalNetMad -
     dividendMad +
     input.divestitureCashMad;
@@ -232,7 +244,7 @@ export function buildPnl(input: PnlInput, params: EngineParams): PnlStatement {
   const equityEndMad =
     input.equityMad + netIncomeMad - dividendMad + capitalNetMad;
   const debtOutstandingEndMad = Math.max(
-    input.debtMad + input.debtDrawnMad - input.debtRepaidMad,
+    input.debtMad + input.debtDrawnMad - debtRepaidMad,
     0,
   );
 

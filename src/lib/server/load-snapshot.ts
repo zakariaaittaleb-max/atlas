@@ -857,7 +857,7 @@ export async function loadResolutionSnapshot(
         // État : reporté depuis le dernier budget connu.
         treasuryStartMad: num(pnl?.treasury_end_mad, num(budget?.treasury_start_mad)),
         equityMad: num(budget?.equity_mad),
-        debtOutstandingMad: num(budget?.debt_outstanding_mad),
+        debtOutstandingMad: Math.max(num(budget?.debt_outstanding_mad), 0),
         capexHistoryMad: capexRoundsByTeam.get(teamId) ?? [],
         previousWorkingCapitalMad: num(pnl?.working_capital_mad),
         consultingSpendMad: consultingByTeam.get(teamId) ?? 0,

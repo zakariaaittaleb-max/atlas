@@ -144,16 +144,21 @@ export async function loadDecisionContext(): Promise<DecisionContext> {
    */
   const previousPnl = closedPnls.find((p) => num(p.round_number) === previous) ?? null;
 
+  // Plancher à zéro : une dette négative n'existe pas comptablement. Lue
+  // brute, elle inversait les bornes du curseur — « tout rembourser » valait
+  // +3,41 Md, au-dessus de la capacité — et le curseur ne bougeait plus.
+  const openingDebtMad = Math.max(num(openingBudget?.debt_outstanding_mad), 0);
+
   const capacity = debtCapacity(
     num(openingBudget?.equity_mad),
     num(lastPnl?.revenue_mad),
-    num(openingBudget?.debt_outstanding_mad),
+    openingDebtMad,
     buildParams(),
   );
 
   const financeLimits: FinanceLimits = {
     equityMad: num(openingBudget?.equity_mad),
-    debtOutstandingMad: num(openingBudget?.debt_outstanding_mad),
+    debtOutstandingMad: openingDebtMad,
     capacityTotalMad: capacity.totalMad,
     capacityAvailableMad: capacity.availableMad,
     capacityBinding: capacity.binding,
