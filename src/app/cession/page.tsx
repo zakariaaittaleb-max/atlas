@@ -7,7 +7,7 @@ import {
   type PublicListing, type SellableDas,
 } from './cession-view';
 
-export const metadata = { title: 'Atlas — Marché de cession' };
+export const metadata = { title: 'Atlas — Cession & acquisitions' };
 export const dynamic = 'force-dynamic';
 
 export default async function CessionPage() {

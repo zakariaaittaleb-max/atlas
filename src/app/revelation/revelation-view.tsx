@@ -43,6 +43,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { ShareBar, type ShareSlice } from '@/components/share-bar';
+import { InfoHint } from '@/components/ui/info-hint';
 import { createClient } from '@/lib/supabase/client';
 import {
   colorIndexByTeam,
@@ -223,7 +224,7 @@ export function RevelationView({
           >
             <div className="h-full w-1/3 rounded-full bg-(--accent) motion-safe:animate-[atlas-slide_1.4s_ease-in-out_infinite]" />
           </div>
-          <h2 className="text-2xl font-medium">Calcul en cours</h2>
+          <h2 className="text-2xl font-semibold text-(--heading)">Calcul en cours</h2>
           <p className="mx-auto mt-3 max-w-lg text-(--foreground-muted)">
             Le marché se redistribue. Toutes les équipes du pool verront le résultat
             au même instant — personne n’a d’avance.
@@ -274,12 +275,14 @@ export function RevelationView({
       </section>
 
       <section className="mb-10 rounded-xl border border-(--border) bg-(--surface) p-6">
-        <h2 className="text-lg font-medium">Poids des groupes</h2>
-        <p className="mt-1 mb-5 text-sm text-(--foreground-muted)">
-          Part du chiffre d’affaires cumulé des groupes, tous domaines confondus. Ce n’est
-          pas une part de marché : les entreprises installées n’y figurent pas, et un groupe
-          peut peser lourd en jouant petit sur beaucoup de domaines.
-        </p>
+        <h2 className="mb-5 flex items-center gap-2 text-lg font-semibold text-(--heading)">
+          Poids des groupes
+          <InfoHint label="Poids des groupes">
+            Part du chiffre d’affaires cumulé des groupes, tous domaines confondus. Ce n’est pas
+            une part de marché : les entreprises installées n’y figurent pas, et un groupe peut
+            peser lourd en jouant petit sur beaucoup de domaines.
+          </InfoHint>
+        </h2>
         <ShareBar
           slices={groupSlices}
           highlightKey={teamId}
@@ -334,7 +337,7 @@ export function RevelationView({
               className="rounded-xl border border-(--border) bg-(--surface) p-6"
             >
               <div className="mb-5 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-                <h2 className="text-lg font-medium">{block.name}</h2>
+                <h2 className="text-lg font-semibold text-(--heading)">{block.name}</h2>
                 <p className="tabular text-sm text-(--foreground-muted)">
                   Marché de {formatMadCompact(composition.marketSizeMad)}
                 </p>
@@ -369,19 +372,21 @@ export function RevelationView({
               />
 
               {composition.installedShare > 0.001 ? (
-                <p className="mt-5 text-sm text-(--foreground-muted)">
-                  Les entreprises déjà installées sur ce domaine, qui ne sont pas des
-                  équipes de la salle, en servent{' '}
-                  <strong className="tabular">
+                <p className="mt-5 flex flex-wrap items-center gap-2 text-sm text-(--foreground-muted)">
+                  Entreprises installées :{' '}
+                  <strong className="tabular font-mono text-(--foreground)">
                     {formatPct(composition.installedShare, 1)}
                   </strong>
-                  . Le facilitateur peut les mettre en vente : les racheter, c’est
-                  récupérer leur part sans la disputer.
+                  <InfoHint label="Entreprises installées">
+                    Les entreprises déjà installées sur ce domaine, qui ne sont pas des équipes de
+                    la salle. Le facilitateur peut les mettre en vente : les racheter, c’est
+                    récupérer leur part sans la disputer.
+                  </InfoHint>
                 </p>
               ) : null}
 
               {composition.unservedShare > 0.001 ? (
-                <p className="mt-3 rounded-lg border border-(--warning) px-4 py-3 text-sm text-(--warning)">
+                <p className="mt-3 rounded-lg bg-(--warning-subtle) px-4 py-3 text-sm text-(--warning)">
                   <strong className="tabular">
                     {formatPct(composition.unservedShare, 1)}
                   </strong>{' '}
@@ -412,15 +417,17 @@ export function RevelationView({
       </div>
 
       {ownDiagnosis && (ownDiagnosis.stuck || ownDiagnosis.drift) ? (
-        <section className="mt-8 rounded-xl border border-(--warning) bg-(--surface) p-6">
-          <h2 className="text-lg font-medium">Le cabinet a relevé une incohérence</h2>
-          <p className="mt-2 max-w-3xl text-(--foreground-muted)">
+        <section className="mt-8 rounded-xl bg-(--warning-subtle) p-6">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-(--warning)">
+            Le cabinet a relevé une incohérence
+            <InfoHint label="Incohérence stratégique">
+              La décomposition axe par axe s’obtient en commandant un audit d’alignement.
+            </InfoHint>
+          </h2>
+          <p className="mt-2 max-w-3xl text-(--foreground)">
             {ownDiagnosis.stuck
               ? 'Vos décisions ne correspondent à aucune stratégie cohérente : ni assez bon marché pour gagner sur les coûts, ni assez distinctives pour justifier un premium. C’est la position la moins défendable d’un secteur.'
               : `Vous déclarez « ${strategyLabel(ownDiagnosis.declared ?? '')} » mais vos décisions exécutent « ${strategyLabel(ownDiagnosis.actual ?? '')} ». Re-déclarer au tour prochain efface ce malus, sans coût de transition.`}
-          </p>
-          <p className="mt-3 text-sm text-(--foreground-muted)">
-            La décomposition axe par axe s’obtient en commandant un audit d’alignement.
           </p>
         </section>
       ) : null}
@@ -450,8 +457,8 @@ function Shell({
   return (
     <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-10">
       <header className="mb-10">
-        <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
-          Tour {roundNumber} — Révélation
+        <p className="text-xs font-semibold tracking-wider text-(--accent-text) uppercase">
+          Tour {roundNumber} · révélation
         </p>
         <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">{teamName}</h1>
       </header>
@@ -463,7 +470,7 @@ function Shell({
 function Placeholder({ titre, texte }: { titre: string; texte: string }) {
   return (
     <div className="rounded-xl border border-(--border) bg-(--surface) p-10">
-      <h2 className="text-xl font-medium">{titre}</h2>
+      <h2 className="text-2xl font-semibold text-(--heading)">{titre}</h2>
       <p className="mt-3 max-w-2xl text-(--foreground-muted)">{texte}</p>
     </div>
   );
@@ -500,10 +507,16 @@ function DecompositionTable({
       style={{ opacity: visible ? 1 : 0 }}
       aria-hidden={!visible}
     >
-      <h3 className="text-base font-medium">Décomposition du score de compétitivité</h3>
-      <p className="mt-1 mb-5 text-sm text-(--foreground-muted)">
-        Qualité 30 % · Notoriété 25 % · Prix 20 % · Alignement 15 % · Pression −10 %
-      </p>
+      <h3 className="mb-4 flex items-center gap-2 text-base font-semibold text-(--heading)">
+        Décomposition du score de compétitivité
+        <InfoHint label="Pondération du score">
+          Qualité 30 % · Notoriété 25 % · Prix 20 % · Alignement 15 % · Pression −10 %.
+          <span className="mt-2 block">
+            Les coûts, capacités et diagnostics d’alignement de vos concurrents ne sont pas
+            publics — ils s’achètent auprès du cabinet.
+          </span>
+        </InfoHint>
+      </h3>
 
       {/* `min-w-0` sur le conteneur de défilement : sans lui, la largeur
           minimale du tableau se propage au parent et fait déborder la page
@@ -576,7 +589,7 @@ function DecompositionTable({
       </div>
 
       <details className="mt-4">
-        <summary className="cursor-pointer text-sm text-(--foreground-muted)">
+        <summary className="cursor-pointer text-sm font-medium text-(--accent-text)">
           Chiffre d’affaires et prix pratiqués sur ce domaine
         </summary>
         <table className="tabular mt-3 w-full border-collapse text-sm">
@@ -594,10 +607,6 @@ function DecompositionTable({
         </table>
       </details>
 
-      <p className="mt-5 text-sm text-(--foreground-muted)">
-        Les coûts, capacités et diagnostics d’alignement de vos concurrents ne sont pas
-        publics — ils s’achètent auprès du cabinet.
-      </p>
     </div>
   );
 }

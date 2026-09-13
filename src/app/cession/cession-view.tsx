@@ -12,14 +12,24 @@
  *   • le vendeur seul voit l'offre de l'acheteur non joueur ;
  *   • il sait combien d'offres il a reçues, jamais leur montant ;
  *   • les acheteurs ne voient qu'une fiche limitée, et s'ignorent entre eux.
+ *
+ * Quatre marchés sur une page : vendre, entrer dans un domaine, intégrer sa
+ * filière, racheter un domaine en vente. La synthèse dit en tête ce qui est en
+ * cours ; chaque marché est un bloc repliable, et les mécanismes (plancher de
+ * liquidité, perte d'intégration, prix de réserve) sont sous les « + ».
  */
 
+import { ChevronDown, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
 import { NumberInput } from '@/components/decision-shell';
 import { DisclosureList } from '@/components/disclosure-list';
+import { Accordion } from '@/components/ui/accordion';
+import { ChoiceCard, GroupLegend } from '@/components/ui/form-controls';
+import { InfoHint } from '@/components/ui/info-hint';
+import { StatCard } from '@/components/ui/stat-card';
 import type { FieldDisclosure } from '@/lib/consulting-types';
 import { isOn, type EnabledModules } from '@/lib/modules-state';
 import { formatMadCompact, formatPct, formatUnits } from '@/lib/format';
@@ -163,186 +173,245 @@ export function CessionView({
   }
 
   const bidByListing = new Map(myBids.map((b) => [b.listingId, b]));
+  const targetIds = new Set(targets.map((t) => t.targetActorId));
+  const entryOffers = myOffers.filter((o) => targetIds.has(o.targetActorId)).length;
+  const linkOffers = myOffers.length - entryOffers;
+  const ownedLinks = integrationTargets.filter((l) => l.ownedByMe).length;
+
+  const showSell = isOn(modules, 'cession.sell');
+  const showAcquire = isOn(modules, 'cession.acquire');
+  const showIntegration = isOn(modules, 'cession.integration');
+  const showBid = isOn(modules, 'cession.bid');
 
   return (
-    <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-10">
-      <header className="mb-8">
-        <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
-          Tour {roundNumber}
+    <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-8 lg:py-10">
+      <header className="mb-6">
+        <p className="text-xs font-semibold tracking-wider text-(--accent-text) uppercase">
+          Tour {roundNumber} · niveau Groupe
         </p>
-        <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">Marché de cession</h1>
-        <p className="mt-3 max-w-3xl text-(--foreground-muted)">
-          Céder un DAS libère de la trésorerie et recentre votre portefeuille. L’acheteur non
-          joueur offre toujours moins qu’un concurrent rationnel : c’est un plancher de
-          liquidité, pas une bonne affaire.
-        </p>
+        <h1 className="mt-1 flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight text-(--heading)">
+          Cession &amp; acquisitions
+          <InfoHint label="Cession et acquisitions">
+            Céder un DAS libère de la trésorerie et recentre votre portefeuille. Racheter permet
+            d’entrer d’un coup dans un domaine, de consolider une position ou d’intégrer sa
+            filière. Toutes les offres sont <strong>scellées</strong> : personne ne voit celles des
+            autres.
+          </InfoHint>
+        </h1>
       </header>
 
-      {!decisionsOpen ? (
-        <p className="mb-8 rounded-lg border border-(--warning) px-4 py-3 text-sm text-(--warning)">
-          Le tour est verrouillé : le marché de cession est clos jusqu’au tour suivant.
-        </p>
-      ) : null}
+      <div className="space-y-4">
+        {!decisionsOpen ? (
+          <Alert tone="warning">
+            Le tour est verrouillé : le marché de cession est clos jusqu’au tour suivant.
+          </Alert>
+        ) : null}
+        {error ? <Alert tone="negative">{error}</Alert> : null}
 
-      {error ? (
-        <p role="alert" className="mb-8 rounded-lg border border-(--negative) px-4 py-3 text-sm text-(--negative)">
-          {error}
-        </p>
-      ) : null}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label="Vos DAS en vente"
+            value={`${ownListings.length} / ${sellable.length}`}
+            note={
+              ownListings.reduce((acc, l) => acc + l.bidCount, 0) > 0
+                ? `${ownListings.reduce((acc, l) => acc + l.bidCount, 0)} offre(s) reçue(s)`
+                : 'Aucune offre reçue'
+            }
+          />
+          <StatCard
+            label="Vos offres d’acquisition"
+            value={String(myOffers.length + myBids.length)}
+            note={`${entryOffers} entrée · ${linkOffers} filière · ${myBids.length} rachat`}
+          />
+          <StatCard
+            label="Maillons détenus"
+            value={String(ownedLinks)}
+            note={`${integrationTargets.length} maillon(s) dans vos filières`}
+          />
+          <StatCard
+            label="Annonces du pool"
+            value={String(market.length)}
+            note="DAS mis en vente par vos concurrents"
+          />
+        </div>
 
-      {/* ── Vendre ────────────────────────────────────────────────────────── */}
-      {isOn(modules, 'cession.sell') ? (
-      <section className="mb-10">
-        <h2 className="mb-4 text-xl font-medium">Vos DAS</h2>
+        {/* ── Vendre ────────────────────────────────────────────────────────── */}
+        {showSell ? (
+          <Accordion
+            title="Vendre un DAS"
+            defaultOpen={ownListings.length > 0}
+            summary={`${ownListings.length} en vente`}
+            hint="Céder un DAS libère de la trésorerie et recentre votre portefeuille. L’acheteur non joueur offre toujours moins qu’un concurrent rationnel : c’est un plancher de liquidité, pas une bonne affaire."
+          >
+            {sellable.length === 0 ? (
+              <p className="text-sm text-(--foreground-muted)">Vous ne détenez aucun DAS actif.</p>
+            ) : (
+              <ul className="space-y-3">
+                {sellable.map((das) => {
+                  const listing = ownListings.find((l) => l.dasId === das.dasId);
+                  return (
+                    <li key={das.dasId} className="rounded-lg border border-(--border) p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <h3 className="flex items-center gap-2 text-base font-semibold">
+                          {das.name}
+                          {listing ? (
+                            <span className="rounded-full bg-(--warning-subtle) px-2 py-0.5 text-xs font-semibold text-(--warning)">
+                              en vente
+                            </span>
+                          ) : null}
+                        </h3>
+                        {!listing ? (
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => send({ action: 'list', dasId: das.dasId })}
+                            className="rounded-lg border border-(--border) px-4 py-2 text-sm font-medium enabled:hover:border-(--border-strong) disabled:opacity-40"
+                          >
+                            Mettre en vente
+                          </button>
+                        ) : null}
+                      </div>
 
-        {sellable.length === 0 ? (
-          <p className="rounded-xl border border-(--border) bg-(--surface) p-6 text-(--foreground-muted)">
-            Vous ne détenez aucun DAS actif.
-          </p>
-        ) : (
-          <ul className="space-y-4">
-            {sellable.map((das) => {
-              const listing = ownListings.find((l) => l.dasId === das.dasId);
-              return (
-                <li key={das.dasId} className="rounded-xl border border-(--border) bg-(--surface) p-6">
-                  <div className="flex flex-wrap items-baseline justify-between gap-3">
-                    <h3 className="text-lg font-medium">{das.name}</h3>
-                    {!listing ? (
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => send({ action: 'list', dasId: das.dasId })}
-                        className="rounded-lg border border-(--border) px-4 py-2 text-sm font-medium disabled:opacity-40"
-                      >
-                        Mettre en vente
-                      </button>
-                    ) : null}
-                  </div>
+                      {listing ? <ListingPanel listing={listing} disabled={disabled} onSend={send} /> : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Accordion>
+        ) : null}
 
-                  {listing ? <ListingPanel listing={listing} disabled={disabled} onSend={send} /> : null}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-      ) : null}
+        {/* ── Acquérir pour ENTRER dans un nouveau domaine ─────────────────── */}
+        {showAcquire ? (
+          <Accordion
+            title="Entrer dans un nouveau domaine"
+            summary={`${targets.length} cible${targets.length > 1 ? 's' : ''} · ${entryOffers} offre${entryOffers > 1 ? 's' : ''}`}
+            hint={
+              <>
+                Racheter une entreprise, c’est entrer d’un coup avec une part de marché constituée —
+                le moyen de contourner la barrière d’entrée qui pénalise les arrivées tardives. Mais
+                vous héritez d’une organisation que vous n’avez pas conçue : sans budget
+                d’intégration, près de la moitié de ce que vous payez part en fumée.
+                <span className="mt-2 block">
+                  Les chiffres de ces cibles — chiffre d’affaires, capacité et surtout passifs non
+                  déclarés — s’obtiennent en due diligence au cabinet. Acquérir à l’aveugle est un
+                  choix, pas un oubli.
+                </span>
+              </>
+            }
+          >
+            {targets.length === 0 ? (
+              <p className="text-sm text-(--foreground-muted)">
+                Aucune cible dans un domaine que vous n’exploitez pas encore.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {targets.map((target) => (
+                  <AcquisitionCard
+                    key={target.targetActorId}
+                    target={target}
+                    dueDiligences={dueDiligences}
+                    existingOffer={myOffers.find((o) => o.targetActorId === target.targetActorId)}
+                    disabled={disabled}
+                    onSend={(body) => send(body, '/api/acquisitions')}
+                  />
+                ))}
+              </ul>
+            )}
+          </Accordion>
+        ) : null}
 
-      {/* ── Acquérir pour ENTRER dans un nouveau domaine ─────────────────── */}
-      {isOn(modules, 'cession.acquire') ? (
-      <section className="mb-10">
-        <h2 className="mb-2 text-xl font-medium">Entrer dans un nouveau domaine</h2>
-        <p className="mb-4 max-w-3xl text-sm text-(--foreground-muted)">
-          Racheter une entreprise, c’est entrer d’un coup avec une part de marché constituée —
-          le moyen de contourner la barrière d’entrée qui pénalise les arrivées tardives.
-          Mais vous héritez d’une organisation que vous n’avez pas conçue : sans budget
-          d’intégration, près de la moitié de ce que vous payez part en fumée.
-        </p>
-        <p className="mb-4 max-w-3xl rounded-lg border border-(--border) px-4 py-3 text-sm text-(--foreground-muted)">
-          Les chiffres de ces cibles ne sont pas affichés : chiffre d’affaires, capacité et
-          surtout <strong>passifs non déclarés</strong> s’obtiennent en{' '}
-          <Link href="/cabinet" className="underline">due diligence</Link>. Acquérir à l’aveugle est un
-          choix, pas un oubli.
-        </p>
+        {/* ── Intégrer un maillon de sa PROPRE filière ─────────────────────── */}
+        {showIntegration ? (
+          <Accordion
+            title="Intégrer votre filière"
+            summary={`${integrationTargets.length} maillon${integrationTargets.length > 1 ? 's' : ''} · ${ownedLinks} détenu${ownedLinks > 1 ? 's' : ''}`}
+            hint={
+              <>
+                Racheter un <strong>fournisseur</strong> supprime la marge qu’il prélevait et
+                sécurise votre approvisionnement : vous ne négociez plus contre lui, vous le possédez.
+                Racheter un <strong>distributeur</strong> fait passer sa couverture du canal tiers à
+                votre réseau propre — il ne prélève plus de marge et n’impose plus de volume minimal.
+                <span className="mt-2 block">
+                  Au-delà du prix, vous immobilisez du capital dans un maillon qu’il faut faire
+                  tourner, et l’opération déplace votre indice d’alignement : elle sert une
+                  intégration verticale, elle contredit une domination par les coûts.
+                </span>
+              </>
+            }
+          >
+            {integrationTargets.length === 0 ? (
+              <p className="text-sm text-(--foreground-muted)">
+                Aucun maillon intégrable : ce bloc ne liste que les fournisseurs et distributeurs des
+                domaines que vous exploitez.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {integrationTargets.map((link) => (
+                  <AcquisitionCard
+                    key={link.targetActorId}
+                    target={{
+                      targetActorId: link.targetActorId,
+                      targetName: link.targetName,
+                      dasName: link.dasName,
+                      regionKey: link.regionKey,
+                    }}
+                    dueDiligences={dueDiligences}
+                    badge={link.actorType === 'fournisseur' ? 'Amont' : 'Aval'}
+                    owned={link.ownedByMe ? 'moi' : link.alreadyOwned ? 'autre' : null}
+                    existingOffer={myOffers.find((o) => o.targetActorId === link.targetActorId)}
+                    disabled={disabled}
+                    onSend={(body) => send(body, '/api/acquisitions')}
+                  />
+                ))}
+              </ul>
+            )}
+          </Accordion>
+        ) : null}
 
-        {targets.length === 0 ? (
-          <p className="rounded-xl border border-(--border) bg-(--surface) p-6 text-(--foreground-muted)">
-            Aucune cible dans un domaine que vous n’exploitez pas encore.
-          </p>
-        ) : (
-          <ul className="space-y-4">
-            {targets.map((target) => (
-              <AcquisitionCard
-                key={target.targetActorId}
-                target={target}
-                dueDiligences={dueDiligences}
-                existingOffer={myOffers.find((o) => o.targetActorId === target.targetActorId)}
-                disabled={disabled}
-                onSend={(body) => send(body, '/api/acquisitions')}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
-      ) : null}
-
-      {/* ── Intégrer un maillon de sa PROPRE filière ─────────────────────── */}
-      {isOn(modules, 'cession.integration') ? (
-      <section className="mb-10">
-        <h2 className="mb-2 text-xl font-medium">Intégrer votre filière</h2>
-        <p className="mb-4 max-w-3xl text-sm text-(--foreground-muted)">
-          Racheter un <strong>fournisseur</strong> supprime la marge qu’il prélevait et sécurise
-          votre approvisionnement : vous ne négociez plus contre lui, vous le possédez.
-          Racheter un <strong>distributeur</strong> fait passer sa couverture du canal tiers à
-          votre réseau propre — il ne prélève plus de marge et n’impose plus de volume minimal.
-        </p>
-        <p className="mb-4 max-w-3xl rounded-lg border border-(--border) px-4 py-3 text-sm text-(--foreground-muted)">
-          Ce que cela coûte, au-delà du prix : vous immobilisez du capital dans un maillon
-          qu’il faut désormais faire tourner, et l’opération <strong>déplace votre indice
-          d’alignement</strong>. Elle sert une stratégie d’intégration verticale ; elle
-          contredit une domination par les coûts, qui vise un contrôle du canal faible.
-          Le moteur relèvera l’un comme l’autre.
-        </p>
-
-        {integrationTargets.length === 0 ? (
-          <p className="rounded-xl border border-(--border) bg-(--surface) p-6 text-(--foreground-muted)">
-            Aucun maillon intégrable : cette section ne liste que les fournisseurs et
-            distributeurs des domaines que vous exploitez.
-          </p>
-        ) : (
-          <ul className="space-y-4">
-            {integrationTargets.map((link) => (
-              <AcquisitionCard
-                key={link.targetActorId}
-                target={{
-                  targetActorId: link.targetActorId,
-                  targetName: link.targetName,
-                  dasName: link.dasName,
-                  regionKey: link.regionKey,
-                }}
-                dueDiligences={dueDiligences}
-                badge={link.actorType === 'fournisseur' ? 'Amont' : 'Aval'}
-                owned={link.ownedByMe ? 'moi' : link.alreadyOwned ? 'autre' : null}
-                existingOffer={myOffers.find((o) => o.targetActorId === link.targetActorId)}
-                disabled={disabled}
-                onSend={(body) => send(body, '/api/acquisitions')}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
-      ) : null}
-
-      {/* ── Acheter un DAS mis en vente par une concurrente ──────────────── */}
-      {isOn(modules, 'cession.bid') ? (
-      <section>
-        <h2 className="mb-2 text-xl font-medium">DAS en vente dans votre pool</h2>
-        <p className="mb-4 max-w-3xl text-sm text-(--foreground-muted)">
-          Les offres sont <strong>scellées</strong> : vous ne voyez ni celles des autres
-          équipes, ni ce que l’acheteur non joueur propose au vendeur. Budgétez votre
-          intégration — sans elle, un rachat détruit jusqu’à 45 % de ce que vous venez de payer.
-        </p>
-
-        {market.length === 0 ? (
-          <p className="rounded-xl border border-(--border) bg-(--surface) p-6 text-(--foreground-muted)">
-            Aucune annonce ouverte dans votre pool à ce tour.
-          </p>
-        ) : (
-          <ul className="space-y-4">
-            {market.map((l) => (
-              <MarketCard
-                key={l.listing_id}
-                listing={l}
-                existingBid={bidByListing.get(l.listing_id)}
-                disabled={disabled}
-                onSend={send}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
-      ) : null}
+        {/* ── Acheter un DAS mis en vente par une concurrente ──────────────── */}
+        {showBid ? (
+          <Accordion
+            title="DAS en vente dans votre pool"
+            defaultOpen={market.length > 0}
+            summary={`${market.length} annonce${market.length > 1 ? 's' : ''} · ${myBids.length} offre${myBids.length > 1 ? 's' : ''}`}
+            hint="Les offres sont scellées : vous ne voyez ni celles des autres équipes, ni ce que l’acheteur non joueur propose au vendeur. Budgétez votre intégration — sans elle, un rachat détruit jusqu’à 45 % de ce que vous venez de payer."
+          >
+            {market.length === 0 ? (
+              <p className="text-sm text-(--foreground-muted)">
+                Aucune annonce ouverte dans votre pool à ce tour.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {market.map((l) => (
+                  <MarketCard
+                    key={l.listing_id}
+                    listing={l}
+                    existingBid={bidByListing.get(l.listing_id)}
+                    disabled={disabled}
+                    onSend={send}
+                  />
+                ))}
+              </ul>
+            )}
+          </Accordion>
+        ) : null}
+      </div>
     </main>
+  );
+}
+
+function Alert({ tone, children }: { tone: 'negative' | 'warning'; children: React.ReactNode }) {
+  return (
+    <p
+      role="alert"
+      className={`flex items-start gap-2 rounded-lg px-4 py-3 text-sm ${
+        tone === 'negative' ? 'bg-(--negative-subtle) text-(--negative)' : 'bg-(--warning-subtle) text-(--warning)'
+      }`}
+    >
+      <TriangleAlert aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{children}</span>
+    </p>
   );
 }
 
@@ -355,57 +424,90 @@ function ListingPanel({
   onSend: (body: Record<string, unknown>) => void;
 }) {
   return (
-    <div className="mt-5 border-t border-(--border) pt-5">
-      <dl className="mb-5 grid gap-4 sm:grid-cols-2">
-        <div>
-          <dt className="text-sm text-(--foreground-muted)">Offre de l’acheteur non joueur</dt>
-          <dd className="tabular mt-1 text-2xl font-semibold">
+    <div className="mt-4 border-t border-(--border) pt-4">
+      <dl className="mb-4 grid gap-2 sm:grid-cols-2">
+        <div className="rounded-lg bg-(--surface-muted) px-4 py-3">
+          <dt className="flex items-center gap-1.5 text-xs text-(--foreground-muted)">
+            Offre de l’acheteur non joueur
+            <InfoHint label="Offre de l’acheteur non joueur">
+              Visible de vous seul. Ferme et immédiate.
+            </InfoHint>
+          </dt>
+          <dd className="tabular mt-1 font-mono text-2xl font-semibold">
             {formatMadCompact(listing.npcOfferMad)}
           </dd>
-          <p className="mt-1 text-xs text-(--foreground-muted)">
-            Visible de vous seul. Ferme et immédiate.
-          </p>
         </div>
-        <div>
-          <dt className="text-sm text-(--foreground-muted)">Offres reçues de vos concurrents</dt>
-          <dd className="tabular mt-1 text-2xl font-semibold">{listing.bidCount}</dd>
-          <p className="mt-1 text-xs text-(--foreground-muted)">
-            Leur montant vous restera inconnu jusqu’au dénouement.
-          </p>
+        <div className="rounded-lg bg-(--surface-muted) px-4 py-3">
+          <dt className="flex items-center gap-1.5 text-xs text-(--foreground-muted)">
+            Offres reçues de vos concurrents
+            <InfoHint label="Offres reçues">
+              Leur montant vous restera inconnu jusqu’au dénouement.
+            </InfoHint>
+          </dt>
+          <dd className="tabular mt-1 font-mono text-2xl font-semibold">{listing.bidCount}</dd>
         </div>
       </dl>
 
-      <fieldset disabled={disabled} className="mb-4">
-        <legend className="mb-2 text-sm font-medium">Votre décision pour ce tour</legend>
-        <div className="flex flex-wrap gap-2">
+      <fieldset disabled={disabled}>
+        <GroupLegend title="Votre décision pour ce tour">
+          Le choix est arrêté avant le verrouillage du tour — vous pariez sans connaître les
+          montants.
+        </GroupLegend>
+        <div className="grid gap-2 sm:grid-cols-3">
           {([
             ['npc', 'Céder à l’acheteur non joueur'],
-            ['best_bid', 'Retenir la meilleure offre reçue'],
+            ['best_bid', 'Retenir la meilleure offre'],
             ['withdraw', 'Retirer l’annonce'],
           ] as const).map(([value, label]) => (
-            <button
+            <ChoiceCard
               key={value}
-              type="button"
-              onClick={() => onSend({ action: 'choice', listingId: listing.listingId, choice: value })}
-              className="rounded-lg border px-4 py-2 text-sm disabled:opacity-40"
-              style={{
-                borderColor: listing.sellerChoice === value ? 'var(--accent)' : 'var(--border)',
-                background: listing.sellerChoice === value ? 'var(--surface-muted)' : undefined,
-                fontWeight: listing.sellerChoice === value ? 600 : 400,
-              }}
-            >
-              {label}
-            </button>
+              title={label}
+              selected={listing.sellerChoice === value}
+              onSelect={() => onSend({ action: 'choice', listingId: listing.listingId, choice: value })}
+            />
           ))}
         </div>
       </fieldset>
 
-      <p className="text-sm text-(--foreground-muted)">
-        {listing.sellerChoice === 'best_bid' && listing.bidCount === 0
-          ? 'Aucune offre reçue : à défaut, la cession se fera à l’acheteur non joueur.'
-          : 'Le choix est arrêté avant le verrouillage du tour — vous pariez sans connaître les montants.'}
-      </p>
+      {listing.sellerChoice === 'best_bid' && listing.bidCount === 0 ? (
+        <p className="mt-3 text-sm text-(--warning)">
+          Aucune offre reçue : à défaut, la cession se fera à l’acheteur non joueur.
+        </p>
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * La perte de valeur à l'intégration, et le budget qui la limite.
+ *
+ * Doc 02 §11 : le budget d'intégration se juge par rapport à 20 % du prix payé.
+ * Le chiffre reste visible — c'est la conséquence de la saisie ; le mécanisme
+ * est sous le « + ».
+ */
+function IntegrationLoss({ offer, integration }: { offer: number; integration: number }) {
+  if (offer <= 0) return null;
+  const ratio = integration / (0.2 * offer);
+  const loss = Math.min(Math.max(0.45 - 0.4 * ratio, 0.05), 0.45);
+  const heavy = loss > 0.25;
+
+  return (
+    <p className="tabular mt-3 flex flex-wrap items-center gap-2 text-sm">
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 font-medium ${
+          heavy ? 'bg-(--negative-subtle) text-(--negative)' : 'bg-(--positive-subtle) text-(--positive)'
+        }`}
+      >
+        {heavy ? <TriangleAlert aria-hidden className="h-3.5 w-3.5" /> : null}
+        Perte de valeur à l’intégration : {formatPct(loss, 0)}
+      </span>
+      <InfoHint label="Perte de valeur à l’intégration">
+        Part de marché, capacité et notoriété s’érodent au même rythme. Sans budget d’intégration,
+        vous détruisez près de la moitié de ce que vous payez ; un budget égal à 20 % du prix payé
+        la ramène à 5 %.
+        {integration > 0 ? ` Votre budget couvre ${formatPct(ratio, 0)} de cette référence.` : ''}
+      </InfoHint>
+    </p>
   );
 }
 
@@ -426,24 +528,27 @@ function MarketCard({
 
   const offerValue = Number(offer);
   const integrationValue = Number(integration || 0);
-  // Doc 02 §11 : le budget d'intégration se juge par rapport à 20 % du prix payé.
-  const integrationRatio = offerValue > 0 ? integrationValue / (0.2 * offerValue) : 0;
-  const valueLoss = Math.min(Math.max(0.45 - 0.4 * integrationRatio, 0.05), 0.45);
 
   return (
-    <li className="rounded-xl border border-(--border) bg-(--surface) p-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h3 className="text-lg font-medium">{listing.das_name}</h3>
-        <p className="text-sm text-(--foreground-muted)">cédé par {listing.seller_team_name}</p>
+    <li className="rounded-lg border border-(--border) p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="flex items-center gap-2 text-base font-semibold">
+          {listing.das_name}
+          <InfoHint label="Ce qui n’est pas communiqué">
+            Les coûts, la trésorerie et le motif de la vente ne sont pas communiqués. Une due
+            diligence auprès du cabinet révèle les passifs non déclarés.
+          </InfoHint>
+        </h3>
+        <p className="text-sm text-(--meta)">cédé par {listing.seller_team_name}</p>
       </div>
 
-      <dl className="tabular mt-4 grid gap-x-8 gap-y-3 text-sm sm:grid-cols-3">
+      <dl className="tabular mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
         <Fact label="Part de marché" value={formatPct(s.marketSharePct, 1)} />
         <Fact
           label="Chiffre d’affaires"
           value={`${formatMadCompact(s.revenueBandMinMad)} – ${formatMadCompact(s.revenueBandMaxMad)}`}
         />
-        <Fact label="Capacité installée" value={`${formatUnits(s.capacityUnits)} unités`} />
+        <Fact label="Capacité installée" value={`${formatUnits(s.capacityUnits)} u.`} />
         <Fact label="Effectif" value={formatUnits(s.headcount)} />
         <Fact label="Qualité perçue" value={s.qualityBand} />
         <Fact label="Notoriété" value={s.notorietyBand} />
@@ -451,13 +556,8 @@ function MarketCard({
         <Fact label="Détenu depuis" value={`${s.roundsHeld} tour(s)`} />
       </dl>
 
-      <p className="mt-4 text-xs text-(--foreground-muted)">
-        Les coûts, la trésorerie et le motif de la vente ne sont pas communiqués. Une due
-        diligence auprès du cabinet révèle les passifs non déclarés.
-      </p>
-
       <form
-        className="mt-5 border-t border-(--border) pt-5"
+        className="mt-4 border-t border-(--border) pt-4"
         onSubmit={(e) => {
           e.preventDefault();
           onSend({
@@ -471,33 +571,15 @@ function MarketCard({
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className="text-sm font-medium">Votre offre (DH)</span>
-            <NumberInput
-              value={offerValue} onChange={(v) => setOffer(String(v))}
-              className="mt-1.5 w-full"
-            />
+            <NumberInput value={offerValue} onChange={(v) => setOffer(String(v))} className="mt-1.5 w-full" />
           </label>
           <label className="block">
             <span className="text-sm font-medium">Budget d’intégration (DH)</span>
-            <NumberInput
-              value={integrationValue} onChange={(v) => setIntegration(String(v))}
-              className="mt-1.5 w-full"
-            />
+            <NumberInput value={integrationValue} onChange={(v) => setIntegration(String(v))} className="mt-1.5 w-full" />
           </label>
         </div>
 
-        {offerValue > 0 ? (
-          <p
-            className="tabular mt-3 text-sm"
-            style={{ color: valueLoss > 0.25 ? 'var(--negative)' : 'var(--positive)' }}
-          >
-            Perte de valeur estimée à l’intégration : {formatPct(valueLoss, 0)}
-            <span className="ml-2 font-normal text-(--foreground-muted)">
-              — {integrationValue === 0
-                ? 'sans budget d’intégration, vous détruisez près de la moitié de ce que vous payez'
-                : `soit ${formatPct(integrationRatio, 0)} du budget de référence`}
-            </span>
-          </p>
-        ) : null}
+        <IntegrationLoss offer={offerValue} integration={integrationValue} />
 
         <button
           type="submit"
@@ -510,6 +592,12 @@ function MarketCard({
     </li>
   );
 }
+
+const SIZE_LABELS = {
+  grande: ['Grande entreprise', 'Plus de 8 % du marché de son domaine : une reprise qui change votre position d’un coup, et qui s’intègre lourdement.'],
+  moyenne: ['Entreprise moyenne', 'Entre 2 et 8 % du marché de son domaine.'],
+  petite: ['Petite entreprise', 'Moins de 2 % du marché de son domaine : une porte d’entrée, pas une position.'],
+} as const;
 
 /** Fiche d'une cible acquérable, et formulaire d'offre scellée. */
 function AcquisitionCard({
@@ -532,32 +620,35 @@ function AcquisitionCard({
 
   const offerValue = Number(offer);
   const integrationValue = Number(integration || 0);
-  const integrationRatio = offerValue > 0 ? integrationValue / (0.2 * offerValue) : 0;
-  const valueLoss = Math.min(Math.max(0.45 - 0.4 * integrationRatio, 0.05), 0.45);
+  const size = target.sizeClass ? SIZE_LABELS[target.sizeClass] : null;
 
   return (
-    <li className="rounded-xl border border-(--border) bg-(--surface) p-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h3 className="flex items-baseline gap-2.5 text-lg font-medium">
+    <li className={`rounded-lg border p-4 ${existingOffer ? 'border-(--accent)' : 'border-(--border)'}`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="flex flex-wrap items-center gap-2 text-base font-semibold">
           {badge ? (
-            <span
-              className="rounded border px-1.5 py-0.5 text-xs font-semibold tracking-wide uppercase"
-              style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
-            >
+            <span className="rounded bg-(--accent-subtle) px-1.5 py-0.5 text-xs font-semibold tracking-wide text-(--accent-text) uppercase">
               {badge}
             </span>
           ) : null}
           {target.targetName}
           {target.consolidation ? (
-            <span
-              className="rounded border px-1.5 py-0.5 text-xs font-semibold tracking-wide uppercase"
-              style={{ borderColor: 'var(--positive)', color: 'var(--positive)' }}
-            >
+            <span className="inline-flex items-center gap-1 rounded bg-(--positive-subtle) px-1.5 py-0.5 text-xs font-semibold tracking-wide text-(--positive) uppercase">
               Consolidation
+              <InfoHint label="Consolidation">
+                Vous exploitez déjà ce domaine. Sa part de marché s’ajoutera à la vôtre, ce qui
+                renforce votre pouvoir de fixation des prix — au prix du choc d’intégration : vous
+                absorbez une position commerciale, pas une marque ni un savoir-faire.
+              </InfoHint>
+            </span>
+          ) : null}
+          {existingOffer ? (
+            <span className="rounded-full bg-(--accent-subtle) px-2 py-0.5 text-xs font-semibold text-(--accent-text)">
+              offre déposée
             </span>
           ) : null}
         </h3>
-        <p className="text-sm text-(--foreground-muted)">
+        <p className="text-sm text-(--meta) capitalize">
           {target.dasName}
           {target.regionKey ? ` · ${target.regionKey.replace(/_/g, ' ')}` : ''}
         </p>
@@ -567,53 +658,30 @@ function AcquisitionCard({
           L'écran proposait d'acheter une société en n'en disant que le nom, le
           domaine et la région. On décide d'une acquisition sur ce qu'elle fait
           et sur son poids, pas sur son état civil. */}
-      {target.sizeClass ? (
-      <p className="mt-3 text-sm">
-        <span
-          className="mr-2 rounded px-1.5 py-0.5 text-xs font-semibold tracking-wide uppercase"
-          style={{
-            background: 'var(--surface-muted)',
-            color:
-              target.sizeClass === 'grande' ? 'var(--warning)'
-              : target.sizeClass === 'petite' ? 'var(--foreground-muted)'
-              : 'var(--accent)',
-          }}
-        >
-          {target.sizeClass === 'grande' ? 'Grande entreprise'
-            : target.sizeClass === 'moyenne' ? 'Entreprise moyenne'
-            : 'Petite entreprise'}
-        </span>
-        <span className="text-(--foreground-muted)">
-          {target.sizeClass === 'grande'
-            ? 'Plus de 8 % du marché de son domaine : une reprise qui change votre position d’un coup, et qui s’intègre lourdement.'
-            : target.sizeClass === 'moyenne'
-              ? 'Entre 2 et 8 % du marché de son domaine.'
-              : 'Moins de 2 % du marché de son domaine : une porte d’entrée, pas une position.'}
-        </span>
-      </p>
-      ) : null}
-
-      {target.consolidation ? (
-        <p className="mt-2 text-sm text-(--foreground-muted)">
-          <span className="font-medium text-(--foreground)">Vous exploitez déjà ce domaine. </span>
-          Sa part de marché s’ajoutera à la vôtre, ce qui renforce votre pouvoir de fixation
-          des prix — au prix du choc d’intégration : vous absorbez une position commerciale,
-          pas une marque ni un savoir-faire.
-        </p>
-      ) : null}
-
-      {target.segments && target.segments.length > 0 ? (
-        <p className="mt-2 text-sm text-(--foreground-muted)">
-          <span className="font-medium text-(--foreground)">Son marché : </span>
-          {target.segments.join(' · ')}
-        </p>
+      {size || (target.segments && target.segments.length > 0) ? (
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          {size ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="rounded bg-(--surface-muted) px-1.5 py-0.5 text-xs font-semibold tracking-wide uppercase ring-1 ring-(--border)">
+                {size[0]}
+              </span>
+              <InfoHint label={size[0]}>{size[1]}</InfoHint>
+            </span>
+          ) : null}
+          {target.segments && target.segments.length > 0 ? (
+            <span className="text-(--foreground-muted)">
+              <span className="font-medium text-(--foreground)">Son marché : </span>
+              {target.segments.join(' · ')}
+            </span>
+          ) : null}
+        </div>
       ) : null}
 
       {owned ? (
-        <p className="mt-3 text-sm" style={{ color: owned === 'moi' ? 'var(--positive)' : 'var(--warning)' }}>
+        <p className={`mt-3 text-sm font-medium ${owned === 'moi' ? 'text-(--positive)' : 'text-(--warning)'}`}>
           {owned === 'moi'
             ? 'Vous détenez ce maillon : il ne prélève plus de marge et ne négocie plus contre vous.'
-            : 'Racheté par une autre équipe. Il n’est plus indépendant — et son nouveau propriétaire décide de ce qu’il vous vend.'}
+            : 'Racheté par une autre équipe — son nouveau propriétaire décide de ce qu’il vous vend.'}
         </p>
       ) : null}
 
@@ -621,68 +689,54 @@ function AcquisitionCard({
       <TargetStats targetActorId={target.targetActorId} dueDiligences={dueDiligences} />
 
       {owned ? null : (
-      <form
-        className="mt-5 border-t border-(--border) pt-5"
-        onSubmit={(e) => {
-          e.preventDefault();
-          onSend({
-            action: 'bid',
-            targetActorId: target.targetActorId,
-            offerMad: offerValue,
-            integrationBudgetMad: integrationValue,
-          });
-        }}
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block">
-            <span className="text-sm font-medium">Votre offre (DH)</span>
-            <NumberInput
-              value={offerValue} onChange={(v) => setOffer(String(v))}
-              className="mt-1.5 w-full"
-            />
-            <span className="mt-1 block text-xs text-(--foreground-muted)">
-              La cible a un prix de réserve : en deçà, elle refuse et personne n’acquiert.
-            </span>
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium">Budget d’intégration (DH)</span>
-            <NumberInput
-              value={integrationValue} onChange={(v) => setIntegration(String(v))}
-              className="mt-1.5 w-full"
-            />
-          </label>
-        </div>
+        <form
+          className="mt-4 border-t border-(--border) pt-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSend({
+              action: 'bid',
+              targetActorId: target.targetActorId,
+              offerMad: offerValue,
+              integrationBudgetMad: integrationValue,
+            });
+          }}
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="flex items-center gap-2 text-sm font-medium">
+                Votre offre (DH)
+                <InfoHint label="Prix de réserve">
+                  La cible a un prix de réserve : en deçà, elle refuse et personne n’acquiert.
+                </InfoHint>
+              </span>
+              <NumberInput value={offerValue} onChange={(v) => setOffer(String(v))} className="mt-1.5 w-full" />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium">Budget d’intégration (DH)</span>
+              <NumberInput value={integrationValue} onChange={(v) => setIntegration(String(v))} className="mt-1.5 w-full" />
+            </label>
+          </div>
 
-        {offerValue > 0 ? (
-          <p
-            className="tabular mt-3 text-sm"
-            style={{ color: valueLoss > 0.25 ? 'var(--negative)' : 'var(--positive)' }}
-          >
-            Perte de valeur estimée à l’intégration : {formatPct(valueLoss, 0)}
-            <span className="ml-2 font-normal text-(--foreground-muted)">
-              — part de marché, capacité et notoriété s’érodent au même rythme.
-            </span>
-          </p>
-        ) : null}
+          <IntegrationLoss offer={offerValue} integration={integrationValue} />
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="submit" disabled={disabled || offerValue < 1}
-            className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
-          >
-            {existingOffer ? 'Modifier mon offre scellée' : 'Déposer une offre scellée'}
-          </button>
-          {existingOffer ? (
+          <div className="mt-4 flex flex-wrap gap-2">
             <button
-              type="button" disabled={disabled}
-              onClick={() => onSend({ action: 'withdraw', targetActorId: target.targetActorId })}
-              className="rounded-lg border border-(--border) px-4 py-2.5 text-sm disabled:opacity-40"
+              type="submit" disabled={disabled || offerValue < 1}
+              className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
             >
-              Retirer mon offre
+              {existingOffer ? 'Modifier mon offre scellée' : 'Déposer une offre scellée'}
             </button>
-          ) : null}
-        </div>
-      </form>
+            {existingOffer ? (
+              <button
+                type="button" disabled={disabled}
+                onClick={() => onSend({ action: 'withdraw', targetActorId: target.targetActorId })}
+                className="rounded-lg px-4 py-2.5 text-sm font-medium text-(--foreground-muted) enabled:hover:bg-(--negative-subtle) enabled:hover:text-(--negative) disabled:opacity-40"
+              >
+                Retirer mon offre
+              </button>
+            ) : null}
+          </div>
+        </form>
       )}
     </li>
   );
@@ -690,8 +744,8 @@ function AcquisitionCard({
 
 function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <dt className="text-(--foreground-muted)">{label}</dt>
+    <div className="rounded-lg bg-(--surface-muted) px-3 py-2">
+      <dt className="text-xs text-(--foreground-muted)">{label}</dt>
       <dd className="mt-0.5 font-medium">{value}</dd>
     </div>
   );
@@ -734,29 +788,34 @@ function TargetStats({
   const study = dueDiligences.find((d) => d.targetActorId === targetActorId);
 
   return (
-    <details className="mt-3 rounded-lg border border-(--border) bg-(--surface-muted)">
-      <summary className="cursor-pointer list-none px-4 py-2.5 text-sm font-medium">
-        Chiffres de la cible
-        <span className="ml-2 font-normal text-(--foreground-muted)">
-          {study
-            ? `${TIER_LABELS[study.tier] ?? study.tier} · tour ${study.roundNumber}`
-            : 'due diligence non commandée'}
+    <details className="group mt-3 rounded-lg bg-(--surface-muted) [&_summary::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm font-medium">
+        <span className="flex-1">
+          Chiffres de la cible
+          <span className="ml-2 font-normal text-(--foreground-muted)">
+            {study
+              ? `${TIER_LABELS[study.tier] ?? study.tier} · tour ${study.roundNumber}`
+              : 'due diligence non commandée'}
+          </span>
         </span>
+        <ChevronDown aria-hidden className="h-4 w-4 text-(--foreground-muted) transition-transform duration-200 group-open:rotate-180" />
       </summary>
 
       <div className="border-t border-(--border) px-4 py-3">
         {study ? (
           <>
             <DisclosureList fields={study.fields} />
-            <p className="mt-3 border-t border-(--border) pt-2 text-xs text-(--foreground-muted)">
-              Ces chiffres sont ceux figés à la commande, marge d’erreur comprise. Un
-              palier supérieur les resserre et couvre les passifs non déclarés.
+            <p className="mt-3 flex items-center gap-2 border-t border-(--border) pt-2 text-xs text-(--foreground-muted)">
+              Chiffres figés à la commande, marge d’erreur comprise.
+              <InfoHint label="Précision de la due diligence">
+                Un palier supérieur les resserre et couvre les passifs non déclarés.
+              </InfoHint>
             </p>
           </>
         ) : (
           <p className="text-sm text-(--foreground-muted)">
-            Chiffre d’affaires, part de marché, marge et passifs de cette cible
-            s’achètent au <Link href="/cabinet" className="underline">cabinet</Link>, en due
+            Chiffre d’affaires, part de marché, marge et passifs s’achètent au{' '}
+            <Link href="/cabinet" className="font-medium text-(--accent-text) underline">cabinet</Link>, en due
             diligence. Sans elle, vous enchérissez sur un nom.
           </p>
         )}
