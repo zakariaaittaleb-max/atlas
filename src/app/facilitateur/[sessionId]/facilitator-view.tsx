@@ -22,7 +22,7 @@ import type { DifficultyDials } from '@/lib/difficulty-types';
 
 import { SettingsSection } from './settings-section';
 import { SessionBriefing } from './session-briefing';
-import { useState, useTransition } from 'react';
+import { Fragment, useState, useTransition } from 'react';
 
 import { formatMadCompact, formatScore, treasuryLabel, sessionStatusLabel } from '@/lib/format';
 
@@ -383,14 +383,22 @@ export function FacilitatorView({
         />
       </section>
 
-      {/* ── Ce que la session fait jouer ─────────────────────────────────── */}
-      {modulesSection}
+      {/* ── Les trois sections construites par la page serveur ─────────────
+          Chacune arrive ici comme un élément fabriqué côté serveur et
+          désérialisé du flux RSC, puis posé parmi les enfants statiques de
+          <main>. React signalait « Each child in a list should have a unique
+          key » en désignant l'élément créé par FacilitatorPage — pour ScalesSection
+          aujourd'hui, pour SettingsSection quand elle venait encore de la page.
+          L'état de validation que le flux transporte avec l'élément ne
+          correspond pas à sa position réelle, qui est statique.
 
-      {/* ── Jusqu'où les équipes peuvent aller ───────────────────────────── */}
-      {scalesSection}
-
-      {/* ── Ce que les équipes ont répondu aux cartes ────────────────────── */}
-      {warRoomSection}
+          Un Fragment à clé, créé ICI, porte l'identité de l'emplacement : la
+          liste de <main> ne contient plus que des éléments à clé, et chaque
+          section redevient l'enfant unique de son Fragment — position où React
+          ne réclame aucune clé. Le rendu est identique. */}
+      <Fragment key="modules">{modulesSection}</Fragment>
+      <Fragment key="scales">{scalesSection}</Fragment>
+      <Fragment key="warroom">{warRoomSection}</Fragment>
 
       {/* ── Cartes de crise ──────────────────────────────────────────────── */}
       <SettingsSection
