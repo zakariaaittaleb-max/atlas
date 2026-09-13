@@ -146,7 +146,7 @@ function ParticipantForm() {
       <button
         type="submit"
         disabled={disabled}
-        className="w-full rounded-lg bg-(--accent) px-4 py-3.5 text-base font-medium text-white disabled:opacity-50"
+        className="w-full rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-4 py-3.5 text-base font-medium text-(--on-accent) disabled:opacity-50"
       >
         {disabled ? "Rattachement..." : "Rejoindre ma session"}
       </button>
@@ -210,7 +210,7 @@ function FacilitatorForm() {
       <button
         type="submit"
         disabled={disabled}
-        className="w-full rounded-lg bg-(--accent) px-4 py-3.5 text-base font-medium text-white disabled:opacity-50"
+        className="w-full rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-4 py-3.5 text-base font-medium text-(--on-accent) disabled:opacity-50"
       >
         {disabled ? "Connexion..." : "Se connecter"}
       </button>

@@ -147,7 +147,7 @@ export function CabinetView({
         <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
           Tour {roundNumber}
         </p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Cabinet de conseil</h1>
+        <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">Cabinet de conseil</h1>
         <p className="mt-3 max-w-3xl text-(--foreground-muted)">
           Le prix n’achète pas l’accès à l’information : il achète sa <strong>précision</strong>.
           Une note express coûte trois fois moins cher et livre des estimations à ±25 %, en
@@ -308,7 +308,7 @@ export function CabinetView({
                 {o.subjects.length > 0 ? (
                   <Link
                     href={`/cabinet/${o.orderId}`}
-                    className="rounded-lg bg-(--accent) px-4 py-2 text-sm font-medium text-white"
+                    className="rounded-lg bg-(--accent) hover:bg-(--accent-hover) transition-colors px-4 py-2 text-sm font-medium text-(--on-accent)"
                   >
                     Lire le rapport
                   </Link>

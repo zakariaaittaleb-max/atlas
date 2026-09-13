@@ -51,7 +51,7 @@ export default async function SessionsAdminPage() {
   return (
     <main className="mx-auto w-full min-w-0 max-w-4xl px-6 py-10">
       <header className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight">Sessions</h1>
+        <h1 className="text-3xl font-bold text-(--heading) tracking-tight">Sessions</h1>
         <p className="mt-2 text-(--foreground-muted)">
           Toutes les sessions, tous facilitateurs confondus. Pour en créer une, connectez-vous en
           tant que le facilitateur concerné (page Facilitateurs) puis utilisez le formulaire

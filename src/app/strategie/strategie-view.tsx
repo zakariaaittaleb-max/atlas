@@ -168,7 +168,7 @@ export function StrategieGroupeView({
           <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
             Tour {context.roundNumber} · niveau Groupe
           </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Stratégie du Groupe</h1>
+          <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">Stratégie du Groupe</h1>
           <p className="mt-3 max-w-3xl text-(--foreground-muted)">
             Ces choix valent pour l’entreprise entière. Chaque domaine devra ensuite s’y
             situer — en les suivant ou en s’en écartant, les deux se paient. Ce que décide
@@ -432,7 +432,7 @@ export function StrategieDasView({
               <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
                 Tour {context.roundNumber} · niveau domaine
               </p>
-              <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+              <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">
                 {das ? (
                   <>
                     Stratégie de{' '}

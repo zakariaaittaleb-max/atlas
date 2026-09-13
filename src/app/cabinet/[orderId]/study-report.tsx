@@ -68,7 +68,7 @@ export function StudyReport({
         <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
           Rapport de mission · {TIER_LABELS[tier] ?? tier}
         </p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">{studyName}</h1>
+        <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">{studyName}</h1>
         <p className="mt-2 text-(--foreground-muted)">{scopeLabel}</p>
         {studyDescription ? (
           <p className="mt-3 max-w-3xl text-sm text-(--foreground-muted)">{studyDescription}</p>

@@ -49,7 +49,7 @@ export async function DocumentFrame({
           </Link>
         </p>
         <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="text-3xl font-bold text-(--heading) tracking-tight">{title}</h1>
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <Link href={siblingHref} className="hover:underline">{siblingLabel} →</Link>
             <a

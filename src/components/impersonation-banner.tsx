@@ -21,7 +21,7 @@ export function ImpersonationBanner({
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-3 bg-(--warning) px-4 py-2 text-sm font-medium text-white">
+    <div className="flex flex-wrap items-center justify-center gap-3 bg-(--warning) px-4 py-2 text-sm font-medium text-(--on-warning)">
       <span>
         Vous agissez en tant que ce facilitateur, connecté comme super-admin ({adminEmail}).
       </span>

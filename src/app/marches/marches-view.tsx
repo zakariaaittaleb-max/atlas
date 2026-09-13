@@ -78,7 +78,7 @@ export function MarchesView({
   if (!das) {
     return (
       <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-10">
-        <h1 className="text-3xl font-semibold tracking-tight">Achats &amp; distribution</h1>
+        <h1 className="text-3xl font-bold text-(--heading) tracking-tight">Achats &amp; distribution</h1>
         <p className="mt-4 text-(--foreground-muted)">
           Vous n’exploitez aucun domaine d’activité pour l’instant.
         </p>
@@ -98,7 +98,7 @@ export function MarchesView({
           <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
             Tour {context.roundNumber}
           </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Achats &amp; distribution</h1>
+          <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">Achats &amp; distribution</h1>
           <p className="mt-3 max-w-3xl text-(--foreground-muted)">
             Concentrer ses achats chez un fournisseur maximise votre pouvoir de négociation
             <em> et</em> votre risque de rupture. Se disperser fait l’inverse. Il n’y a pas de

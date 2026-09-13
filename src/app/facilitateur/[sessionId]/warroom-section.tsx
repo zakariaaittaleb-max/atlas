@@ -203,7 +203,7 @@ export function WarRoomSection({
                           type="button"
                           disabled={pending}
                           onClick={() => arbitrate(shock.shockId, r.teamId)}
-                          className="rounded-lg bg-(--accent) px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+                          className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-3 py-1.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
                         >
                           Arbitrer
                         </button>

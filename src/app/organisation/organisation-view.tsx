@@ -134,7 +134,7 @@ export function OrganisationView({
   if (!das) {
     return (
       <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-10">
-        <h1 className="text-3xl font-semibold tracking-tight">Organisation</h1>
+        <h1 className="text-3xl font-bold text-(--heading) tracking-tight">Organisation</h1>
         <p className="mt-4 text-(--foreground-muted)">
           Vous n’exploitez aucun domaine d’activité pour l’instant.
         </p>
@@ -156,7 +156,7 @@ export function OrganisationView({
           <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
             Exercice {context.roundNumber} · {context.teamName}
           </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Organisation</h1>
+          <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">Organisation</h1>
           <p className="mt-3 max-w-3xl text-(--foreground-muted)">
             Chaque domaine d’activité se structure séparément : un métier industriel et un métier
             de compétences ne se pilotent pas de la même façon. Ces choix pèsent{' '}
@@ -639,7 +639,7 @@ export function OrganisationView({
               await autosave.flush();
               startTransition(() => router.refresh());
             }}
-            className="rounded-lg bg-(--accent) px-6 py-3 font-medium text-white disabled:opacity-40"
+            className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-6 py-3 font-medium text-(--on-accent) disabled:opacity-40"
           >
             {locked ? 'Tour verrouillé' : 'Terminer la conception'}
           </button>

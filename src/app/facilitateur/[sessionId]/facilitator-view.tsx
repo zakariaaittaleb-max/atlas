@@ -155,7 +155,7 @@ export function FacilitatorView({
           <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
             Pilotage de session
           </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">{sessionName}</h1>
+          <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">{sessionName}</h1>
           <p className="tabular mt-2 text-(--foreground-muted)">
             {roundNumber === 0 ? 'Onboarding (T0)' : `Tour ${roundNumber}`} sur {plannedRounds} prévus
             {' · '}{sessionStatusLabel(status)}
@@ -554,7 +554,7 @@ export function FacilitatorView({
               dasId: selectedDas, redistributionPts: redistribution, beneficiaryTeamIds: [],
             }, 'Carte déclenchée — les équipes la verront dans leur War Room.')
           }
-          className="mt-5 rounded-lg bg-(--accent) px-5 py-2.5 text-sm font-medium text-white disabled:opacity-40"
+          className="mt-5 rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
         >
           Déclencher cette carte
         </button>
@@ -622,7 +622,7 @@ function Confirm({
     <span className="flex flex-wrap items-center gap-2 rounded-lg border border-(--warning) px-3 py-2">
       <span className="max-w-md text-sm text-(--warning)">{question}</span>
       <button type="button" onClick={onConfirm}
-        className="rounded bg-(--accent) px-3 py-1.5 text-sm font-medium text-white">
+        className="rounded bg-(--accent) hover:bg-(--accent-hover) transition-colors px-3 py-1.5 text-sm font-medium text-(--on-accent)">
         Confirmer
       </button>
       <button type="button" onClick={onCancel} className="rounded border border-(--border) px-3 py-1.5 text-sm">

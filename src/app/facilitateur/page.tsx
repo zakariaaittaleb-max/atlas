@@ -44,7 +44,7 @@ export default async function FacilitatorIndexPage() {
       </div>
 
       <header className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight">Mes sessions</h1>
+        <h1 className="text-3xl font-bold text-(--heading) tracking-tight">Mes sessions</h1>
         <p className="mt-2 text-(--foreground-muted)">
           Vous animez les ateliers ci-dessous. Le code de session et les codes d’équipe se
           distribuent en salle.
@@ -76,7 +76,7 @@ export default async function FacilitatorIndexPage() {
               <div className="flex gap-2">
                 <Link
                   href={`/facilitateur/${String(s.id)}`}
-                  className="rounded-lg bg-(--accent) px-4 py-2 text-sm font-medium text-white"
+                  className="rounded-lg bg-(--accent) hover:bg-(--accent-hover) transition-colors px-4 py-2 text-sm font-medium text-(--on-accent)"
                 >
                   Piloter
                 </Link>

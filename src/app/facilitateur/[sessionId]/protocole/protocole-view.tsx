@@ -113,7 +113,7 @@ export function ProtocoleView({
               ← {sessionName}
             </Link>
           </p>
-          <h1 className="mt-1 text-2xl font-semibold">Protocole de test d’utilisabilité</h1>
+          <h1 className="mt-1 text-2xl font-bold text-(--heading)">Protocole de test d’utilisabilité</h1>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-xs text-(--foreground-muted)">{saveLabel[saveState]}</span>
@@ -135,7 +135,7 @@ export function ProtocoleView({
             className={
               'flex shrink-0 items-baseline gap-2 rounded-lg px-3 py-2 text-sm ' +
               (phase === p.n
-                ? 'bg-(--accent) text-white'
+                ? 'bg-(--accent) text-(--on-accent)'
                 : 'border border-(--border) text-(--foreground-muted)')
             }
           >
@@ -168,7 +168,7 @@ export function ProtocoleView({
               <div className="flex flex-col gap-3">
                 {data.tasks.map((t, i) => (
                   <div key={i} className="flex items-center gap-3">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-(--accent) font-mono text-xs text-white">{i + 1}</span>
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-(--accent) font-mono text-xs text-(--on-accent)">{i + 1}</span>
                     <input
                       className="w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
                       value={t}
@@ -224,7 +224,7 @@ export function ProtocoleView({
             </div>
             <div className="flex gap-2">
               <button type="button" onClick={() => setRunning(true)} disabled={running}
-                className="rounded-lg bg-(--accent) px-4 py-2 text-sm font-medium text-white disabled:opacity-50">▶ Démarrer</button>
+                className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-4 py-2 text-sm font-medium text-(--on-accent) disabled:opacity-50">▶ Démarrer</button>
               <button type="button" onClick={() => setRunning(false)}
                 className="rounded-lg border border-(--border) px-4 py-2 text-sm">⏸ Pause</button>
               <button type="button" onClick={() => { setRunning(false); setSeconds(0); }}

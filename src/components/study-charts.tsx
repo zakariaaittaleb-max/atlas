@@ -80,18 +80,18 @@ export function plottableOf(subjects: ChartSubject[]): { key: string; label: str
 /**
  * Palette des séries.
  *
- * L'équipe prend l'accent ; les concurrents des teintes distinctes. Aucune
+ * L'équipe prend la première série ; les concurrents les suivantes. Aucune
  * information n'est portée par la seule couleur — chaque courbe est nommée
- * dans la légende et dans l'infobulle.
+ * dans la légende et dans l'infobulle. Ordre fixe du système de design,
+ * validé en vision daltonienne ; au-delà de cinq sujets, gris plutôt qu'une
+ * teinte recyclée.
  */
 const SERIES_COLOURS = [
-  'var(--accent)',
-  '#c2410c',
-  '#0f766e',
-  '#7c3aed',
-  '#a16207',
-  '#be123c',
-  '#1d4ed8',
+  'var(--series-1)',
+  'var(--series-2)',
+  'var(--series-3)',
+  'var(--series-4)',
+  'var(--series-5)',
 ];
 
 export function StudyCharts({
@@ -178,7 +178,7 @@ export function StudyCharts({
                   key={subject.subjectId}
                   type="monotone"
                   dataKey={subject.subjectName}
-                  stroke={SERIES_COLOURS[index % SERIES_COLOURS.length]}
+                  stroke={SERIES_COLOURS[index] ?? 'var(--meta)'}
                   strokeWidth={subject.isSelf ? 3 : 1.75}
                   dot={{ r: 3 }}
                   connectNulls

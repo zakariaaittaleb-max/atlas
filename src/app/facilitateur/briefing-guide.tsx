@@ -415,7 +415,7 @@ function Step({
   return (
     <div className="relative">
       <div className="flex gap-4">
-        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-(--accent) text-white font-bold text-sm">
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-(--accent) text-(--on-accent) font-bold text-sm">
           {number}
         </div>
         <div className="flex-1 min-w-0">

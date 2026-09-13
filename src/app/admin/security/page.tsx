@@ -39,7 +39,7 @@ export default async function SecurityAdminPage() {
   return (
     <main className="mx-auto w-full min-w-0 max-w-3xl px-6 py-10">
       <header className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight">Sécurité</h1>
+        <h1 className="text-3xl font-bold text-(--heading) tracking-tight">Sécurité</h1>
         <p className="mt-2 text-(--foreground-muted)">
           Mesures anti-scraping appliquées à l’ensemble du site. Chaque bascule prend effet en
           quelques secondes, sans redéploiement.

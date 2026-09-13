@@ -82,7 +82,7 @@ export function GlossaryModal({ open, onClose }: { open: boolean; onClose: () =>
         <div className="sticky bottom-0 bg-(--surface) border-t border-(--border) px-6 py-4 flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-(--primary) text-white rounded-lg font-medium hover:bg-(--primary-hover) transition"
+            className="px-4 py-2 bg-(--accent) text-(--on-accent) rounded-lg font-medium hover:bg-(--accent-hover) transition"
           >
             Compris !
           </button>

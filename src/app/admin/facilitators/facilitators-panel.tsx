@@ -143,7 +143,7 @@ function CreateFacilitatorForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-(--accent) px-4 py-2 font-medium text-white disabled:opacity-50"
+          className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-4 py-2 font-medium text-(--on-accent) disabled:opacity-50"
         >
           {pending ? 'Création…' : 'Créer'}
         </button>
@@ -281,7 +281,7 @@ function FacilitatorRow({
           <p className="font-medium">
             {facilitator.email}
             {banned ? (
-              <span className="ml-2 rounded-full bg-(--negative) px-2 py-0.5 text-xs font-medium text-white">
+              <span className="ml-2 rounded-full bg-(--negative) px-2 py-0.5 text-xs font-medium text-(--on-negative)">
                 Bloqué
               </span>
             ) : null}
@@ -376,7 +376,7 @@ function FacilitatorRow({
           type="button"
           disabled={pending || !modulesDirty}
           onClick={saveModules}
-          className="mt-3 rounded-lg bg-(--accent) px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+          className="mt-3 rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-4 py-2 text-sm font-medium text-(--on-accent) disabled:opacity-40"
         >
           {pending ? 'Enregistrement…' : 'Enregistrer le plafond'}
         </button>
@@ -398,7 +398,7 @@ function FacilitatorRow({
           <button
             type="submit"
             disabled={pending}
-            className="rounded-lg bg-(--accent) px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-4 py-2 text-sm font-medium text-(--on-accent) disabled:opacity-50"
           >
             Confirmer
           </button>

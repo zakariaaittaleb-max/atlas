@@ -152,7 +152,7 @@ export function SettingsSection({
               dials: level === 'sur_mesure' ? custom : undefined,
             }, `Niveau réglé sur « ${level} ».`)
           }
-          className="mt-5 rounded-lg bg-(--accent) px-5 py-2.5 text-sm font-medium text-white disabled:opacity-40"
+          className="mt-5 rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
         >
           Appliquer le niveau
         </button>
@@ -322,7 +322,7 @@ export function SettingsSection({
                 ...card, effects: Object.fromEntries(posed),
               }, `Carte « ${card.name} » ajoutée au catalogue de cette session.`)
             }
-            className="rounded-lg bg-(--accent) px-5 py-2.5 text-sm font-medium text-white disabled:opacity-40"
+            className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
           >
             {posed.length === 0
               ? 'Renseignez au moins une variable'

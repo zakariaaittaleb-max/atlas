@@ -140,7 +140,7 @@ export function SusView({
           <Link href="/cockpit" className="hover:underline">← Retour au cockpit</Link>
         </p>
         <p className="text-xs font-medium uppercase tracking-wide text-(--accent)">Panel de test · réponse individuelle</p>
-        <h1 className="text-2xl font-semibold">Questionnaire de satisfaction — Atlas</h1>
+        <h1 className="text-2xl font-bold text-(--heading)">Questionnaire de satisfaction — Atlas</h1>
         <p className="mt-2 text-sm text-(--foreground-muted)">
           Répondez seul·e, sans consulter les autres participants. Vos réponses sont anonymes pour le facilitateur ;
           seul le score global du groupe est calculé automatiquement.
@@ -175,7 +175,7 @@ export function SusView({
                   className={
                     'rounded-lg py-2 text-sm font-medium ' +
                     (answers[i] === v
-                      ? 'bg-(--accent) text-white'
+                      ? 'bg-(--accent) text-(--on-accent)'
                       : 'bg-(--surface-muted) text-(--foreground-muted)')
                   }
                 >
@@ -202,7 +202,7 @@ export function SusView({
         {error && <p className="mt-3 text-sm text-(--negative)">{error}</p>}
         <button
           type="button" onClick={submit} disabled={busy}
-          className="mt-4 w-full rounded-lg bg-(--accent) py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+          className="mt-4 w-full rounded-lg bg-(--accent) py-2.5 text-sm font-semibold text-(--on-accent) disabled:opacity-50"
         >
           {busy ? 'Envoi…' : 'Envoyer ma réponse'}
         </button>

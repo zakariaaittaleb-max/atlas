@@ -123,7 +123,7 @@ export function FinanceView({
           <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
             Tour {context.roundNumber} · Niveau Groupe
           </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Finance du Groupe</h1>
+          <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">Finance du Groupe</h1>
           <p className="tabular mt-3 text-(--foreground-muted)">
             Trésorerie d’ouverture : <strong>{formatMadCompact(context.treasuryMad)}</strong>
             {context.debtOutstandingMad > 0 ? (

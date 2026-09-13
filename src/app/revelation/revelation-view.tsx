@@ -430,7 +430,7 @@ export function RevelationView({
           type="button"
           disabled={!nextRoundOpen}
           onClick={() => router.push('/cockpit')}
-          className="rounded-lg bg-(--accent) px-6 py-3 font-medium text-white disabled:opacity-40"
+          className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-6 py-3 font-medium text-(--on-accent) disabled:opacity-40"
         >
           Continuer vers le tour suivant
         </button>
@@ -453,7 +453,7 @@ function Shell({
         <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
           Tour {roundNumber} — Révélation
         </p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">{teamName}</h1>
+        <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">{teamName}</h1>
       </header>
       {children}
     </main>

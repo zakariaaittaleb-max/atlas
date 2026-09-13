@@ -104,7 +104,7 @@ export function SectionActions({
           setValidated(true);
           setConfirming(false);
         }}
-        className="rounded-lg bg-(--accent) px-5 py-2.5 text-sm font-medium text-white"
+        className="rounded-lg bg-(--accent) hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent)"
       >
         Valider {what}
       </button>
@@ -225,7 +225,7 @@ export function DecisionBar({
           type="button"
           disabled={blocked}
           onClick={onValidate}
-          className="rounded-lg bg-(--accent) px-6 py-3 font-medium text-white disabled:opacity-40"
+          className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-6 py-3 font-medium text-(--on-accent) disabled:opacity-40"
         >
           {!decisionsOpen
             ? 'Tour verrouillé'

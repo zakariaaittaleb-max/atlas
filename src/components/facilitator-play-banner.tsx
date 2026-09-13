@@ -32,7 +32,7 @@ export function FacilitatorPlayBanner({
   const [pending, startTransition] = useTransition();
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-3 bg-(--accent) px-4 py-2 text-sm font-medium text-white">
+    <div className="flex flex-wrap items-center justify-center gap-3 bg-(--accent) px-4 py-2 text-sm font-medium text-(--on-accent)">
       <span>
         Vous jouez dans <strong>{teamName}</strong> — vos saisies comptent pour cette équipe.
       </span>

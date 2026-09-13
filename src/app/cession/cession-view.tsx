@@ -170,7 +170,7 @@ export function CessionView({
         <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
           Tour {roundNumber}
         </p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Marché de cession</h1>
+        <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">Marché de cession</h1>
         <p className="mt-3 max-w-3xl text-(--foreground-muted)">
           Céder un DAS libère de la trésorerie et recentre votre portefeuille. L’acheteur non
           joueur offre toujours moins qu’un concurrent rationnel : c’est un plancher de
@@ -502,7 +502,7 @@ function MarketCard({
         <button
           type="submit"
           disabled={disabled || offerValue < 1}
-          className="mt-4 rounded-lg bg-(--accent) px-5 py-2.5 text-sm font-medium text-white disabled:opacity-40"
+          className="mt-4 rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
         >
           {existingBid ? 'Modifier mon offre scellée' : 'Déposer une offre scellée'}
         </button>
@@ -668,7 +668,7 @@ function AcquisitionCard({
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="submit" disabled={disabled || offerValue < 1}
-            className="rounded-lg bg-(--accent) px-5 py-2.5 text-sm font-medium text-white disabled:opacity-40"
+            className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
           >
             {existingOffer ? 'Modifier mon offre scellée' : 'Déposer une offre scellée'}
           </button>

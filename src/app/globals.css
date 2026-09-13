@@ -34,6 +34,8 @@
   --accent-text: #1e40af;
   --accent-subtle: #eff6ff;
   --on-accent: #ffffff;
+  --on-warning: #ffffff;
+  --on-negative: #ffffff;
   --focus: #1d4ed8;
 
   /* Vert et rouge ne portent JAMAIS seuls une information : ils accompagnent
@@ -78,6 +80,8 @@
     --accent-text: #93c5fd;
     --accent-subtle: #172554;
     --on-accent: #030712;
+    --on-warning: #030712;
+    --on-negative: #030712;
     --focus: #60a5fa;
     --positive: #34d399;
     --positive-icon: #34d399;
@@ -111,6 +115,8 @@
   --accent-text: #93c5fd;
   --accent-subtle: #172554;
   --on-accent: #030712;
+  --on-warning: #030712;
+  --on-negative: #030712;
   --focus: #60a5fa;
   --positive: #34d399;
   --positive-icon: #34d399;

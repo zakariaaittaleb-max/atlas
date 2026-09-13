@@ -163,7 +163,7 @@ export function ScalesSection({
               }
             })
           }
-          className="rounded-lg bg-(--accent) px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+          className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-4 py-2 text-sm font-medium text-(--on-accent) disabled:opacity-40"
         >
           {pending ? 'Application…' : 'Appliquer les fourchettes'}
         </button>

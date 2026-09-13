@@ -56,7 +56,7 @@ export default async function FacilitatorsAdminPage() {
   return (
     <main className="mx-auto w-full min-w-0 max-w-4xl px-6 py-10">
       <header className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight">Facilitateurs</h1>
+        <h1 className="text-3xl font-bold text-(--heading) tracking-tight">Facilitateurs</h1>
         <p className="mt-2 text-(--foreground-muted)">
           Tout compte non-anonyme est un facilitateur — les participants n’existent qu’en
           anonyme, le temps d’une session.

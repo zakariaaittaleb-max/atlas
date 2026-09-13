@@ -118,7 +118,7 @@ export function SecurityPanel({
           type="button"
           onClick={apply}
           disabled={!isDirty || pending}
-          className="rounded-lg bg-(--accent) px-5 py-2.5 font-medium text-white disabled:opacity-50"
+          className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 font-medium text-(--on-accent) disabled:opacity-50"
         >
           {pending ? 'Application…' : 'Appliquer'}
         </button>

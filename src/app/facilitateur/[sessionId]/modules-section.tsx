@@ -147,7 +147,7 @@ export function ModulesSection({
           type="button"
           disabled={pending || !dirty}
           onClick={save}
-          className="rounded-lg bg-(--accent) px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+          className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-4 py-2 text-sm font-medium text-(--on-accent) disabled:opacity-40"
         >
           {pending ? 'Application…' : `Appliquer (${openCount} champs)`}
         </button>

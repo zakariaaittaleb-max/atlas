@@ -331,7 +331,7 @@ export function SessionLauncher({ sectors }: { sectors: { key: string; name: str
 
         <button
           type="submit" disabled={disabled}
-          className="rounded-lg bg-(--accent) px-6 py-3 font-medium text-white disabled:opacity-40"
+          className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-6 py-3 font-medium text-(--on-accent) disabled:opacity-40"
         >
           {disabled ? 'Provisionnement…' : 'Créer la session'}
         </button>
