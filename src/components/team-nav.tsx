@@ -8,8 +8,9 @@ import { getRoundState, getTeamContext, getUser } from '@/lib/dal';
 import { readDisplayConfig } from '@/lib/display-config';
 import { NAV_COOKIE } from '@/lib/display-config-types';
 import { formatMadCompact } from '@/lib/format';
-import { openScreenHrefs } from '@/lib/modules-state';
+import { openScreenHrefs, type EnabledModules } from '@/lib/modules-state';
 import { isSuperAdminEmail } from '@/lib/security-config';
+import { loadDecisionContext, missingDecisions } from '@/lib/server/decision-context';
 import { loadEnabledModules } from '@/lib/server/modules';
 import { loadMoneyBar } from '@/lib/server/money-bar';
 import { loadPresenceContext } from '@/lib/server/presence-context';
@@ -121,6 +122,8 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
   const status = String(round?.status ?? 'draft');
   const currentRound = Number(round?.current_round ?? 0);
   const open = status === 'round_active' || status === 'onboarding';
+  // Tour fermé : il n'y a plus rien à renseigner, donc rien à compter.
+  const todo = open ? await screensToFill(modules) : {};
 
   return (
     <div className="min-h-0 flex-1 lg:flex" data-round-locked={open ? undefined : ''}>
@@ -141,6 +144,7 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
         showSurvey={visible('/sus')}
         showAdmin={isSuperAdminEmail(user?.email)}
         initialCollapsed={jar.get(NAV_COOKIE)?.value === 'collapsed'}
+        todo={todo}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -205,6 +209,36 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
       </div>
     </div>
   );
+}
+
+/** Les écrans où une décision du tour peut manquer (voir `missingDecisions`). */
+const TRACKED_SCREENS = ['/strategie', '/strategie/das', '/marches', '/organisation', '/finance'];
+
+/**
+ * Ce qui reste à renseigner, écran par écran.
+ *
+ * ── POURQUOI ICI ───────────────────────────────────────────────────────────
+ * Le compte des décisions manquantes n'apparaissait qu'en bas des écrans de
+ * saisie. Une équipe sur le cockpit ou au cabinet ne savait pas qu'il lui
+ * restait les achats à renseigner, et le découvrait au verrouillage. La
+ * navigation est le seul endroit visible depuis tous les écrans.
+ *
+ * Même règle que la barre du bas (`missingDecisions`), même contexte (mémoïsé
+ * pour la requête) : la navigation et la page ne peuvent pas se contredire. Un
+ * écran suivi sans manque vaut zéro — « fait » ; un écran non suivi est absent.
+ */
+async function screensToFill(modules: EnabledModules): Promise<Record<string, number>> {
+  try {
+    const context = await loadDecisionContext();
+    const todo: Record<string, number> = Object.fromEntries(TRACKED_SCREENS.map((href) => [href, 0]));
+    for (const item of missingDecisions(context, modules)) {
+      todo[item.href] = (todo[item.href] ?? 0) + 1;
+    }
+    return todo;
+  } catch {
+    // Un repère de navigation ne doit jamais empêcher un écran de s'afficher.
+    return {};
+  }
 }
 
 function MoneyItem({

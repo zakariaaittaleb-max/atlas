@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { cache } from 'react';
+
 /**
  * Contexte de saisie : tout ce dont les écrans de décision ont besoin.
  *
@@ -48,7 +50,14 @@ const bool = (v: unknown, d = false) => (typeof v === 'boolean' ? v : d);
 const SMIG_MAD = 3422.72;
 const CHARGES_PATRONALES_PCT = 0.2109;
 
-export async function loadDecisionContext(): Promise<DecisionContext> {
+/**
+ * Mémoïsé le temps d'une requête : la navigation (écrans restant à remplir) et
+ * la page lisent le même contexte. Ils ne doivent ni le charger deux fois, ni
+ * pouvoir en afficher deux versions.
+ */
+export const loadDecisionContext = cache(loadDecisionContextOnce);
+
+async function loadDecisionContextOnce(): Promise<DecisionContext> {
   const team = await requireTeam();
   const round = await getRoundState(team.sessionId);
   const roundNumber = (round?.current_round as number) ?? 0;

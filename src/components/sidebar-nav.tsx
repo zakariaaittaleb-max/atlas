@@ -3,6 +3,7 @@
 import {
   BriefcaseBusiness,
   ChevronDown,
+  CircleCheck,
   Compass,
   Download,
   Factory,
@@ -44,6 +45,8 @@ interface SidebarProps {
   showSurvey: boolean;
   showAdmin: boolean;
   initialCollapsed: boolean;
+  /** Décisions encore à renseigner, par écran. Un écran absent n'est pas suivi. */
+  todo: Record<string, number>;
 }
 
 /**
@@ -145,7 +148,7 @@ export function SidebarNav(props: SidebarProps) {
 }
 
 function NavBody({
-  groups, roundLabel, statusLabel, decisionsOpen, showSurvey, showAdmin,
+  groups, roundLabel, statusLabel, decisionsOpen, showSurvey, showAdmin, todo,
   collapsed, onNavigate, onExpandRequest,
 }: SidebarProps & {
   collapsed: boolean;
@@ -162,6 +165,8 @@ function NavBody({
     .filter((href) => pathname === href || pathname.startsWith(`${href}/`))
     .sort((a, b) => b.length - a.length)[0];
 
+  const remaining = Object.values(todo).reduce((acc, count) => acc + count, 0);
+
   const toggle = (id: string) =>
     setClosed((prev) => {
       const next = new Set(prev);
@@ -174,6 +179,13 @@ function NavBody({
     <>
       <div className={`mx-3 mb-3 rounded-lg bg-(--surface-muted) ${collapsed ? 'flex justify-center p-2' : 'px-3 py-2.5'}`}>
         <StatusDot open={decisionsOpen} label={`${roundLabel} · ${statusLabel}`} compact={collapsed} />
+        {!collapsed && decisionsOpen && Object.keys(todo).length > 0 ? (
+          <p className="mt-1 pl-4.5 text-sm text-(--foreground-muted)">
+            {remaining === 0
+              ? 'Toutes vos décisions sont renseignées'
+              : `${remaining} décision${remaining > 1 ? 's' : ''} à renseigner`}
+          </p>
+        ) : null}
       </div>
 
       <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
@@ -183,6 +195,7 @@ function NavBody({
             const single = group.links.length === 1 && group.links[0].label === group.label;
             const containsActive = group.links.some((l) => l.href === activeHref);
             const isOpen = !closed.has(group.id) || containsActive;
+            const groupTodo = group.links.reduce((acc, link) => acc + (todo[link.href] ?? 0), 0);
 
             if (single || collapsed) {
               const target = group.links[0];
@@ -204,8 +217,19 @@ function NavBody({
                       }}
                       className={`flex w-full justify-center rounded-lg p-2.5 ${active ? 'bg-(--accent-subtle) text-(--accent-text)' : 'text-(--foreground-muted) hover:bg-(--surface-muted) hover:text-(--foreground)'}`}
                     >
-                      <Icon aria-hidden className="h-5 w-5" />
-                      <span className="sr-only">{group.label}</span>
+                      <span className="relative flex">
+                        <Icon aria-hidden className="h-5 w-5" />
+                        {groupTodo > 0 ? (
+                          <span
+                            aria-hidden
+                            className="absolute -top-1 -right-1.5 h-2.5 w-2.5 rounded-full border-2 border-(--surface) bg-(--warning)"
+                          />
+                        ) : null}
+                      </span>
+                      <span className="sr-only">
+                        {group.label}
+                        {groupTodo > 0 ? ` — ${groupTodo} décision${groupTodo > 1 ? 's' : ''} à renseigner` : ''}
+                      </span>
                     </button>
                   )}
                 </li>
@@ -224,6 +248,14 @@ function NavBody({
                 >
                   <Icon aria-hidden className="h-4 w-4 shrink-0" />
                   <span className="flex-1 text-left">{group.label}</span>
+                  {/* Groupe replié : son compte reste visible, sinon replier
+                      reviendrait à cacher ce qui reste à faire. */}
+                  {!isOpen && groupTodo > 0 ? (
+                    <span className="tabular rounded-full bg-(--warning-subtle) px-2 text-sm font-semibold tracking-normal text-(--warning) normal-case">
+                      {groupTodo}
+                      <span className="sr-only"> décision{groupTodo > 1 ? 's' : ''} à renseigner</span>
+                    </span>
+                  ) : null}
                   <ChevronDown
                     aria-hidden
                     className={`h-4 w-4 transition-transform duration-200 ${isOpen ? '' : '-rotate-90'} ${containsActive ? 'opacity-0' : ''}`}
@@ -238,6 +270,7 @@ function NavBody({
                               désormais ce nom, et le sélecteur de domaine
                               apparaît sur chaque écran qu'il gouverne. */}
                           <span className="min-w-0 flex-1 truncate">{link.label}</span>
+                          <FillState count={todo[link.href]} />
                         </NavLink>
                       </li>
                     ))}
@@ -342,6 +375,34 @@ function UtilityLink({
     <a href={href} title={label} className={className}>{content}</a>
   ) : (
     <Link href={href} title={label} onClick={onNavigate} className={className}>{content}</Link>
+  );
+}
+
+/**
+ * Où en est un écran : un nombre de décisions à renseigner, ou une coche.
+ * Le signe est doublé d'un mot pour le lecteur d'écran, et la couleur n'est
+ * jamais seule — un nombre ou une coche se lisent sans elle.
+ */
+function FillState({ count }: { count: number | undefined }) {
+  if (count === undefined) return null;
+  if (count === 0) {
+    return (
+      <>
+        <CircleCheck aria-hidden className="h-4 w-4 shrink-0 text-(--positive-icon)" />
+        <span className="sr-only"> — renseigné</span>
+      </>
+    );
+  }
+  return (
+    <>
+      <span
+        aria-hidden
+        className="tabular min-w-6 shrink-0 rounded-full bg-(--warning-subtle) px-1.5 text-center text-sm font-semibold text-(--warning)"
+      >
+        {count}
+      </span>
+      <span className="sr-only"> — {count} décision{count > 1 ? 's' : ''} à renseigner</span>
+    </>
   );
 }
 
