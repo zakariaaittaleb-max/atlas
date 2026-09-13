@@ -10,12 +10,14 @@
  *
  * Il a maintenant sa page : en-tête qui dit ce qu'on a payé et ce que ça vaut,
  * synthèse chiffrée, courbes d'évolution, notes méthodologiques. Il se lit, se
- * projette, et se retrouve par son adresse.
+ * projette, et se retrouve par son adresse. Ce que l'étude couvre et pourquoi
+ * suivre une évolution sont sous les « + » ; les chiffres restent au premier plan.
  */
 
 import Link from 'next/link';
 
 import { DisclosureList } from '@/components/disclosure-list';
+import { InfoHint } from '@/components/ui/info-hint';
 import { StudyCharts, SupplierRanks, type ChartSubject } from '@/components/study-charts';
 import type { FieldDisclosure } from '@/lib/consulting-types';
 import { formatMadCompact, formatPct } from '@/lib/format';
@@ -59,22 +61,22 @@ export function StudyReport({
   return (
     <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-10">
       <div className="mb-6 print:hidden">
-        <Link href="/cabinet" className="text-sm underline">
+        <Link href="/cabinet" className="text-sm font-medium text-(--accent-text) hover:underline">
           ← Retour au cabinet
         </Link>
       </div>
 
       <header className="mb-8 border-b border-(--border) pb-6">
-        <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
+        <p className="text-xs font-semibold tracking-wider text-(--accent-text) uppercase">
           Rapport de mission · {TIER_LABELS[tier] ?? tier}
         </p>
-        <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">{studyName}</h1>
+        <h1 className="mt-1 flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight text-(--heading)">
+          {studyName}
+          {studyDescription ? <InfoHint label={studyName}>{studyDescription}</InfoHint> : null}
+        </h1>
         <p className="mt-2 text-(--foreground-muted)">{scopeLabel}</p>
-        {studyDescription ? (
-          <p className="mt-3 max-w-3xl text-sm text-(--foreground-muted)">{studyDescription}</p>
-        ) : null}
 
-        <dl className="tabular mt-5 flex flex-wrap gap-x-8 gap-y-3 text-sm">
+        <dl className="tabular mt-5 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
           <Fact label="Exercice observé" value={roundNumber < 0 ? 'Dotation' : `Tour ${roundNumber}`} />
           <Fact label="Honoraires" value={formatMadCompact(priceMad)} />
           <Fact
@@ -87,32 +89,36 @@ export function StudyReport({
 
       {auditVerdict ? (
         <section className="mb-8 rounded-xl border border-(--accent) bg-(--surface) p-6">
-          <h2 className="mb-2 text-lg font-medium">Verdict du cabinet</h2>
+          <h2 className="mb-2 text-lg font-semibold text-(--heading)">Verdict du cabinet</h2>
           <p>{auditVerdict}</p>
         </section>
       ) : null}
 
       {hasHistory ? (
         <section className="mb-8">
-          <h2 className="mb-1 text-xl font-medium">Évolution</h2>
-          <p className="mb-4 max-w-3xl text-sm text-(--foreground-muted)">
-            Une photo ne décide rien. Savoir qu’un concurrent détient 22 % du marché ne dit pas
-            s’il vient d’en gagner huit ou d’en perdre douze.
-          </p>
+          <h2 className="mb-4 flex items-center gap-2 text-2xl font-semibold text-(--heading)">
+            Évolution
+            <InfoHint label="Pourquoi une évolution">
+              Une photo ne décide rien. Savoir qu’un concurrent détient 22 % du marché ne dit pas
+              s’il vient d’en gagner huit ou d’en perdre douze.
+            </InfoHint>
+          </h2>
           <StudyCharts subjects={subjects} errorMargin={errorMargin} />
         </section>
       ) : null}
 
       <section className="mb-8">
-        <h2 className="mb-4 text-xl font-medium">Synthèse chiffrée</h2>
+        <h2 className="mb-4 text-2xl font-semibold text-(--heading)">Synthèse chiffrée</h2>
         <div className="space-y-4">
           {subjects.map((subject) => (
             <div
               key={subject.subjectId}
-              className="rounded-xl border bg-(--surface) p-5"
-              style={{ borderColor: subject.isSelf ? 'var(--accent)' : 'var(--border)' }}
+              className={`rounded-xl border bg-(--surface) p-5 ${subject.isSelf ? 'border-(--accent)' : 'border-(--border)'}`}
             >
-              <p className="mb-3 font-medium">{subject.subjectName}</p>
+              <p className="mb-3 font-semibold">
+                {subject.subjectName}
+                {subject.isSelf ? <span className="ml-2 text-sm font-normal text-(--accent-text)">vous</span> : null}
+              </p>
               <DisclosureList fields={subject.fields} />
             </div>
           ))}
@@ -121,7 +127,7 @@ export function StudyReport({
 
       {subjects.some((s) => (s.suppliers ?? []).length > 0) ? (
         <section className="mb-8">
-          <h2 className="mb-4 text-xl font-medium">Chaînes d’approvisionnement</h2>
+          <h2 className="mb-4 text-2xl font-semibold text-(--heading)">Chaînes d’approvisionnement</h2>
           <SupplierRanks subjects={subjects} />
         </section>
       ) : null}
@@ -142,7 +148,7 @@ export function StudyReport({
       <div className="mt-8 flex flex-wrap gap-3 print:hidden">
         <a
           href={`/api/consulting/${orderId}/download`}
-          className="rounded-lg border border-(--border) px-4 py-2 text-sm font-medium"
+          className="rounded-lg border border-(--border) bg-(--surface) px-4 py-2 text-sm font-medium hover:border-(--border-strong)"
         >
           Télécharger le classeur
         </a>
@@ -151,7 +157,7 @@ export function StudyReport({
           <button
             type="button"
             onClick={() => window.print()}
-            className="rounded-lg border border-(--border) px-4 py-2 text-sm font-medium"
+            className="rounded-lg border border-(--border) bg-(--surface) px-4 py-2 text-sm font-medium hover:border-(--border-strong)"
           >
             Imprimer le rapport
           </button>
@@ -160,7 +166,7 @@ export function StudyReport({
         {canExport ? (
           <a
             href={`/api/consulting/${orderId}/table`}
-            className="rounded-lg border border-(--border) px-4 py-2 text-sm font-medium"
+            className="rounded-lg border border-(--border) bg-(--surface) px-4 py-2 text-sm font-medium hover:border-(--border-strong)"
           >
             Export analytique (table à plat)
           </a>
@@ -172,9 +178,9 @@ export function StudyReport({
 
 function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="rounded-lg bg-(--surface-muted) px-3 py-2">
       <dt className="text-xs text-(--foreground-muted)">{label}</dt>
-      <dd className="font-semibold">{value}</dd>
+      <dd className="font-mono font-semibold">{value}</dd>
     </div>
   );
 }
