@@ -2,6 +2,8 @@
 
 import { usePathname } from 'next/navigation';
 
+import { NextStep, type Step } from '@/components/next-step';
+
 /**
  * L'habillage des écrans d'équipe : navigation, barre d'argent, lien d'évitement.
  *
@@ -16,8 +18,10 @@ import { usePathname } from 'next/navigation';
 const BARE_PREFIXES = ['/facilitateur', '/projecteur', '/admin'];
 
 export function TeamChrome({
-  locked, sidebar, topBar, children,
+  locked, sidebar, topBar, steps = [], children,
 }: {
+  /** Écrans de décision dans l'ordre du parcours, pour « Étape suivante ». */
+  steps?: Step[];
   /** Saisie fermée : les champs passent en lecture seule lisible. */
   locked: boolean;
   sidebar: React.ReactNode;
@@ -48,6 +52,7 @@ export function TeamChrome({
             contour de focus n'y signalerait rien d'actionnable. */}
         <div id="contenu" tabIndex={-1} className="flex min-w-0 flex-1 flex-col" style={{ outline: 'none' }}>
           {children}
+          <NextStep steps={steps} />
         </div>
       </div>
     </div>

@@ -51,6 +51,8 @@ export interface TeamProgress {
   treasuryMad: number;
   treasuryStatus: string;
   iaScore: number | null;
+  /** Heure de soumission du tour par l'équipe, `null` tant qu'elle n'a pas soumis. */
+  submittedAt: string | null;
 }
 
 /**
@@ -79,6 +81,11 @@ const DIMENSIONS: Record<string, string> = {
   politique: 'Politique', economique: 'Économique', socioculturel: 'Socioculturel',
   technologique: 'Technologique', ecologique: 'Écologique', legal: 'Légal',
 };
+
+/** Même fuseau au rendu serveur et à l'hydratation. */
+const CLOCK = new Intl.DateTimeFormat('fr-FR', {
+  hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Casablanca',
+});
 
 const TABS = [
   ['conduite', 'Conduite'],
@@ -188,6 +195,7 @@ export function FacilitatorView({
 
   const activeTeams = teams.filter((t) => !t.isLiquidated);
   const ready = activeTeams.filter(isReady).length;
+  const submitted = activeTeams.filter((t) => t.submittedAt).length;
   const waiting = activeTeams.filter((t) => !isReady(t));
 
   const badges: Partial<Record<TabId, string>> = {
@@ -278,7 +286,9 @@ export function FacilitatorView({
             <p className="mt-2 text-sm text-(--foreground-muted)">
               {sessionStatusLabel(status)}
               {' · '}
-              <strong className="tabular font-semibold text-(--foreground)">{ready}/{activeTeams.length}</strong> équipes prêtes
+              <strong className="tabular font-semibold text-(--foreground)">{submitted}/{activeTeams.length}</strong> équipes ont soumis
+              {' · '}
+              <strong className="tabular font-semibold text-(--foreground)">{ready}</strong> complètes
               {status === 'round_active' && waiting.length > 0 ? (
                 <> · en attente : {waiting.map((t) => t.name).join(', ')}</>
               ) : null}
@@ -445,8 +455,12 @@ export function FacilitatorView({
                         <span className="font-medium text-(--negative)">Liquidée</span>
                       ) : t.treasuryStatus !== 'sain' ? (
                         <span className="font-medium text-(--warning)">{treasuryLabel(t.treasuryStatus)}</span>
+                      ) : t.submittedAt ? (
+                        <span className="font-medium text-(--positive)">
+                          ✓ Soumise <span className="font-normal text-(--foreground-muted)">à {CLOCK.format(new Date(t.submittedAt))}</span>
+                        </span>
                       ) : isReady(t) ? (
-                        <span className="font-medium text-(--positive)">✓ Prête</span>
+                        <span className="font-medium text-(--foreground)">Complète, non soumise</span>
                       ) : (
                         <span className="text-(--foreground-muted)">En cours</span>
                       )}

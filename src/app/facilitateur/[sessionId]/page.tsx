@@ -125,6 +125,14 @@ export default async function FacilitatorPage({
       (m) => m.is_facilitator && String(m.user_id) === context.userId,
     )?.team_id ?? null;
 
+  // Les soumissions du tour : une équipe complète n'est pas pour autant une
+  // équipe qui a fini de débattre.
+  const { data: submissions } = await admin
+    .from('team_round_submissions')
+    .select('team_id, submitted_at')
+    .in('team_id', ids)
+    .eq('round_number', roundNumber);
+
   const progress: TeamProgress[] = (teams ?? []).map((t) => {
     const teamId = String(t.id);
     const expectedDas = unitsByTeam.get(teamId) ?? 0;
@@ -153,6 +161,10 @@ export default async function FacilitatorPage({
       ),
       treasuryStatus: String(state?.treasury_status ?? 'sain'),
       iaScore: state?.ia_score === undefined ? null : Number(state.ia_score),
+      submittedAt: (() => {
+        const row = (submissions ?? []).find((s) => String(s.team_id) === teamId);
+        return row?.submitted_at ? String(row.submitted_at) : null;
+      })(),
     };
   });
 

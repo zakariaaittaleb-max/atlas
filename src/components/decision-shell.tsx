@@ -33,6 +33,7 @@
  */
 
 import { Circle, CircleCheck, CloudOff, LoaderCircle, Lock, PencilLine } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { InfoHint } from '@/components/ui/info-hint';
@@ -247,8 +248,9 @@ export function DecisionBar({
   savedAt?: number | null;
   missing: MissingDecision[];
   decisionsOpen: boolean;
-  onValidate: () => void;
+  onValidate: () => void | Promise<void>;
 }) {
+  const router = useRouter();
   const blocked = missing.length > 0 || !decisionsOpen;
 
   return (
@@ -259,7 +261,8 @@ export function DecisionBar({
             <SaveIndicator state={state} pending={pending} lastError={lastError} savedAt={savedAt} />
             <InfoHint label="Enregistrement de vos saisies">
               Vos saisies sont enregistrées au fil de la frappe : le bouton de droite ne
-              sauvegarde rien, il déclare votre tour prêt.
+              sauvegarde rien. Il envoie ce qui reste en file, puis ouvre le récapitulatif
+              du tour, d’où votre équipe le soumet.
             </InfoHint>
           </div>
           {missing.length > 0 ? (
@@ -278,14 +281,17 @@ export function DecisionBar({
         <button
           type="button"
           disabled={blocked}
-          onClick={onValidate}
+          onClick={async () => {
+            await onValidate();
+            router.push('/recapitulatif');
+          }}
           className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-6 py-3 font-medium text-(--on-accent) disabled:opacity-40"
         >
           {!decisionsOpen
             ? 'Tour verrouillé'
             : missing.length > 0
               ? `${missing.length} décision${missing.length > 1 ? 's' : ''} manquante${missing.length > 1 ? 's' : ''}`
-              : 'Déclarer mon tour prêt'}
+              : 'Relire et soumettre le tour'}
         </button>
       </div>
 

@@ -4,6 +4,7 @@ import {
   BriefcaseBusiness,
   ChevronDown,
   CircleCheck,
+  ClipboardCheck,
   Compass,
   Download,
   Factory,
@@ -34,6 +35,7 @@ const ICONS = {
   strategie: Compass,
   operations: Factory,
   conseils: BriefcaseBusiness,
+  soumission: ClipboardCheck,
 };
 
 interface SidebarProps {

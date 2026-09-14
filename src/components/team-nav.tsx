@@ -62,6 +62,13 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
+    // Relire l'ensemble du tour, puis le soumettre : le geste qui clôt la saisie.
+    id: 'soumission',
+    label: 'Soumission',
+    icon: 'soumission',
+    links: [{ href: '/recapitulatif', label: 'Récapitulatif du tour' }],
+  },
+  {
     id: 'conseils',
     label: 'Conseils',
     icon: 'conseils',
@@ -70,6 +77,17 @@ const GROUPS: NavGroup[] = [
       { href: '/revelation', label: 'Révélation' },
     ],
   },
+];
+
+/**
+ * L'ordre des écrans de décision pour « Étape suivante » : le Groupe, puis les
+ * domaines, puis la relecture. Le Dashboard, le cabinet et la révélation se
+ * consultent ; ils ne sont pas des étapes de saisie.
+ */
+const STEP_HREFS = [
+  '/strategie', '/finance', '/cession',
+  '/strategie/das', '/organisation', '/marches', '/war-room',
+  '/recapitulatif',
 ];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -115,10 +133,16 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
   // Révélation ne sont pas des écrans de saisie et restent toujours là.
   const openScreens = openScreenHrefs(modules);
   const visible = (href: string) =>
-    href === '/dashboard' || href === '/revelation' || openScreens.has(href);
+    href === '/dashboard' || href === '/revelation' || href === '/recapitulatif' || openScreens.has(href);
   const groups = GROUPS
     .map((group) => ({ ...group, links: group.links.filter((link) => visible(link.href)) }))
     .filter((group) => group.links.length > 0);
+
+  const visibleLinks = groups.flatMap((group) => group.links);
+  const steps = STEP_HREFS
+    .map((href) => visibleLinks.find((link) => link.href === href))
+    .filter((link): link is (typeof visibleLinks)[number] => Boolean(link))
+    .map(({ href, label }) => ({ href, label }));
 
   const status = String(round?.status ?? 'draft');
   const currentRound = Number(round?.current_round ?? 0);
@@ -198,7 +222,7 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <TeamChrome locked={!open} sidebar={sidebar} topBar={topBar}>
+    <TeamChrome locked={!open} sidebar={sidebar} topBar={topBar} steps={steps}>
       {children}
     </TeamChrome>
   );
