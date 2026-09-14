@@ -274,6 +274,9 @@ export function OrganisationView({
             <Accordion
               title="Directives du Groupe"
               indicators={{ topic: 'org-directives', dasId: activeDas }}
+              status={
+                context.group === null || (isOn(modules, 'org.portfolio_role') && !role) ? 'todo' : 'done'
+              }
               defaultOpen
               summary={
                 context.group === null
@@ -479,6 +482,7 @@ export function OrganisationView({
             <Accordion
               title="Axes stratégiques"
               indicators={{ topic: 'org-structure', dasId: activeDas }}
+              status={axesChosen === 3 ? 'done' : 'todo'}
               summary={`${axesChosen} sur 3`}
               hint="Ce domaine dit ce qu’il PRIORISE — et c’est cela qui est mesuré. L’ordre compte : le premier axe pèse trois fois plus que le troisième. Choisir trois priorités n’est un arbitrage que si l’on en écarte d’autres."
             >
@@ -564,6 +568,7 @@ export function OrganisationView({
             <Accordion
               title="Organigramme"
               indicators={{ topic: 'org-structure', dasId: activeDas }}
+              status={das.positions.length > 0 ? 'done' : 'todo'}
               summary={`${das.positions.length} poste${das.positions.length > 1 ? 's' : ''} · ${keyCount} clé${keyCount > 1 ? 's' : ''}`}
               hint="Déclarer un poste CLÉ, c’est y concentrer l’attention et les moyens. Au-delà de trois, « clé » cesse de vouloir dire quelque chose."
             >
@@ -591,6 +596,7 @@ export function OrganisationView({
             <Accordion
               title="Indicateurs de pilotage"
               indicators={{ topic: 'org-structure', dasId: activeDas }}
+              status={kpisChosen >= context.directions.length ? 'done' : 'todo'}
               summary={`${kpisChosen} sur ${context.directions.length}`}
               hint="Choisir un indicateur, c’est décider de ce que la direction va optimiser — donc de ce qu’elle va sacrifier. Un responsable de production suivi sur le coût unitaire et un autre suivi sur le taux de rebut ne prendront pas les mêmes décisions."
             >
@@ -641,6 +647,7 @@ export function OrganisationView({
             <Accordion
               title="Répartition des moyens"
               indicators={{ topic: 'org-moyens', dasId: activeDas }}
+              status={!overBudget && budgetShare >= 0.95 ? 'done' : 'todo'}
               summary={overBudget ? `dépassement ${formatMadCompact(budgetTotal - context.operatingBudgetMad)}` : `${formatPct(budgetShare, 0)} réparti`}
               hint="Là où va l’argent dit ce que vous faites vraiment. Déclarer une différenciation en finançant la production comme une usine low-cost est l’incohérence que le moteur relève le plus sûrement."
             >

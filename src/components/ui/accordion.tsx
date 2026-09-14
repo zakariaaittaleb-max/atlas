@@ -35,8 +35,14 @@ export function Accordion({
   defaultOpen = false,
   anchor,
   indicators,
+  status,
   children,
 }: {
+  /**
+   * Où en est le bloc : « fait » ou « à faire ». Sur un écran de sept blocs
+   * repliés, c'est ce qui dit lequel ouvrir — le résumé chiffré ne suffit pas.
+   */
+  status?: 'done' | 'todo';
   title: string;
   /** La statistique qui résume le contenu, lisible sans ouvrir. */
   summary?: React.ReactNode;
@@ -104,6 +110,17 @@ export function Accordion({
           {hint ? <InfoHint label={title}>{hint}</InfoHint> : null}
         </h3>
         {indicators ? <IndicatorsButton decision={title} {...indicators} /> : null}
+        {status ? (
+          <span
+            className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-sm font-semibold ${
+              status === 'done' ? 'bg-(--positive-subtle) text-(--positive)' : 'bg-(--warning-subtle) text-(--warning)'
+            }`}
+          >
+            {/* L'état se lit en mot et en symbole, jamais par la seule teinte. */}
+            <span aria-hidden>{status === 'done' ? '✓' : '○'}</span>
+            {status === 'done' ? 'fait' : 'à faire'}
+          </span>
+        ) : null}
         {summary ? (
           <span className="tabular shrink-0 text-right font-mono text-sm font-medium text-(--foreground)">
             {summary}
