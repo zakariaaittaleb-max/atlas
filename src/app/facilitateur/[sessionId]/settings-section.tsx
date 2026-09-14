@@ -18,6 +18,8 @@
 
 import { useState } from 'react';
 
+import { InfoHint } from '@/components/ui/info-hint';
+
 import {
   DIAL_EXPLANATIONS, DIFFICULTY_PRESETS, type DifficultyDials,
 } from '@/lib/difficulty-types';
@@ -56,7 +58,12 @@ const DIMENSIONS = [
 
 export function SettingsSection({
   sessionId, difficulty, dials, locked, sectors, call, disabled, part = 'tout',
+  das = [], onCardCreated,
 }: {
+  /** Domaines de la session, pour déclencher une carte dès sa création. */
+  das?: { id: string; name: string }[];
+  /** Appelé avec la clé d'une carte ajoutée au catalogue sans être déclenchée. */
+  onCardCreated?: (key: string) => void;
   /**
    * Les deux blocs ne vivent plus au même endroit de la page : la difficulté
    * se règle avant la partie, une carte sur mesure se compose pendant.
@@ -67,7 +74,7 @@ export function SettingsSection({
   dials: DifficultyDials;
   locked: boolean;
   sectors: string[];
-  call: (path: string, body: Record<string, unknown>, ok: string) => void;
+  call: (path: string, body: Record<string, unknown>, ok: string) => Promise<Record<string, unknown> | null> | void;
   disabled: boolean;
 }) {
   const [level, setLevel] = useState(difficulty);
@@ -81,6 +88,36 @@ export function SettingsSection({
   const [effects, setEffects] = useState<Record<string, number>>({});
 
   const posed = Object.entries(effects).filter(([, v]) => v !== 0);
+  const [triggerDas, setTriggerDas] = useState('');
+
+  /**
+   * Créer la carte, et la déclencher aussitôt si un domaine est choisi.
+   *
+   * Composer une carte ne la montrait à personne : elle rejoignait un
+   * catalogue de quarante cartes, et les équipes ne voient une carte qu'une
+   * fois DÉCLENCHÉE. Le facilitateur croyait l'avoir posée dans la partie.
+   */
+  async function create(dasId: string | null) {
+    const name = card.name.trim();
+    const created = await call('/api/facilitator', {
+      action: 'create_shock_card', sessionId,
+      ...card, effects: Object.fromEntries(posed),
+    }, dasId
+      ? `Carte « ${name} » créée.`
+      : `Carte « ${name} » ajoutée : elle est présélectionnée pour le déclenchement.`);
+
+    const key = created && typeof created.key === 'string' ? created.key : null;
+    if (!key) return;
+
+    if (!dasId) {
+      onCardCreated?.(key);
+      return;
+    }
+    await call('/api/facilitator', {
+      sessionId, action: 'trigger_shock', cardKey: key, dasId,
+      redistributionPts: 0, beneficiaryTeamIds: [],
+    }, `Carte « ${name} » créée et déclenchée : les équipes la voient dans leur War Room.`);
+  }
 
   return (
     <>
@@ -298,8 +335,12 @@ export function SettingsSection({
                     key={spec.key}
                     className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-(--border) px-4 py-2.5"
                   >
-                    <span className="min-w-[12rem] text-sm font-medium">{spec.label}</span>
+                    {/* Un vrai libellé relié : sans lui, un lecteur d'écran annonçait
+                        une quinzaine de curseurs anonymes. */}
+                    <label htmlFor={`effet-${spec.key}`} className="min-w-[12rem] text-sm font-medium">{spec.label}</label>
                     <input
+                      id={`effet-${spec.key}`}
+                      aria-valuetext={shown}
                       type="range"
                       min={spec.min} max={spec.max}
                       step={spec.unit === 'points' || spec.unit === 'jours' ? 1 : 0.01}
@@ -321,21 +362,50 @@ export function SettingsSection({
             </div>
           </div>
 
-          <button
-            type="button"
-            disabled={disabled || card.name.trim().length < 3 || posed.length === 0}
-            onClick={() =>
-              call('/api/facilitator', {
-                action: 'create_shock_card', sessionId,
-                ...card, effects: Object.fromEntries(posed),
-              }, `Carte « ${card.name} » ajoutée au catalogue de cette session.`)
-            }
-            className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
-          >
-            {posed.length === 0
-              ? 'Renseignez au moins une variable'
-              : `Créer la carte (${posed.length} variable${posed.length > 1 ? 's' : ''})`}
-          </button>
+          <div className="flex flex-wrap items-end gap-x-6 gap-y-4 border-t border-(--border) pt-5">
+            <button
+              type="button"
+              disabled={disabled || card.name.trim().length < 3 || posed.length === 0}
+              onClick={() => void create(null)}
+              className="rounded-lg border border-(--border) bg-(--surface) px-5 py-2.5 text-sm font-medium enabled:hover:border-(--accent) disabled:opacity-40"
+            >
+              {posed.length === 0
+                ? 'Renseignez au moins une variable'
+                : `Ajouter au catalogue (${posed.length} variable${posed.length > 1 ? 's' : ''})`}
+            </button>
+
+            {das.length > 0 ? (
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="block">
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    Déclencher tout de suite sur
+                    <InfoHint label="Quand les équipes voient la carte">
+                      Une carte n’apparaît aux équipes qu’une fois déclenchée : elles la découvrent
+                      alors dans leur War Room, avec son nom et sa description, jamais ses chiffres.
+                      Ajoutée au catalogue seulement, elle attend que vous la déclenchiez.
+                    </InfoHint>
+                  </span>
+                  <select
+                    id="carte-domaine"
+                    value={triggerDas}
+                    onChange={(e) => setTriggerDas(e.target.value)}
+                    className="mt-1.5 rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
+                  >
+                    <option value="">Choisir un domaine</option>
+                    {das.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  disabled={disabled || card.name.trim().length < 3 || posed.length === 0 || !triggerDas}
+                  onClick={() => void create(triggerDas)}
+                  className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
+                >
+                  Créer et déclencher
+                </button>
+              </div>
+            ) : null}
+          </div>
         </fieldset>
       </section>
       )}

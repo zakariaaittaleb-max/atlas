@@ -66,6 +66,8 @@ export type JoinTeamAction = (input: {
 interface Card {
   key: string; name: string; description: string; nature: string;
   dimension: string; targetSectors: string[]; durationRounds: number; source: string | null;
+  /** Composée par le facilitateur pour cette session. */
+  custom: boolean;
 }
 
 interface Run {
@@ -150,7 +152,10 @@ export function FacilitatorView({
     if (focus) tabRefs.current[id]?.focus();
   }
 
-  async function call(path: string, body: Record<string, unknown>, successMessage: string) {
+  /** Renvoie la réponse de l'API en cas de succès — la création d'une carte en lit la clé. */
+  async function call(
+    path: string, body: Record<string, unknown>, successMessage: string,
+  ): Promise<Record<string, unknown> | null> {
     setError(null); setNotice(null); setBusy(true);
     try {
       const res = await fetch(path, {
@@ -169,13 +174,15 @@ export function FacilitatorView({
           );
         }
         setBusy(false);
-        return;
+        return null;
       }
       setNotice(successMessage);
       startTransition(() => { router.refresh(); setBusy(false); });
+      return payload as Record<string, unknown>;
     } catch {
       setError('Le réseau est indisponible.');
       setBusy(false);
+      return null;
     }
   }
 
@@ -507,7 +514,7 @@ export function FacilitatorView({
       <div role="tabpanel" id="panneau-marche" aria-labelledby="onglet-marche" hidden={tab !== 'marche'}>
         <Fragment key="warroom">{warRoomSection}</Fragment>
 
-        <section className="mb-8 rounded-xl border border-(--border) bg-(--surface) p-6">
+        <section id="declencher-carte" className="mb-8 scroll-mt-40 rounded-xl border border-(--border) bg-(--surface) p-6">
           <h2 className="mb-1 text-xl font-semibold text-(--heading)">Déclencher une opportunité ou une menace</h2>
           <p className="mb-5 max-w-3xl text-sm text-(--foreground-muted)">
             Les équipes voient le nom et la description de chaque carte, jamais son amplitude.
@@ -518,15 +525,30 @@ export function FacilitatorView({
             <label className="block sm:col-span-2">
               <span className="text-sm font-medium">Carte</span>
               <select
+                id="carte-a-declencher"
                 value={selectedCard} onChange={(e) => setSelectedCard(e.target.value)}
                 className="mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
               >
-                {cards.map((c) => (
-                  <option key={c.key} value={c.key}>
-                    {DIMENSIONS[c.dimension] ?? c.dimension} — {c.name}
-                    {c.nature === 'opportunite' ? ' (opportunité)' : ' (menace)'}
-                  </option>
-                ))}
+                {/* Les cartes composées pour la session d'abord : c'est celle
+                    qu'on vient d'écrire qu'on cherche, pas la quarantième du
+                    catalogue commun. */}
+                {cards.some((c) => c.custom) ? (
+                  <optgroup label="Composées pour cette session">
+                    {cards.filter((c) => c.custom).map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.name}{c.nature === 'opportunite' ? ' (opportunité)' : ' (menace)'}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+                <optgroup label="Catalogue commun">
+                  {cards.filter((c) => !c.custom).map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {DIMENSIONS[c.dimension] ?? c.dimension} — {c.name}
+                      {c.nature === 'opportunite' ? ' (opportunité)' : ' (menace)'}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </label>
 
@@ -600,6 +622,26 @@ export function FacilitatorView({
           ) : null}
         </section>
 
+        {/* Composer, puis déclencher : les deux gestes se suivent. Une carte
+            créée est présélectionnée ci-dessus ; « Créer et déclencher » la
+            pose directement dans la War Room des équipes. */}
+        <SettingsSection
+          part="carte"
+          sessionId={sessionId}
+          difficulty={difficulty}
+          dials={dials}
+          locked={difficultyLocked}
+          sectors={sectors}
+          call={call}
+          disabled={disabled}
+          das={das.map((d) => ({ id: d.id, name: d.name }))}
+          onCardCreated={(key) => {
+            setSelectedCard(key);
+            document.getElementById('declencher-carte')?.scrollIntoView({ block: 'start' });
+            document.getElementById('carte-a-declencher')?.focus({ preventScroll: true });
+          }}
+        />
+
         {/* ── La réserve mise sur le marché ──────────────────────────────────
             Ouvrir la diversification est un GESTE PÉDAGOGIQUE, pas un réglage.
             Tant qu'un domaine reste fermé, les équipes règlent le métier qu'elles
@@ -657,16 +699,6 @@ export function FacilitatorView({
           </ul>
         </section>
 
-        <SettingsSection
-          part="carte"
-          sessionId={sessionId}
-          difficulty={difficulty}
-          dials={dials}
-          locked={difficultyLocked}
-          sectors={sectors}
-          call={call}
-          disabled={disabled}
-        />
       </div>
 
       <div role="tabpanel" id="panneau-reglages" aria-labelledby="onglet-reglages" hidden={tab !== 'reglages'}>

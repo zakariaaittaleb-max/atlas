@@ -230,7 +230,11 @@ export async function POST(request: Request) {
     const { data: card } = await admin
       .from('shock_cards').select('*').eq('key', body.cardKey).maybeSingle();
 
-    if (!card) return NextResponse.json({ error: 'Carte inconnue.' }, { status: 404 });
+    // Une carte composée appartient à sa session : la clé d'une autre partie
+    // ne doit rien déclencher ici.
+    if (!card || (card.session_id && String(card.session_id) !== body.sessionId)) {
+      return NextResponse.json({ error: 'Carte inconnue.' }, { status: 404 });
+    }
 
     // Les effets sont COPIÉS depuis la carte, pas référencés : une carte
     // modifiée entre deux sessions ne doit pas réécrire l'histoire d'une partie

@@ -57,7 +57,13 @@ export default async function FacilitatorPage({
       // sans cible n'est pas acquérable même si on le déclarait ouvert.
       admin.from('ecosystem_actors').select('das_id, market_open')
         .eq('session_id', sessionId).eq('actor_type', 'cible_acquisition'),
-      admin.from('shock_cards').select('key, name, description, nature, pestel_dimension, target_sectors, duration_rounds, source_reference, effects').order('pestel_dimension'),
+      // Le catalogue commun, plus les cartes composées pour CETTE session. Sans
+      // filtre, un facilitateur voyait — et pouvait déclencher — les cartes
+      // composées par un collègue dans une autre partie.
+      admin.from('shock_cards')
+        .select('key, name, description, nature, pestel_dimension, target_sectors, duration_rounds, source_reference, effects, session_id')
+        .or(`session_id.is.null,session_id.eq.${sessionId}`)
+        .order('pestel_dimension'),
       admin.from('market_shocks').select('id, card_key, das_id, round_number, rounds_remaining').eq('session_id', sessionId).order('round_number', { ascending: false }),
       // Les plans des équipes : lecture par la clé de service, `shock_responses`
       // n'étant lisible que par l'équipe qui la possède. L'autorisation a été
@@ -261,6 +267,7 @@ export default async function FacilitatorPage({
         targetSectors: (c.target_sectors as string[]) ?? [],
         durationRounds: Number(c.duration_rounds),
         source: c.source_reference ? String(c.source_reference) : null,
+        custom: Boolean(c.session_id),
       }))}
       activeShocks={(shocks ?? []).map((s) => ({
         id: String(s.id), cardKey: String(s.card_key), dasId: String(s.das_id),

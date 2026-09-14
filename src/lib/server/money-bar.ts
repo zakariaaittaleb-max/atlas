@@ -17,17 +17,10 @@ import { getRoundState, getTeamContext } from '@/lib/dal';
 import type { MoneyBar } from '@/lib/results-types';
 import { createServerClient } from '@/lib/supabase/server';
 
+import { rollupHr } from './hr-consolidation';
+
 const num = (v: unknown, d = 0) => (typeof v === 'number' ? v : Number(v ?? d) || d);
 
-/**
- * Taux de cotisations patronales.
- *
- * Dupliqué ici depuis `engine_parameters` faute d'accès au calibrage de session
- * dans ce chemin de lecture. La valeur est volontairement conservatrice : la
- * barre est un REPÈRE d'arbitrage, la vérité comptable est établie à la
- * résolution, où le paramètre de session s'applique.
- */
-const CHARGES_PATRONALES = 0.2109;
 
 export type { MoneyBar };
 
@@ -41,7 +34,10 @@ export async function loadMoneyBar(): Promise<MoneyBar | null> {
 
   const supabase = await createServerClient();
 
-  const [{ data: pnl }, { data: budget }, { data: decisions }, { data: hr }, { data: state }] =
+  const [
+    { data: pnl }, { data: budget }, { data: decisions }, { data: state },
+    { data: units }, { data: hrDecisions }, { data: hrStates },
+  ] =
     await Promise.all([
       supabase.from('pnl_statements').select('treasury_end_mad')
         .eq('team_id', team.teamId).eq('round_number', roundNumber - 1).maybeSingle(),
@@ -54,10 +50,16 @@ export async function loadMoneyBar(): Promise<MoneyBar | null> {
         .order('round_number'),
       supabase.from('das_decisions').select('*')
         .eq('team_id', team.teamId).eq('round_number', roundNumber),
-      supabase.from('hr_metrics').select('*')
-        .eq('team_id', team.teamId).eq('round_number', roundNumber).maybeSingle(),
       supabase.from('team_round_state').select('headcount')
         .eq('team_id', team.teamId).eq('round_number', roundNumber - 1).maybeSingle(),
+      // Les RH EN VIGUEUR de chaque domaine, la même consolidation que l'écran
+      // de finance (voir `hr-rollup.ts`).
+      supabase.from('team_units').select('das_id')
+        .eq('team_id', team.teamId).in('status', ['active', 'listed_for_sale']),
+      supabase.from('das_hr_decisions').select('*')
+        .eq('team_id', team.teamId).lte('round_number', roundNumber),
+      supabase.from('das_hr_state').select('das_id, round_number, headcount, payroll_mad')
+        .eq('team_id', team.teamId).lte('round_number', roundNumber),
     ]);
 
   const budgets = (budget ?? []) as Record<string, unknown>[];
@@ -76,14 +78,14 @@ export async function loadMoneyBar(): Promise<MoneyBar | null> {
   // Les salaires sont un engagement du tour au même titre qu'un investissement :
   // les omettre faisait apparaître « 0 DH engagé » à une équipe qui payait
   // pourtant plusieurs milliards de masse salariale.
-  const hires =
-    num(hr?.hire_operateurs) + num(hr?.hire_techniciens) +
-    num(hr?.hire_experts) + num(hr?.hire_cadres);
-  const headcountEnd = Math.max(
-    num(state?.headcount) + hires - num(hr?.restructuring_count), 0,
+  const hr = rollupHr(
+    (units ?? []).map((u) => ({ dasId: String(u.das_id), name: '' })),
+    hrDecisions as Record<string, unknown>[] | null,
+    hrStates as Record<string, unknown>[] | null,
+    roundNumber,
+    num(state?.headcount),
   );
-  const payrollMad =
-    headcountEnd * num(hr?.avg_salary_brut_mad, 5800) * 12 * (1 + CHARGES_PATRONALES);
+  const payrollMad = hr.payrollMad;
 
   const dasEngagedMad = (decisions ?? []).reduce(
     (acc, d) =>
@@ -95,7 +97,7 @@ export async function loadMoneyBar(): Promise<MoneyBar | null> {
   const engagedMad =
     payrollMad + dasEngagedMad +
     num(lastBudget?.opex_mad) + num(thisRound?.debt_repaid_mad) +
-    num(thisRound?.dividend_mad) + num(hr?.training_budget_mad);
+    num(thisRound?.dividend_mad) + hr.trainingBudgetMad;
 
   return {
     availableMad,
