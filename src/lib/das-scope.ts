@@ -25,6 +25,8 @@
  * Module client-safe : ni `server-only`, ni logique d'accès.
  */
 
+import type { DasVitals } from '@/lib/das-vitals';
+
 export const DAS_COOKIE = 'atlas.das';
 
 /** Un an : le choix doit survivre à la séance, pas à l'année scolaire. */
@@ -45,6 +47,8 @@ export interface DasOption {
   launchedRound: number;
   /** Entré par acquisition ou par rachat, et non par la dotation initiale. */
   acquired: boolean;
+  /** Croissance, part de marché, poids et marge au dernier exercice clos ; `null` sans exercice. */
+  vitals?: DasVitals | null;
 }
 
 export interface DasScope {

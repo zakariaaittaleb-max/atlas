@@ -315,6 +315,7 @@ export function FinanceView({
                   <CashPooling
                     das={context.das}
                     transfers={finance.cashTransfers}
+                    treasuryMad={context.treasuryMad}
                     disabled={locked}
                     onChange={(next) => pushFinance({ ...finance, cashTransfers: next })}
                   />

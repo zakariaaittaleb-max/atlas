@@ -448,7 +448,9 @@ async function write(admin: Admin, teamId: string, round: number, body: Body): P
     dividend_mad: dividendMad,
   };
 
-  await writeCashPooling(admin, teamId, round, body.cashTransfers ?? []);
+  // Absent de la requête : on ne touche à rien. Présent, même vide : c'est la
+  // répartition du tour, qui remplace la précédente.
+  if (body.cashTransfers) await writeCashPooling(admin, teamId, round, body.cashTransfers);
 
   if (existing) {
     fail((await admin.from('financial_budgets').update(decisions)
@@ -487,8 +489,6 @@ async function writeCashPooling(
   round: number,
   transfers: { dasId: string; transferMad: number }[],
 ): Promise<void> {
-  if (transfers.length === 0) return;
-
   const total = transfers.reduce((acc, t) => acc + t.transferMad, 0);
   if (Math.abs(total) > 1) {
     throw new RefusMetier(
@@ -514,6 +514,15 @@ async function writeCashPooling(
       round_number: round,
       transfer_mad: t.transferMad,
     }));
+
+  // Revenir à la référence doit EFFACER les transferts : un simple upsert
+  // laissait en base ceux qu'on venait de retirer, et le moteur les appliquait.
+  const { error: clearError } = await admin
+    .from('das_cash_allocation')
+    .delete()
+    .eq('team_id', teamId)
+    .eq('round_number', round);
+  if (clearError) throw new Error(`Transferts refusés : ${clearError.message}`);
 
   if (rows.length === 0) return;
 

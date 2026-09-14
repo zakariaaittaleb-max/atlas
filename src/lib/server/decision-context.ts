@@ -73,7 +73,7 @@ async function loadDecisionContextOnce(): Promise<DecisionContext> {
     { data: pnls }, { data: state },
     { data: procurement }, { data: distribution }, { data: actors },
     { data: orgDesigns }, { data: dasHrDecisions }, { data: dasHrStates },
-    { data: supplyMetrics },
+    { data: supplyMetrics }, { data: cashAllocations },
   ] = await Promise.all([
     // `listed_for_sale` est inclus : un DAS mis en vente doit continuer à être
     // piloté jusqu'à la résolution. La cession ne se dénoue qu'à ce moment-là,
@@ -135,6 +135,10 @@ async function loadDecisionContextOnce(): Promise<DecisionContext> {
       .from('team_das_round_metrics')
       .select('das_id, volume_sold, volume_lost, input_stock_units, finished_stock_units, effective_capacity_units')
       .eq('team_id', team.teamId).eq('round_number', previous),
+    // Les transferts entre domaines saisis CE tour : sans eux, l'écran les
+    // montrait vides alors que le moteur allait les appliquer.
+    supabase.from('das_cash_allocation').select('das_id, transfer_mad')
+      .eq('team_id', team.teamId).eq('round_number', roundNumber),
   ]);
 
   // Le budget ÉCRIT ce tour, s'il existe : c'est lui qui dit « saisi » plutôt
@@ -312,7 +316,16 @@ async function loadDecisionContextOnce(): Promise<DecisionContext> {
     corporate: toCorporate(strategyRow),
     corporateRecorded: Boolean(strategyRow) && num(strategyRow?.round_number) === roundNumber,
     corporateBaseline,
-    finance: budget ? toFinance(budget as Row) : financeBaseline,
+    // Le budget écrit CE tour porte aussi ses gestes (crédit, levée, dividende,
+    // transferts) : les remettre à zéro affichait « aucun mouvement de dette »
+    // sur un remboursement enregistré — et la prochaine sauvegarde l'effaçait.
+    finance: budget
+      ? toFinance(budget as Row, {
+          cashTransfers: ((cashAllocations ?? []) as Row[])
+            .map((a) => ({ dasId: str(a.das_id), transferMad: num(a.transfer_mad) }))
+            .filter((t) => t.transferMad !== 0),
+        })
+      : financeBaseline,
     financeRecorded: Boolean(budget),
     financeBaseline,
     hr: rollupHr(
@@ -376,8 +389,27 @@ function toCorporate(row: Row | null): CorporateValues {
   };
 }
 
-function toFinance(row: Row | null): FinanceValues {
+/**
+ * Les valeurs de finance d'un budget.
+ *
+ * `current` est passé pour le budget écrit CE tour : ses gestes sont relus
+ * tels qu'enregistrés. Sans lui (budget d'un exercice antérieur), seuls les
+ * engagements se reconduisent.
+ */
+function toFinance(
+  row: Row | null,
+  current?: { cashTransfers: FinanceValues['cashTransfers'] },
+): FinanceValues {
   if (!row) return FINANCE_DEFAULTS;
+  if (current) {
+    return {
+      opexMad: num(row.opex_mad),
+      netCreditMad: num(row.debt_drawn_mad) - num(row.debt_repaid_mad),
+      capitalRaisedMad: num(row.capital_raised_mad),
+      dividendMad: num(row.dividend_mad),
+      cashTransfers: current.cashTransfers,
+    };
+  }
   return {
     // Les frais de siège sont un ENGAGEMENT : ils se reconduisent.
     opexMad: num(row.opex_mad),

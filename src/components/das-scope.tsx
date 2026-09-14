@@ -27,6 +27,8 @@ import {
   DAS_COOKIE, DAS_COOKIE_MAX_AGE, resolveActiveDas,
   type DasOption, type DasScope,
 } from '@/lib/das-scope';
+import { formatSignedPct, toneOf } from '@/lib/das-vitals';
+import { formatPct, formatSharePoints } from '@/lib/format';
 
 interface DasScopeValue {
   das: DasOption[];
@@ -149,7 +151,74 @@ export function DasSwitcher() {
           })}
         </div>
 
+        <DasVitalsLine das={das.find((d) => d.dasId === activeDasId) ?? null} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * Les quatre chiffres d'un domaine, collés au sélecteur.
+ *
+ * Un domaine se décidait sans voir s'il grandissait, ce qu'il pesait dans le
+ * Groupe ni ce qu'il rapportait : il fallait retourner au Dashboard. La barre
+ * du haut étant collée, ils restent visibles pendant toute la saisie.
+ */
+function DasVitalsLine({ das }: { das: DasOption | null }) {
+  if (!das) return null;
+  const v = das.vitals;
+
+  if (!v) {
+    return (
+      <p className="text-sm text-(--foreground-muted) lg:ml-auto">Aucun exercice clos pour ce domaine</p>
+    );
+  }
+
+  const growthTone = toneOf(v.growth);
+  return (
+    <div className="flex w-full min-w-0 flex-wrap items-center gap-x-5 gap-y-1 lg:ml-auto lg:w-auto">
+      <dl className="tabular flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
+        <Vital
+          label="Croissance"
+          value={formatSignedPct(v.growth)}
+          tone={growthTone}
+        />
+        <Vital
+          label="Part de marché"
+          value={formatPct(v.marketShare)}
+          // Une part inchangée ne s'annonce pas « ↑ +0,0 pt » : seul un écart d'au moins 0,05 point s'écrit.
+          detail={v.marketShareDelta !== null && Math.abs(v.marketShareDelta) >= 0.0005 ? `${formatSharePoints(v.marketShareDelta)} pt` : undefined}
+        />
+        <Vital label="Poids dans le Groupe" value={formatPct(v.weightInGroup, 0)} />
+        <Vital
+          label="Marge"
+          value={formatPct(v.margin)}
+          tone={v.margin !== null && v.margin < 0 ? 'negative' : null}
+        />
+      </dl>
+      <InfoHint label="Chiffres du domaine">
+        {v.roundNumber >= 0 ? `Exercice ${v.roundNumber}, le dernier clos. ` : 'Chiffres de la dotation. '}
+        Croissance : variation du chiffre d’affaires sur l’exercice précédent. Poids : part du
+        chiffre d’affaires du Groupe. Marge : EBITDA rapporté au chiffre d’affaires.
+      </InfoHint>
+    </div>
+  );
+}
+
+function Vital({
+  label, value, detail, tone = null,
+}: { label: string; value: string; detail?: string; tone?: 'positive' | 'negative' | null }) {
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <dt className="text-(--foreground-muted)">{label}</dt>
+      <dd
+        className={`font-mono font-semibold ${
+          tone === 'positive' ? 'text-(--positive)' : tone === 'negative' ? 'text-(--negative)' : ''
+        }`}
+      >
+        {value}
+      </dd>
+      {detail ? <dd className="text-(--foreground-muted)">{detail}</dd> : null}
     </div>
   );
 }

@@ -13,8 +13,9 @@ import 'server-only';
 
 import { cookies } from 'next/headers';
 
-import { getTeamContext } from '@/lib/dal';
+import { getRoundState, getTeamContext } from '@/lib/dal';
 import { DAS_COOKIE, resolveActiveDas, type DasOption, type DasScope } from '@/lib/das-scope';
+import { computeDasVitals } from '@/lib/das-vitals';
 import { createServerClient } from '@/lib/supabase/server';
 
 export async function loadDasScope(): Promise<DasScope | null> {
@@ -55,7 +56,29 @@ export async function loadDasScope(): Promise<DasScope | null> {
     // onglets sous le curseur.
     .sort((a, b) => a.launchedRound - b.launchedRound || a.name.localeCompare(b.name, 'fr'));
 
+  // Croissance, part de marché, poids dans le Groupe et marge : ce qu'un
+  // domaine doit avoir sous les yeux partout où il se décide. Exercices clos
+  // seulement — le tour courant n'a de chiffres qu'après sa résolution.
+  const round = await getRoundState(team.sessionId);
+  const { data: metrics } = await supabase
+    .from('team_das_round_metrics')
+    .select('das_id, round_number, revenue_mad, market_share_pct, ebitda_mad')
+    .eq('team_id', team.teamId)
+    .lte('round_number', Number(round?.current_round ?? 0));
+
+  const vitals = computeDasVitals(
+    (metrics ?? []).map((m) => ({
+      dasId: String(m.das_id),
+      roundNumber: Number(m.round_number),
+      revenueMad: m.revenue_mad === null ? null : Number(m.revenue_mad),
+      marketShare: m.market_share_pct === null ? null : Number(m.market_share_pct),
+      ebitdaMad: m.ebitda_mad === null ? null : Number(m.ebitda_mad),
+    })),
+    das.map((d) => d.dasId),
+  );
+  const withVitals = das.map((d) => ({ ...d, vitals: vitals.get(d.dasId) ?? null }));
+
   const wanted = (await cookies()).get(DAS_COOKIE)?.value ?? null;
 
-  return { das, activeDasId: resolveActiveDas(das, wanted) };
+  return { das: withVitals, activeDasId: resolveActiveDas(withVitals, wanted) };
 }
