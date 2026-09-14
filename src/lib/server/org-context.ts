@@ -21,6 +21,13 @@ const num = (v: unknown, d = 0) => (typeof v === 'number' ? v : Number(v ?? d) |
 const str = (v: unknown, d = '') => (typeof v === 'string' ? v : d);
 const bool = (v: unknown, d = false) => (typeof v === 'boolean' ? v : d);
 
+/**
+ * Part du chiffre d'affaires répartissable entre directions : la marge brute
+ * attendue. C'est ce qu'il y a réellement à distribuer, pas le CA lui-même —
+ * et la règle même de la dotation de départ (`provision.ts`).
+ */
+const OPERATING_BUDGET_SHARE = 0.30;
+
 export async function loadOrgContext(): Promise<OrgContext> {
   const team = await requireTeam();
   const round = await getRoundState(team.sessionId);
@@ -31,7 +38,7 @@ export async function loadOrgContext(): Promise<OrgContext> {
   const [
     { data: directions }, { data: kpiCatalog }, { data: axisCatalog },
     { data: units }, { data: designs }, { data: axes },
-    { data: budgets }, { data: kpis }, { data: positions }, { data: pnl },
+    { data: budgets }, { data: kpis }, { data: positions }, { data: dasRevenueRows },
     { data: state }, { data: strategy }, { data: directiveRows },
     { data: sharedRows }, { data: platformRows }, { data: dasSectors },
     { data: proximityRows }, { data: hrRows }, { data: hrPreviousRows },
@@ -48,8 +55,11 @@ export async function loadOrgContext(): Promise<OrgContext> {
     supabase.from('das_direction_budgets').select('*').eq('team_id', team.teamId).lte('round_number', roundNumber),
     supabase.from('das_direction_kpis').select('*').eq('team_id', team.teamId).lte('round_number', roundNumber),
     supabase.from('das_positions').select('*').eq('team_id', team.teamId).lte('round_number', roundNumber),
-    supabase.from('pnl_statements').select('revenue_mad')
-      .eq('team_id', team.teamId).eq('round_number', roundNumber - 1).maybeSingle(),
+    // Le chiffre d'affaires de CHAQUE domaine, exercices clos compris ceux de
+    // l'historique de départ (tours 0 et −1) : l'assiette des budgets se
+    // calcule domaine par domaine.
+    supabase.from('team_das_round_metrics').select('das_id, round_number, revenue_mad')
+      .eq('team_id', team.teamId).lt('round_number', roundNumber),
     supabase.from('team_round_state').select('headcount')
       .eq('team_id', team.teamId).eq('round_number', roundNumber - 1).maybeSingle(),
     // Les directives ARRÊTÉES AU GROUPE, affichées en lecture seule : sans
@@ -109,6 +119,21 @@ export async function loadOrgContext(): Promise<OrgContext> {
     const unit = u.strategic_units as unknown as { id: string; name: string } | null;
     const dasId = str(u.das_id);
 
+    // L'assiette du domaine : 30 % de son dernier chiffre d'affaires connu.
+    // Elle se lisait sur le compte de résultat du GROUPE du tour précédent, qui
+    // n'existe pas avant la première résolution : l'écran annonçait « 0 DH à
+    // répartir » et un faux dépassement égal aux budgets hérités. À défaut de
+    // chiffre d'affaires, la dotation de départ — calculée sur la même règle.
+    const lastRevenue = ((dasRevenueRows ?? []) as Row[])
+      .filter((r) => str(r.das_id) === dasId && num(r.revenue_mad) > 0)
+      .sort((a, b) => num(b.round_number) - num(a.round_number))[0];
+    const seededBudget = ((budgets ?? []) as Row[])
+      .filter((b) => str(b.das_id) === dasId && num(b.round_number) === 0)
+      .reduce((acc, b) => acc + num(b.budget_mad), 0);
+    const operatingBudgetMad = lastRevenue
+      ? num(lastRevenue.revenue_mad) * OPERATING_BUDGET_SHARE
+      : seededBudget;
+
     // Le tour effectif : le plus récent où une conception existe.
     const design = ((designs ?? []) as Row[])
       .filter((d) => str(d.das_id) === dasId)
@@ -147,6 +172,7 @@ export async function loadOrgContext(): Promise<OrgContext> {
     return {
       dasId,
       dasName: unit?.name ?? 'DAS',
+      operatingBudgetMad,
       inheritedFromRound: effectiveRound,
       structureType: str(design?.structure_type, 'fonctionnelle') as DasOrganisation['structureType'],
       delegationLevel: num(design?.delegation_level, 50),
@@ -325,10 +351,7 @@ export async function loadOrgContext(): Promise<OrgContext> {
       key: str(a.key), name: str(a.name), description: str(a.description),
     })),
     das,
-    // Assiette répartissable : la marge brute attendue, soit environ 30 % du CA
-    // du dernier exercice. C'est ce qu'il y a réellement à distribuer entre
-    // directions, pas le chiffre d'affaires lui-même.
-    operatingBudgetMad: num(pnl?.revenue_mad) * 0.30,
+    operatingBudgetMad: das.reduce((acc, d) => acc + d.operatingBudgetMad, 0),
     headcount: num(state?.headcount),
   };
 }

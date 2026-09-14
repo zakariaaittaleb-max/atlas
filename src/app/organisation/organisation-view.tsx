@@ -156,10 +156,10 @@ export function OrganisationView({
   }
 
   const budgetTotal = das.budgets.reduce((acc, b) => acc + b.budgetMad, 0);
-  const budgetShare = context.operatingBudgetMad > 0
-    ? budgetTotal / context.operatingBudgetMad
+  const budgetShare = das.operatingBudgetMad > 0
+    ? budgetTotal / das.operatingBudgetMad
     : 0;
-  const overBudget = budgetTotal > context.operatingBudgetMad;
+  const overBudget = budgetTotal > das.operatingBudgetMad;
   const keyCount = das.positions.filter((p) => p.isKeyPosition).length;
 
   // ── La synthèse, calculée comme les blocs la calculent ──────────────────
@@ -221,8 +221,8 @@ export function OrganisationView({
         value={formatPct(budgetShare, 0)}
         note={
           overBudget
-            ? `Dépassement de ${formatMadCompact(budgetTotal - context.operatingBudgetMad)}`
-            : `${formatMadCompact(budgetTotal)} sur ${formatMadCompact(context.operatingBudgetMad)}`
+            ? `Dépassement de ${formatMadCompact(budgetTotal - das.operatingBudgetMad)}`
+            : `${formatMadCompact(budgetTotal)} sur ${formatMadCompact(das.operatingBudgetMad)}`
         }
         hint="Part du budget de fonctionnement affectée aux directions de ce domaine."
       />
@@ -648,7 +648,7 @@ export function OrganisationView({
               title="Répartition des moyens"
               indicators={{ topic: 'org-moyens', dasId: activeDas }}
               status={!overBudget && budgetShare >= 0.95 ? 'done' : 'todo'}
-              summary={overBudget ? `dépassement ${formatMadCompact(budgetTotal - context.operatingBudgetMad)}` : `${formatPct(budgetShare, 0)} réparti`}
+              summary={overBudget ? `dépassement ${formatMadCompact(budgetTotal - das.operatingBudgetMad)}` : `${formatPct(budgetShare, 0)} réparti`}
               hint="Là où va l’argent dit ce que vous faites vraiment. Déclarer une différenciation en finançant la production comme une usine low-cost est l’incohérence que le moteur relève le plus sûrement."
             >
               {/* ── L'assiette, en permanence sous les yeux ──────────────────
@@ -658,7 +658,7 @@ export function OrganisationView({
               <dl className="tabular mb-4 grid gap-4 rounded-lg bg-(--surface-muted) p-4 text-sm sm:grid-cols-3">
                 <div>
                   <dt className="text-sm text-(--foreground-muted)">Budget total à répartir</dt>
-                  <dd className="font-mono text-base font-semibold">{formatMadCompact(context.operatingBudgetMad)}</dd>
+                  <dd className="font-mono text-base font-semibold">{formatMadCompact(das.operatingBudgetMad)}</dd>
                 </div>
                 <div>
                   <dt className="text-sm text-(--foreground-muted)">Réparti</dt>
@@ -669,7 +669,7 @@ export function OrganisationView({
                 <div>
                   <dt className="text-sm text-(--foreground-muted)">{overBudget ? 'Dépassement' : 'Non affecté'}</dt>
                   <dd className={`font-mono text-base font-semibold ${overBudget ? 'text-(--negative)' : ''}`}>
-                    {overBudget ? '− ' : ''}{formatMadCompact(Math.abs(context.operatingBudgetMad - budgetTotal))}
+                    {overBudget ? '− ' : ''}{formatMadCompact(Math.abs(das.operatingBudgetMad - budgetTotal))}
                   </dd>
                 </div>
               </dl>
@@ -688,15 +688,15 @@ export function OrganisationView({
                   // Le pourcentage porte sur l'ASSIETTE, pas sur ce qui est déjà
                   // réparti : sinon déplacer un curseur changerait le libellé de
                   // tous les autres sans que personne y ait touché.
-                  const pct = context.operatingBudgetMad > 0
-                    ? (budget / context.operatingBudgetMad) * 100
+                  const pct = das.operatingBudgetMad > 0
+                    ? (budget / das.operatingBudgetMad) * 100
                     : 0;
 
                   const setPct = (next: number) => {
                     const budgets = das.budgets.filter((b) => b.directionKey !== direction.key);
                     budgets.push({
                       directionKey: direction.key,
-                      budgetMad: Math.round((next / 100) * context.operatingBudgetMad),
+                      budgetMad: Math.round((next / 100) * das.operatingBudgetMad),
                     });
                     update({ budgets });
                     push('budgets', { budgets });
@@ -768,11 +768,11 @@ export function OrganisationView({
  */
 function basisFor(das: OrgContext['das'][number], context: OrgContext): VariationBasis {
   return {
-    treasuryMad: context.operatingBudgetMad,
+    treasuryMad: das.operatingBudgetMad,
     payrollMad: das.hrState?.payrollMad ?? 0,
     headcount: das.hrState?.headcount ?? context.headcount,
     smigMad: SMIG_MAD,
-    operatingBudgetMad: context.operatingBudgetMad,
+    operatingBudgetMad: das.operatingBudgetMad,
     directionCount: context.directions.length,
   };
 }
