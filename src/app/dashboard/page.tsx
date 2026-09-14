@@ -2,17 +2,17 @@ import { TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 
-import { CockpitView } from './cockpit-view';
+import { DashboardScreen } from './dashboard-screen';
 import { getRoundState, requireTeam } from '@/lib/dal';
 import { readDisplayConfig } from '@/lib/display-config';
 import { parseViewLevel, VIEW_COOKIE } from '@/lib/display-config-types';
 import { loadDashboardContext } from '@/lib/server/dashboard-context';
 import { treasuryLabel } from '@/lib/format';
 
-export const metadata = { title: 'Atlas — Cockpit' };
+export const metadata = { title: 'Atlas — Dashboard' };
 export const dynamic = 'force-dynamic';
 
-export default async function CockpitPage() {
+export default async function DashboardPage() {
   const team = await requireTeam();
   const [round, context, config, jar] = await Promise.all([
     getRoundState(team.sessionId),
@@ -29,7 +29,7 @@ export default async function CockpitPage() {
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-semibold tracking-wider text-(--accent-text) uppercase">
-            Cockpit · {currentRound === 0 ? 'Onboarding (T0)' : `Tour ${currentRound}`}
+            Dashboard · {currentRound === 0 ? 'Onboarding (T0)' : `Tour ${currentRound}`}
             {round?.planned_rounds ? ` sur ${round.planned_rounds} prévus` : null}
           </p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-(--heading)">{team.teamName}</h1>
@@ -53,7 +53,7 @@ export default async function CockpitPage() {
         </div>
       </header>
 
-      <CockpitView context={context} sections={config.sections} initialView={initialView} />
+      <DashboardScreen context={context} sections={config.sections} initialView={initialView} />
     </main>
   );
 }

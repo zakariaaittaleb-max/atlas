@@ -7,7 +7,7 @@ import { DataTable, downloadCsv, type DataColumn, type DataRow } from './data-ta
 import { InfoHint } from './info-hint';
 
 /**
- * Cadre commun à tous les graphiques du cockpit.
+ * Cadre commun à tous les graphiques du dashboard.
  *
  * Quatre promesses, tenues ici une fois pour toutes :
  *  • **chargement** — Recharts mesure le DOM : avant l'hydratation, un gabarit

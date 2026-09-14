@@ -51,7 +51,7 @@ beforeEach(() => {
 describe('proxy', () => {
   it('laisse tout passer quand les quatre mesures sont désactivées', async () => {
     mockReadSecurityConfig.mockResolvedValue(ALL_OFF);
-    const response = await proxy(makeRequest('/cockpit'));
+    const response = await proxy(makeRequest('/dashboard'));
     expect(response.headers.get('location')).toBeNull();
     expect(response.headers.get('Content-Security-Policy')).toBeNull();
     expect(response.status).toBeLessThan(300);
@@ -59,7 +59,7 @@ describe('proxy', () => {
 
   it('strict_auth redirige une page vers /login sans session', async () => {
     mockReadSecurityConfig.mockResolvedValue({ ...ALL_OFF, strict_auth: true });
-    const response = await proxy(makeRequest('/cockpit'));
+    const response = await proxy(makeRequest('/dashboard'));
     expect(response.status).toBeGreaterThanOrEqual(300);
     expect(response.status).toBeLessThan(400);
     expect(response.headers.get('location')).toContain('/login');
@@ -80,13 +80,13 @@ describe('proxy', () => {
   it('strict_auth laisse passer un utilisateur authentifié (même anonyme)', async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } } });
     mockReadSecurityConfig.mockResolvedValue({ ...ALL_OFF, strict_auth: true });
-    const response = await proxy(makeRequest('/cockpit'));
+    const response = await proxy(makeRequest('/dashboard'));
     expect(response.headers.get('location')).toBeNull();
   });
 
   it('security_headers ajoute Cache-Control, X-Robots-Tag, nosniff et une CSP', async () => {
     mockReadSecurityConfig.mockResolvedValue({ ...ALL_OFF, security_headers: true });
-    const response = await proxy(makeRequest('/cockpit'));
+    const response = await proxy(makeRequest('/dashboard'));
     expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(response.headers.get('X-Robots-Tag')).toContain('noindex');
     expect(response.headers.get('Cache-Control')).toContain('no-store');
@@ -119,7 +119,7 @@ describe('proxy', () => {
     mockReadSecurityConfig.mockResolvedValue({ ...ALL_OFF, rate_limit_api: true });
     const ip = '203.0.113.99';
     for (let i = 0; i < 150; i++) {
-      const response = await proxy(makeRequest('/cockpit', { ip }));
+      const response = await proxy(makeRequest('/dashboard', { ip }));
       expect(response.status).not.toBe(429);
     }
   });

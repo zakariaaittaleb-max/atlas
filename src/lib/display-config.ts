@@ -6,7 +6,7 @@ import 'server-only';
  * Même mécanique que `security-config.ts` : une ligne en base (migration 0042),
  * un cache mémoire court pour ne pas interroger Supabase à chaque rendu, et un
  * repli sur les valeurs par défaut si la base ne répond pas — mieux vaut un
- * cockpit complet qu'un cockpit vide.
+ * dashboard complet qu'un dashboard vide.
  */
 
 import { createAdminClient } from './supabase/server';

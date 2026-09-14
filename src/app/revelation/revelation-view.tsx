@@ -465,7 +465,7 @@ export function RevelationView({
         <button
           type="button"
           disabled={!nextRoundOpen}
-          onClick={() => router.push('/cockpit')}
+          onClick={() => router.push('/dashboard')}
           className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-6 py-3 font-medium text-(--on-accent) disabled:opacity-40"
         >
           Continuer vers le tour suivant

@@ -4,5 +4,5 @@ import { getTeamContext } from '@/lib/dal';
 
 export default async function RootPage() {
   const context = await getTeamContext();
-  redirect(context ? '/cockpit' : '/login');
+  redirect(context ? '/dashboard' : '/login');
 }

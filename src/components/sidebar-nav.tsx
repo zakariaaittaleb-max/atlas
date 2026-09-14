@@ -30,7 +30,7 @@ export interface NavGroup {
 }
 
 const ICONS = {
-  cockpit: Gauge,
+  dashboard: Gauge,
   strategie: Compass,
   operations: Factory,
   conseils: BriefcaseBusiness,

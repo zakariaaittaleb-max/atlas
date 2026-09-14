@@ -546,7 +546,7 @@ export function qualityFocusFactor(
  *
  * Ce n'était pas un détail d'affichage : c'est cette valeur que lit le
  * Balanced Scorecard pour noter la dimension sociale en fin de partie, et
- * c'est elle que le cockpit affiche tout au long.
+ * c'est elle que le dashboard affiche tout au long.
  *
  * Un groupe n'a pas de climat propre — il a celui de ses équipes, pondéré par
  * leurs effectifs. Un domaine de quarante personnes en souffrance ne compense

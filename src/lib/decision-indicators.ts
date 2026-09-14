@@ -4,11 +4,11 @@
  * Un prix se juge à la part de marché qu'il gagne et à la marge qu'il coûte ;
  * un volume d'achat au stock et aux ventes perdues ; un investissement à
  * l'outil qu'il sature et à la trésorerie qu'il consomme. Chaque bloc de
- * décision a donc SA fiche : quelques chiffres choisis, jamais le cockpit
+ * décision a donc SA fiche : quelques chiffres choisis, jamais le dashboard
  * entier recopié.
  *
  * Module pur et client-safe : la route `/api/indicators` l'appelle avec le
- * contexte du cockpit, la fenêtre n'en importe que les types. Les chiffres sont
+ * contexte du dashboard, la fenêtre n'en importe que les types. Les chiffres sont
  * ceux du dernier exercice clos — une décision se prend en regardant d'où l'on
  * part, pas en devinant où l'on arrivera.
  */
@@ -80,7 +80,7 @@ interface Metric {
   hint: string;
 }
 
-/** Unités et libellés identiques à ceux du cockpit : un chiffre ne change pas de nom d'un écran à l'autre. */
+/** Unités et libellés identiques à ceux du dashboard : un chiffre ne change pas de nom d'un écran à l'autre. */
 const GROUP_METRICS: Record<GroupKey, Metric> = {
   treasuryMad: {
     label: 'Trésorerie du Groupe', unit: 'DH', polarity: 'normal',

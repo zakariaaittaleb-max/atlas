@@ -33,10 +33,10 @@ import { loadPresenceContext } from '@/lib/server/presence-context';
 /** Les écrans, rangés par niveau de décision (doc 00 §8 : deux niveaux au plus). */
 const GROUPS: NavGroup[] = [
   {
-    id: 'cockpit',
-    label: 'Cockpit',
-    icon: 'cockpit',
-    links: [{ href: '/cockpit', label: 'Cockpit' }],
+    id: 'dashboard',
+    label: 'Dashboard',
+    icon: 'dashboard',
+    links: [{ href: '/dashboard', label: 'Dashboard' }],
   },
   {
     id: 'strategie',
@@ -111,11 +111,11 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
   ]);
 
   // Un écran dont plus aucun champ n'est ouvert n'a rien à montrer : garder son
-  // lien ferait croire à une panne à qui l'ouvrirait. Le Cockpit et la
+  // lien ferait croire à une panne à qui l'ouvrirait. Le Dashboard et la
   // Révélation ne sont pas des écrans de saisie et restent toujours là.
   const openScreens = openScreenHrefs(modules);
   const visible = (href: string) =>
-    href === '/cockpit' || href === '/revelation' || openScreens.has(href);
+    href === '/dashboard' || href === '/revelation' || openScreens.has(href);
   const groups = GROUPS
     .map((group) => ({ ...group, links: group.links.filter((link) => visible(link.href)) }))
     .filter((group) => group.links.length > 0);
@@ -212,7 +212,7 @@ const TRACKED_SCREENS = ['/strategie', '/strategie/das', '/marches', '/organisat
  *
  * ── POURQUOI ICI ───────────────────────────────────────────────────────────
  * Le compte des décisions manquantes n'apparaissait qu'en bas des écrans de
- * saisie. Une équipe sur le cockpit ou au cabinet ne savait pas qu'il lui
+ * saisie. Une équipe sur le dashboard ou au cabinet ne savait pas qu'il lui
  * restait les achats à renseigner, et le découvrait au verrouillage. La
  * navigation est le seul endroit visible depuis tous les écrans.
  *

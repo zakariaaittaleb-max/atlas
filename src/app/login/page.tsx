@@ -9,7 +9,7 @@ export const metadata = {
 
 export default async function LoginPage() {
   const context = await getTeamContext();
-  if (context) redirect("/cockpit");
+  if (context) redirect("/dashboard");
 
   const user = await getUser();
   if (user && !user.is_anonymous) redirect("/facilitateur");

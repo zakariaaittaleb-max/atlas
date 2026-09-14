@@ -15,6 +15,15 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/api/facilitator/document": ["./src/content/**"],
   },
+
+  /**
+   * Le « Cockpit » s'appelle désormais « Dashboard ». Les favoris des
+   * participants et les liens déjà distribués en salle pointent encore sur
+   * l'ancienne adresse : ils suivent, au lieu d'aboutir sur une 404.
+   */
+  async redirects() {
+    return [{ source: "/cockpit", destination: "/dashboard", permanent: true }];
+  },
 };
 
 export default nextConfig;

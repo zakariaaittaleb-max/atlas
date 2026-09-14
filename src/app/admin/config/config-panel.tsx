@@ -63,7 +63,7 @@ export function ConfigPanel({
   return (
     <div className="space-y-10">
       <Group
-        title="Sections du cockpit"
+        title="Sections du dashboard"
         hint={
           hiddenCount === 0
             ? 'Toutes les sections sont visibles.'
@@ -104,7 +104,7 @@ export function ConfigPanel({
         />
       </Group>
 
-      <Group title="Vue par défaut du cockpit" hint="Chaque membre peut ensuite changer de niveau ; son choix est retenu sur son appareil.">
+      <Group title="Vue par défaut du dashboard" hint="Chaque membre peut ensuite changer de niveau ; son choix est retenu sur son appareil.">
         <div className="rounded-xl border border-(--border) bg-(--surface) p-5">
           <MetricToggle
             variant="segmented"

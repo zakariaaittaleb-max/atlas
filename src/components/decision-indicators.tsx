@@ -5,7 +5,7 @@
  *
  * ── POURQUOI ───────────────────────────────────────────────────────────────
  * On arbitrait un prix sans voir sa part de marché, un volume d'achat sans voir
- * ses ventes perdues : les chiffres existaient, mais sur le cockpit, à deux
+ * ses ventes perdues : les chiffres existaient, mais sur le dashboard, à deux
  * écrans de là. Recopier ces cartes sous chaque décision aurait noyé la saisie ;
  * elles restent donc à un geste, et ne montrent que ce qui éclaire la décision
  * ouverte.
@@ -104,7 +104,7 @@ export function IndicatorsButton({
         footer={
           <>
             <Link
-              href="/cockpit"
+              href="/dashboard"
               className="mr-auto text-sm font-medium text-(--accent-text) underline underline-offset-4"
             >
               Tout le tableau de bord

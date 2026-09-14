@@ -7,7 +7,7 @@
  * à l'ouverture plutôt qu'avec la page garde les écrans de saisie aussi légers
  * qu'avant : la plupart des blocs ne seront jamais ouverts.
  *
- * La donnée est celle du cockpit (`loadDashboardContext`), lue avec le client
+ * La donnée est celle du dashboard (`loadDashboardContext`), lue avec le client
  * de l'équipe, donc soumise à la RLS : une équipe n'obtient ici rien qu'elle ne
  * voie déjà sur son tableau de bord. La sélection et la mise en forme vivent
  * dans `lib/decision-indicators.ts`, pure et testée.

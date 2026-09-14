@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Le cockpit suit le domaine choisi dans la barre du haut, comme les écrans de
+ * Le dashboard suit le domaine choisi dans la barre du haut, comme les écrans de
  * saisie. Ce composant n'existe que pour lire ce périmètre : `useDasScope` est
  * un hook client, et la page qui charge les données est un composant serveur.
  */
@@ -11,7 +11,7 @@ import { DashboardView } from '@/components/dashboard-view';
 import type { DashboardContext } from '@/lib/dashboard-types';
 import type { DashboardSectionKey, ViewLevel } from '@/lib/display-config-types';
 
-export function CockpitView({
+export function DashboardScreen({
   context,
   sections,
   initialView,

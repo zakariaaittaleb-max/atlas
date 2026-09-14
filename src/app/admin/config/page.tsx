@@ -46,7 +46,7 @@ export default async function DisplayConfigPage() {
         </h1>
         <p className="mt-2 max-w-2xl text-(--foreground-muted)">
           Ce que les équipes voient, et comment. Masquer une section retire son onglet du
-          cockpit sans rien effacer : ses données restent calculées et reviennent à
+          dashboard sans rien effacer : ses données restent calculées et reviennent à
           l’identique dès qu’elle est rallumée. Effet en quelques secondes, sans redéploiement.
         </p>
       </header>

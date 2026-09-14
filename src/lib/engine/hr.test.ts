@@ -305,7 +305,7 @@ describe('orientation de la formation', () => {
 describe('consolidateClimate', () => {
   /**
    * Le défaut corrigé : deux modèles de climat coexistaient, et le plus
-   * grossier alimentait le cockpit ET le Balanced Scorecard. Sans décision RH
+   * grossier alimentait le dashboard ET le Balanced Scorecard. Sans décision RH
    * il rendait exactement la valeur précédente — sur une partie de dix tours,
    * le climat de groupe restait figé à sa valeur de départ, quelle que soit la
    * charge que les équipes faisaient peser sur leurs effectifs.

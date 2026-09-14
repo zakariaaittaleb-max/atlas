@@ -2,10 +2,10 @@
  * ATLAS — configuration d'affichage, types et valeurs par défaut.
  *
  * Module pur, sans dépendance serveur : le panneau `/admin/config` (client)
- * et le cockpit l'importent tels quels, comme `security-config-types.ts`.
+ * et le dashboard l'importent tels quels, comme `security-config-types.ts`.
  *
  * ── RIEN N'EST SUPPRIMÉ, TOUT EST RANGÉ ────────────────────────────────────
- * Masquer une section retire son onglet du cockpit, pas ses données : elles
+ * Masquer une section retire son onglet du dashboard, pas ses données : elles
  * restent calculées, exportées, et réapparaissent à l'identique dès que la
  * section est rallumée.
  */
@@ -18,7 +18,7 @@ export type DashboardSectionKey =
   | 'matrices';
 
 /**
- * Niveau de lecture du cockpit. Ce ne sont PAS des rôles : chaque membre d'une
+ * Niveau de lecture du dashboard. Ce ne sont PAS des rôles : chaque membre d'une
  * équipe choisit la profondeur qui lui convient au moment où il consulte.
  */
 export type ViewLevel = 'pilote' | 'gestionnaire' | 'analyste';

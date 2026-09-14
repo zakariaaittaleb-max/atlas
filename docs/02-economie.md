@@ -195,7 +195,7 @@ est décisif. **Le même investissement est bon ou mauvais selon la stratégie.*
 
 ### 4.3 Point mort
 
-Affiché en permanence dans le cockpit — c'est l'indicateur qui force le débat :
+Affiché en permanence dans le dashboard — c'est l'indicateur qui force le débat :
 
 ```
 point_mort_volume = coûts_fixes_totaux

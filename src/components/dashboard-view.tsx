@@ -135,9 +135,9 @@ export function DashboardView({
   if (visibleSections.length === 0 || activeTab === null) {
     return (
       <section className="rounded-xl border border-(--border) bg-(--surface) p-8">
-        <h2 className="text-2xl font-semibold text-(--heading)">Cockpit masqué</h2>
+        <h2 className="text-2xl font-semibold text-(--heading)">Dashboard masqué</h2>
         <p className="mt-3 max-w-2xl text-(--foreground-muted)">
-          L’animateur a masqué toutes les sections du cockpit pour ce moment de la partie. Vos
+          L’animateur a masqué toutes les sections du dashboard pour ce moment de la partie. Vos
           données sont intactes et réapparaîtront dès qu’il les rallumera.
         </p>
       </section>
@@ -223,7 +223,7 @@ function SectionTabs({
     <div
       ref={list}
       role="tablist"
-      aria-label="Thèmes du cockpit"
+      aria-label="Thèmes du dashboard"
       onKeyDown={onKeyDown}
       className="flex gap-1 overflow-x-auto border-b border-(--border)"
     >

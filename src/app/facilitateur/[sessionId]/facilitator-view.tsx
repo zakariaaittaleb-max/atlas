@@ -883,7 +883,7 @@ function JoinTeamBlock({
         setError(result.error);
         return;
       }
-      router.push('/cockpit');
+      router.push('/dashboard');
     });
   }
 

@@ -112,7 +112,7 @@ function ParticipantForm() {
       }
 
       startTransition(() => {
-        router.replace("/cockpit");
+        router.replace("/dashboard");
         router.refresh();
       });
     } catch {

@@ -9,7 +9,7 @@ import 'server-only';
  * les études achetées, dont le livrable est archivé sur la commande.
  *
  * ── TOUT EST EN SÉRIE ──────────────────────────────────────────────────────
- * Le cockpit comparait deux tours et montrait six nombres. Savoir que sa marge
+ * Le dashboard comparait deux tours et montrait six nombres. Savoir que sa marge
  * vaut 12 % ne dit pas si l'on vient de la doubler ou de la diviser par deux ;
  * c'est pourtant la seule question qui change une décision. Chaque indicateur
  * est donc chargé sur TOUS les tours résolus.

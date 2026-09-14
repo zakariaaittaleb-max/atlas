@@ -1754,7 +1754,7 @@ export function resolveRound(
       alignment,
       // Le climat et l'effectif du groupe sont la CONSOLIDATION de ses
       // domaines, non un second calcul. Deux modèles coexistaient, et le plus
-      // grossier alimentait le cockpit et le Balanced Scorecard.
+      // grossier alimentait le dashboard et le Balanced Scorecard.
       climatSocial: consolidateClimate(teamHrStates, team.previousClimatSocial),
       headcount: consolidateHeadcount(teamHrStates, headcount),
       centralisationIndex: corporate.centralisation,

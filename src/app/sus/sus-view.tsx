@@ -126,7 +126,7 @@ export function SusView({
     return (
       <main className="mx-auto w-full min-w-0 max-w-2xl px-6 py-10">
         <p className="mb-6 text-sm text-(--foreground-muted)">
-          <Link href="/cockpit" className="hover:underline">← Retour au cockpit</Link>
+          <Link href="/dashboard" className="hover:underline">← Retour au dashboard</Link>
         </p>
         <ResultCard score={result.score} aggregate={result.aggregate} />
       </main>
@@ -137,7 +137,7 @@ export function SusView({
     <main className="mx-auto w-full min-w-0 max-w-2xl px-6 py-10">
       <header className="mb-6">
         <p className="mb-3 text-sm text-(--foreground-muted)">
-          <Link href="/cockpit" className="hover:underline">← Retour au cockpit</Link>
+          <Link href="/dashboard" className="hover:underline">← Retour au dashboard</Link>
         </p>
         <p className="text-xs font-medium uppercase tracking-wide text-(--accent)">Panel de test · réponse individuelle</p>
         <h1 className="text-2xl font-bold text-(--heading)">Questionnaire de satisfaction — Atlas</h1>
