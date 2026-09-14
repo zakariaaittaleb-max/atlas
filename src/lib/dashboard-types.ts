@@ -107,6 +107,10 @@ export interface DashboardContext {
    * calculés qu'à la première résolution.
    */
   resolvedRounds: number;
+  /** Chiffre d'affaires médian des groupes du pool au dernier exercice clos ; `null` sans repère. */
+  poolRevenueMedianMad: number | null;
+  /** Nombre de groupes derrière la médiane. */
+  poolTeams: number;
   treasuryStatus: string;
   group: GroupPoint[];
   das: DasSeries[];

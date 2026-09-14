@@ -167,10 +167,14 @@ export function LeversSection({
 }) {
   if (levers.length === 0) return null;
   const states = leverStates(levers, finance, limits, dasCount);
+  const isOut = (key: string) => ['closed', 'blocked'].includes(states.get(key)!.status);
+  const actionable = levers.filter((lever) => !isOut(lever.key));
+  const unavailable = levers.filter((lever) => isOut(lever.key));
 
   return (
+    <>
     <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">
-      {levers.map((lever) => {
+      {actionable.map((lever) => {
         const state = states.get(lever.key)!;
         const status = STATUS[state.status];
         const StatusIcon = status.icon;
@@ -250,5 +254,22 @@ export function LeversSection({
         );
       })}
     </ul>
+    {/* Fermés ou indisponibles : une ligne qui dit pourquoi, au lieu de cartes
+        de même taille que les leviers qu'on peut réellement actionner. */}
+    {unavailable.length > 0 ? (
+      <p className="mt-3 text-sm text-(--foreground-muted)">
+        <span className="font-medium text-(--foreground)">Pas actionnables ce tour : </span>
+        {unavailable.map((lever, index) => {
+          const state = states.get(lever.key)!;
+          return (
+            <span key={lever.key}>
+              {index > 0 ? ' · ' : ''}
+              {state.title} ({state.line.charAt(0).toLowerCase() + state.line.slice(1)})
+            </span>
+          );
+        })}
+      </p>
+    ) : null}
+    </>
   );
 }

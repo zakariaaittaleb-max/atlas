@@ -66,6 +66,11 @@ export async function loadDasScope(): Promise<DasScope | null> {
     .eq('team_id', team.teamId)
     .lte('round_number', Number(round?.current_round ?? 0));
 
+  const { data: benchmarks } = await supabase
+    .from('pool_das_benchmark')
+    .select('das_id, round_number, median_market_share')
+    .lte('round_number', Number(round?.current_round ?? 0));
+
   const vitals = computeDasVitals(
     (metrics ?? []).map((m) => ({
       dasId: String(m.das_id),
@@ -75,6 +80,11 @@ export async function loadDasScope(): Promise<DasScope | null> {
       ebitdaMad: m.ebitda_mad === null ? null : Number(m.ebitda_mad),
     })),
     das.map((d) => d.dasId),
+    (benchmarks ?? []).map((b) => ({
+      dasId: String(b.das_id),
+      roundNumber: Number(b.round_number),
+      medianShare: Number(b.median_market_share ?? 0),
+    })),
   );
   const withVitals = das.map((d) => ({ ...d, vitals: vitals.get(d.dasId) ?? null }));
 

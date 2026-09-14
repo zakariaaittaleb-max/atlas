@@ -59,6 +59,8 @@ function context(patch: Partial<DashboardContext> = {}): DashboardContext {
     roundNumber: 2,
     hasResults: true,
     resolvedRounds: 1,
+    poolRevenueMedianMad: null,
+    poolTeams: 0,
     treasuryStatus: 'sain',
     group: [groupPoint(1), groupPoint(2, { treasuryMad: 17_000_000_000 })],
     das: [das('agro', 'Micarom', [dasPoint(1, { marketSharePct: 10 }), dasPoint(2)])],

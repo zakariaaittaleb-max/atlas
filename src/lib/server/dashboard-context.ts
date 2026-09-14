@@ -166,11 +166,20 @@ export async function loadDashboardContext(): Promise<DashboardContext> {
     };
   });
 
+  // Le repère du pool, sur le même exercice que le dernier point du Groupe.
+  const lastGroupRound = group.at(-1)?.roundNumber ?? null;
+  const { data: benchmarks } = await supabase
+    .from('pool_group_benchmark')
+    .select('round_number, median_group_revenue_mad, teams');
+  const benchmark = ((benchmarks ?? []) as Row[]).find((b) => num(b.round_number) === lastGroupRound);
+
   return {
     teamName: team.teamName,
     roundNumber,
     hasResults: group.length > 0,
     resolvedRounds: group.filter((p) => p.roundNumber >= 1).length,
+    poolRevenueMedianMad: benchmark ? num(benchmark.median_group_revenue_mad) : null,
+    poolTeams: benchmark ? num(benchmark.teams) : 0,
     treasuryStatus: str(stateByRound.get(lastRound)?.treasury_status, 'sain'),
     group,
     das,

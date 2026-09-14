@@ -313,6 +313,43 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
       'La part du processus prise en charge par la machine. Elle abaisse le coût variable, alourdit les coûts fixes, et inquiète le corps social quand elle progresse vite.',
     example: 'Passer de 30 à 55 en un tour abaisse le coût unitaire et coûte une dizaine de points de climat.',
   },
+  // ── Stratégie : les termes du programme ──────────────────────────────────
+  DAS: {
+    definition: 'Domaine d’activité stratégique : un métier distinct du Groupe, avec son marché, ses concurrents et ses propres décisions.',
+    example: 'Un Groupe présent dans l’agro-industrie et le textile pilote 2 DAS : chacun a son prix, ses segments et ses investissements.',
+  },
+  PESTEL: {
+    definition: 'Grille d’analyse de l’environnement : facteurs Politiques, Économiques, Socioculturels, Technologiques, Écologiques et Légaux.',
+    example: 'Une hausse de 0,5 point du taux directeur est un facteur économique : elle renchérit le crédit de tous vos DAS.',
+  },
+  'Matrice BCG': {
+    definition: 'Classement des DAS selon la croissance de leur marché et leur part de marché relative : vedettes, vaches à lait, dilemmes et poids morts.',
+    example: 'Un DAS à 45 % de part de marché sur un marché qui croît de 2 % par an est une vache à lait : il finance les autres.',
+  },
+  'Océan bleu': {
+    definition: 'Stratégie qui crée un espace de marché sans concurrence directe, en alliant différenciation et coûts contenus.',
+    example: 'Servir un segment délaissé à 80 % du prix du marché avec une qualité supérieure, là où aucun concurrent n’est présent.',
+  },
+  'Stratégie générique': {
+    definition: 'Le mode d’avantage concurrentiel d’un DAS selon Porter : domination par les coûts, différenciation ou concentration.',
+    example: 'En domination par les coûts, un DAS vise le prix le plus bas de son marché, par exemple 85 % du prix moyen.',
+  },
+  'Balanced Scorecard': {
+    definition: 'Tableau de bord équilibré sur quatre axes : financier, clients, processus internes, apprentissage.',
+    example: 'Un résultat net en hausse avec un climat social à 45 sur 100 : axe financier fort, axe apprentissage en alerte.',
+  },
+  'Due diligence': {
+    definition: 'Audit d’une cible avant son rachat : chiffres réels, marge, appétence à céder et passifs non déclarés.',
+    example: 'Une due diligence approfondie à 660 k DH révèle 10,6 Md DH de passifs cachés chez une cible de 42 Md DH de chiffre d’affaires.',
+  },
+  'Cash pooling': {
+    definition: 'Mise en commun de la trésorerie du Groupe entre ses DAS : ce que l’un reçoit, un autre le cède.',
+    example: 'Transférer 1,2 Md DH de la vache à lait vers la vedette ne change pas la trésorerie du Groupe, seulement sa répartition.',
+  },
+  'Prix de réserve': {
+    definition: 'Le prix en dessous duquel une cible refuse toute offre d’acquisition.',
+    example: 'Une cible de 10 Md DH de chiffre d’affaires, dans un secteur valorisé 5 fois ce chiffre, refuse toute offre sous 11,4 à 17,5 Md DH.',
+  },
 };
 
 /**

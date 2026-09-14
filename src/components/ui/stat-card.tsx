@@ -27,6 +27,7 @@ export function StatCard({
   trend,
   source,
   note,
+  benchmark,
   size = 'md',
   polarity,
   /** Pour un indicateur où la baisse est une bonne nouvelle (coût, pression). */
@@ -43,6 +44,8 @@ export function StatCard({
   source?: string;
   /** Remplace « Premier tour — pas de comparaison » quand il n'y a pas d'écart chiffrable. */
   note?: string;
+  /** Repère de comparaison au pool, affiché sous la variation. */
+  benchmark?: string;
   /** `sm` pour une valeur en mots plutôt qu'en chiffres. */
   size?: 'md' | 'sm';
   polarity?: Polarity;
@@ -81,6 +84,7 @@ export function StatCard({
           <span className="text-sm text-(--meta)">{note ?? 'Premier tour — pas de comparaison'}</span>
         )}
       </div>
+      {benchmark ? <p className="tabular mt-1 text-sm text-(--meta)">{benchmark}</p> : null}
 
       {trend && trend.length > 1 ? (
         <Sparkline values={trend} className="mt-4" label={`Trajectoire : ${label}`} />

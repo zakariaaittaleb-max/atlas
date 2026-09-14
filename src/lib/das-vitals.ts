@@ -32,6 +32,8 @@ export interface DasVitals {
   weightInGroup: number | null;
   /** EBITDA ÷ chiffre d'affaires, en fraction. */
   margin: number | null;
+  /** Part de marché médiane du pool sur ce domaine, au même exercice ; `null` sans repère. */
+  poolMedianShare: number | null;
 }
 
 export interface DasMetricRow {
@@ -49,7 +51,11 @@ export interface DasMetricRow {
  * seuls domaines du portefeuille (`dasIds`) : un domaine cédé ne compte plus
  * dans le Groupe qu'il a quitté.
  */
-export function computeDasVitals(rows: DasMetricRow[], dasIds: string[]): Map<string, DasVitals> {
+export function computeDasVitals(
+  rows: DasMetricRow[],
+  dasIds: string[],
+  benchmarks: { dasId: string; roundNumber: number; medianShare: number }[] = [],
+): Map<string, DasVitals> {
   const result = new Map<string, DasVitals>();
   const owned = new Set(dasIds);
   const mine = rows.filter((r) => owned.has(r.dasId));
@@ -81,6 +87,8 @@ export function computeDasVitals(rows: DasMetricRow[], dasIds: string[]): Map<st
           : null,
       weightInGroup: groupRevenue > 0 ? Math.max(revenue, 0) / groupRevenue : null,
       margin: revenue > 0 && last.ebitdaMad !== null ? last.ebitdaMad / revenue : null,
+      poolMedianShare:
+        benchmarks.find((b) => b.dasId === dasId && b.roundNumber === last.roundNumber)?.medianShare ?? null,
     });
   }
 

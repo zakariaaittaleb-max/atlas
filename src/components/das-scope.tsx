@@ -187,7 +187,14 @@ function DasVitalsLine({ das }: { das: DasOption | null }) {
           label="Part de marché"
           value={formatPct(v.marketShare)}
           // Une part inchangée ne s'annonce pas « ↑ +0,0 pt » : seul un écart d'au moins 0,05 point s'écrit.
-          detail={v.marketShareDelta !== null && Math.abs(v.marketShareDelta) >= 0.0005 ? `${formatSharePoints(v.marketShareDelta)} pt` : undefined}
+          detail={
+            [
+              v.marketShareDelta !== null && Math.abs(v.marketShareDelta) >= 0.0005
+                ? `${formatSharePoints(v.marketShareDelta)} pt`
+                : null,
+              v.poolMedianShare !== null ? `médiane du pool ${formatPct(v.poolMedianShare)}` : null,
+            ].filter(Boolean).join(' · ') || undefined
+          }
         />
         <Vital label="Poids dans le Groupe" value={formatPct(v.weightInGroup, 0)} />
         <Vital
@@ -199,7 +206,7 @@ function DasVitalsLine({ das }: { das: DasOption | null }) {
       <InfoHint label="Chiffres du domaine">
         {v.roundNumber >= 0 ? `Exercice ${v.roundNumber}, le dernier clos. ` : 'Chiffres de la dotation. '}
         Croissance : variation du chiffre d’affaires sur l’exercice précédent. Poids : part du
-        chiffre d’affaires du Groupe. Marge : EBITDA rapporté au chiffre d’affaires.
+        chiffre d’affaires du Groupe. Marge : EBITDA rapporté au chiffre d’affaires. Médiane du pool : part de marché médiane des groupes sur ce domaine, au même exercice.
       </InfoHint>
     </div>
   );

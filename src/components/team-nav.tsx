@@ -2,6 +2,7 @@ import { Lock } from 'lucide-react';
 import { cookies } from 'next/headers';
 
 import { DasSwitcher } from '@/components/das-scope';
+import { GlossaryButton } from '@/components/glossary-modal';
 import { PresenceBar } from '@/components/presence-bar';
 import { SidebarNav, type NavGroup } from '@/components/sidebar-nav';
 import { TeamChrome } from '@/components/team-chrome';
@@ -178,7 +179,7 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
             {money ? (
               <>
               {config.showBudget ? (
-                <MoneyItem label="Vous disposez de" value={formatMadCompact(money.availableMad)}>
+                <MoneyItem label="Vous disposez de" value={formatMadCompact(money.availableMad)} className="max-sm:hidden">
                   {config.showCredits && money.drawnThisRoundMad > 0 ? (
                     <span className="text-sm text-(--meta)">
                       dont {formatMadCompact(money.drawnThisRoundMad)} de crédit pris
@@ -199,14 +200,16 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
                 />
               ) : null}
               {config.showCredits && money.debtOutstandingMad > 0 ? (
-                <MoneyItem label="Crédits en cours" value={formatMadCompact(money.debtOutstandingMad)} />
+                <MoneyItem label="Crédits en cours" value={formatMadCompact(money.debtOutstandingMad)} className="max-sm:hidden" />
               ) : null}
               </>
             ) : null}
             {/* Un seul abonnement de présence par onglet : le canal temps réel
                 refuse un second abonné au même nom. */}
-            <span className="ml-auto flex items-center gap-4 self-center">
-              {presence ? <PresenceBar context={presence} /> : null}
+            <span className="ml-auto flex items-center gap-3 self-center">
+              {/* Sur téléphone, on consulte : la présence s'efface derrière les chiffres. */}
+              {presence ? <span className="max-sm:hidden"><PresenceBar context={presence} /></span> : null}
+              <GlossaryButton />
               <ThemeToggle initial={themeChoice} />
             </span>
           </div>
@@ -261,15 +264,17 @@ async function screensToFill(modules: EnabledModules): Promise<Record<string, nu
 }
 
 function MoneyItem({
-  label, value, tone, children,
+  label, value, tone, children, className = '',
 }: {
+  /** Sur téléphone, seuls « Engagé » et « Il vous reste » tiennent la ligne. */
+  className?: string;
   label: string;
   value: string;
   tone?: 'negative';
   children?: React.ReactNode;
 }) {
   return (
-    <span className="flex flex-wrap items-baseline gap-x-2">
+    <span className={`flex flex-wrap items-baseline gap-x-2 ${className}`}>
       <span className="text-(--foreground-muted)">{label}</span>
       <strong
         className={`font-mono font-semibold ${tone === 'negative' ? 'text-(--negative)' : 'text-(--foreground)'}`}

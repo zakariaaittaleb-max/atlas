@@ -58,6 +58,7 @@ import { DataTable, downloadCsv, type DataColumn, type DataRow } from '@/compone
 import { InfoHint } from '@/components/ui/info-hint';
 import { MetricToggle } from '@/components/ui/metric-toggle';
 import { StatCard } from '@/components/ui/stat-card';
+import { formatSignedPct } from '@/lib/das-vitals';
 import type { FieldDisclosure } from '@/lib/consulting-types';
 import type {
   CabinetOverlay, DasSeries, DashboardContext, GroupPoint,
@@ -269,6 +270,11 @@ function PilotView({
   const last = group[group.length - 1];
   const previous = group[group.length - 2];
   const trend = (key: keyof GroupPoint) => group.map((p) => p[key] as number);
+  // Se situer dans son pool : une médiane sur au moins deux groupes, sinon rien.
+  const revenueBenchmark =
+    context.poolRevenueMedianMad && context.poolTeams > 1
+      ? `Médiane du pool : ${formatMadCompact(context.poolRevenueMedianMad)} (${formatSignedPct(last.revenueMad / context.poolRevenueMedianMad - 1)})`
+      : undefined;
   const card = (key: 'treasuryMad' | 'revenueMad' | 'netIncomeMad' | 'iaScore', label: string, unit: string) =>
     context.resolvedRounds === 0 && RESULT_METRICS.has(key) ? (
       <StatCard key={key} label={label} value="—" note={NOT_YET_PUBLISHED} />
@@ -279,6 +285,7 @@ function PilotView({
         value={show(last[key], unit)}
         delta={previous ? delta(last[key], previous[key], (v) => show(v, unit)) : null}
         trend={trend(key)}
+        benchmark={key === 'revenueMad' ? revenueBenchmark : undefined}
       />
     );
 
