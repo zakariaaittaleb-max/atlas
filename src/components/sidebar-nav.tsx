@@ -148,7 +148,7 @@ export function SidebarNav(props: SidebarProps) {
 }
 
 function NavBody({
-  groups, roundLabel, statusLabel, decisionsOpen, showSurvey, showAdmin, todo,
+  groups, roundLabel, statusLabel, decisionsOpen, showSurvey, showAdmin, todo = {},
   collapsed, onNavigate, onExpandRequest,
 }: SidebarProps & {
   collapsed: boolean;

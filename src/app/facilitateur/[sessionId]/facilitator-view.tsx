@@ -4,27 +4,36 @@
  * ATLAS — pilotage de session.
  *
  * L'écran du formateur, conçu pour être utilisé DEBOUT, dans une salle bruyante,
- * pendant qu'on lui pose des questions. D'où trois partis pris :
+ * pendant qu'on lui pose des questions.
  *
- *   • **L'avancement des équipes tient en un coup d'œil.** Le formateur doit
- *     savoir qui traîne sans interroger chaque table.
- *   • **Les gestes irréversibles sont confirmés.** Verrouiller un tour ou
- *     résoudre engage toute la salle : un clic malheureux ne doit pas suffire.
- *   • **Les échecs de résolution sont affichés en clair.** Si un invariant a
- *     sauté, le formateur doit le voir et savoir que rien n'a été écrit —
- *     pas découvrir un classement faux projeté au mur.
+ * ── CE QUE LA REFONTE A CHANGÉ ─────────────────────────────────────────────
+ * La page empilait douze sections sur 6 600 px : les trois gestes qui font
+ * avancer la partie (ouvrir, verrouiller, résoudre) côtoyaient la composition
+ * de cartes sur mesure et les échelles de variation, que l'on règle une fois
+ * avant la séance. Pour verrouiller, on remontait ; pour arbitrer la War Room,
+ * on redescendait.
+ *
+ *   • **La conduite reste en haut, collée.** L'état du tour en étapes, et LE
+ *     geste suivant mis en avant — il n'y en a jamais qu'un qui fasse avancer
+ *     la partie. Les autres restent à portée, en second rang.
+ *   • **Le reste est rangé par moment d'usage**, en onglets : ce qu'on suit
+ *     pendant le tour, ce qu'on déclenche sur le marché, ce qu'on règle avant,
+ *     ce qu'on ouvre au débriefing. L'onglet retenu vit dans l'URL.
+ *   • **Les gestes irréversibles restent confirmés**, et les échecs de
+ *     résolution s'affichent en clair dans la barre de conduite, là où l'on
+ *     regarde au moment où ils surviennent.
  */
 
+import { Check, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Fragment, useEffect, useRef, useState, useTransition } from 'react';
 
 import type { DifficultyDials } from '@/lib/difficulty-types';
+import { formatMadCompact, formatScore, sessionStatusLabel, treasuryLabel } from '@/lib/format';
 
-import { SettingsSection } from './settings-section';
 import { SessionBriefing } from './session-briefing';
-import { Fragment, useState, useTransition } from 'react';
-
-import { formatMadCompact, formatScore, treasuryLabel, sessionStatusLabel } from '@/lib/format';
+import { SettingsSection } from './settings-section';
 
 export interface TeamProgress {
   teamId: string;
@@ -69,11 +78,20 @@ const DIMENSIONS: Record<string, string> = {
   technologique: 'Technologique', ecologique: 'Écologique', legal: 'Légal',
 };
 
+const TABS = [
+  ['conduite', 'Conduite'],
+  ['marche', 'Marché & crises'],
+  ['reglages', 'Réglages de session'],
+  ['debriefing', 'Débriefing'],
+] as const;
+
+type TabId = (typeof TABS)[number][0];
+
 export function FacilitatorView({
   sessionId, sessionName, joinCode, status, roundNumber, plannedRounds, maxRounds,
   teams, das, cards, activeShocks, runs, difficulty, dials, difficultyLocked, sectors,
   canPlayInTeam, playingTeamId, joinTeamAction, modulesSection, scalesSection,
-  warRoomSection,
+  warRoomSection, warRoomPending,
 }: {
   sessionId: string; sessionName: string; joinCode: string; status: string;
   roundNumber: number; plannedRounds: number; maxRounds: number;
@@ -85,6 +103,8 @@ export function FacilitatorView({
   modulesSection: React.ReactNode;
   scalesSection: React.ReactNode;
   warRoomSection: React.ReactNode;
+  /** Plans de War Room rédigés par les équipes et pas encore arbitrés. */
+  warRoomPending: number;
   das: { id: string; name: string; marketOpen: boolean; hasTargets: boolean }[];
   cards: Card[];
   difficulty: string;
@@ -103,8 +123,32 @@ export function FacilitatorView({
   const [selectedCard, setSelectedCard] = useState(cards[0]?.key ?? '');
   const [selectedDas, setSelectedDas] = useState(das[0]?.id ?? '');
   const [redistribution, setRedistribution] = useState(0);
+  const [tab, setTab] = useState<TabId>('conduite');
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const disabled = busy || pending;
+
+  // L'onglet vit dans l'URL : un rechargement, ou un lien envoyé à un
+  // co-animateur, rouvre le bon. Lu après le montage — le serveur ne connaît
+  // pas le fragment, et le lire au rendu désynchroniserait l'hydratation.
+  useEffect(() => {
+    const read = () => {
+      const hash = window.location.hash.slice(1);
+      if (TABS.some(([id]) => id === hash)) setTab(hash as TabId);
+    };
+    const initial = window.setTimeout(read, 0);
+    window.addEventListener('hashchange', read);
+    return () => {
+      window.clearTimeout(initial);
+      window.removeEventListener('hashchange', read);
+    };
+  }, []);
+
+  function selectTab(id: TabId, focus = false) {
+    setTab(id);
+    window.history.replaceState(null, '', `#${id}`);
+    if (focus) tabRefs.current[id]?.focus();
+  }
 
   async function call(path: string, body: Record<string, unknown>, successMessage: string) {
     setError(null); setNotice(null); setBusy(true);
@@ -135,155 +179,320 @@ export function FacilitatorView({
     }
   }
 
-  const ready = teams.filter(isReady).length;
   const activeTeams = teams.filter((t) => !t.isLiquidated);
+  const ready = activeTeams.filter(isReady).length;
+  const waiting = activeTeams.filter((t) => !isReady(t));
+
+  const badges: Partial<Record<TabId, string>> = {
+    conduite: `${ready}/${activeTeams.length}`,
+    ...(warRoomPending > 0 ? { marche: String(warRoomPending) } : {}),
+  };
+
+  // ── Le geste suivant, et lui seul en avant ────────────────────────────────
+  const canOpen = roundNumber < maxRounds && !['round_active', 'round_locked', 'round_resolving', 'completed'].includes(status);
+  const openLabel = `Ouvrir le tour ${roundNumber + 1}`;
+
+  const lockConfirm = (
+    <Confirm
+      key="lock"
+      primary={status === 'round_active'}
+      label="Verrouiller le tour"
+      question={`Verrouiller fige les ${activeTeams.length} équipes au même instant.${
+        activeTeams.length - ready > 0 ? ` ${activeTeams.length - ready} n’ont pas fini leur saisie.` : ''
+      }`}
+      confirming={confirming === 'lock'}
+      onArm={() => setConfirming('lock')}
+      onCancel={() => setConfirming(null)}
+      disabled={disabled || status !== 'round_active'}
+      onConfirm={() => { setConfirming(null); void call('/api/rounds/control', { sessionId, action: 'lock' }, 'Tour verrouillé.'); }}
+    />
+  );
+  const resolveConfirm = (
+    <Confirm
+      key="resolve"
+      primary={status === 'round_locked'}
+      label={status === 'round_active' ? 'Résoudre sans verrouiller' : 'Résoudre le tour'}
+      question="Le moteur calcule et publie les résultats à tout le pool. Si un invariant est violé, rien n’est écrit et vous pourrez corriger."
+      confirming={confirming === 'resolve'}
+      onArm={() => setConfirming('resolve')}
+      onCancel={() => setConfirming(null)}
+      disabled={disabled || (status !== 'round_active' && status !== 'round_locked')}
+      onConfirm={() => { setConfirming(null); void call('/api/rounds/resolve', { sessionId }, 'Tour résolu — les résultats sont publiés.'); }}
+    />
+  );
 
   return (
-    <main className="mx-auto w-full min-w-0 max-w-6xl px-6 py-10">
-      <div className="mb-6 flex items-center gap-3">
-        <button
-          onClick={() => router.back()}
-          className="flex items-center justify-center h-9 w-9 rounded-lg border border-(--border) hover:bg-(--surface-muted) transition"
-          title="Retour"
-        >
-          <span className="text-lg">←</span>
-        </button>
-        <p className="text-sm font-medium text-(--foreground-muted)">Retour aux sessions</p>
-      </div>
-      <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium tracking-wide text-(--foreground-muted) uppercase">
+    <main className="mx-auto w-full min-w-0 max-w-6xl px-6 pt-6 pb-16">
+      <Link
+        href="/facilitateur"
+        className="inline-flex min-h-9 items-center gap-2 rounded-lg text-sm font-medium text-(--foreground-muted) hover:text-(--foreground)"
+      >
+        <span aria-hidden>←</span> Mes sessions
+      </Link>
+
+      <header className="mt-3 mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold tracking-wider text-(--accent-text) uppercase">
             Pilotage de session
           </p>
-          <h1 className="mt-1 text-3xl font-bold text-(--heading) tracking-tight">{sessionName}</h1>
-          <p className="tabular mt-2 text-(--foreground-muted)">
-            {roundNumber === 0 ? 'Onboarding (T0)' : `Tour ${roundNumber}`} sur {plannedRounds} prévus
-            {' · '}{sessionStatusLabel(status)}
-            {' · '}<strong>{ready}/{activeTeams.length}</strong> équipes prêtes
+          <h1 className="mt-1 text-3xl font-bold tracking-tight text-(--heading)">{sessionName}</h1>
+          <p className="tabular mt-1.5 text-(--foreground-muted)">
+            {roundNumber === 0 ? 'Onboarding' : `Tour ${roundNumber}`} sur {plannedRounds} prévus
+            {' · '}{maxRounds} au plus
           </p>
         </div>
-        <div className="rounded-lg border border-(--border) bg-(--surface) px-4 py-3 text-center">
-          <p className="text-xs text-(--foreground-muted)">Code de session</p>
-          <p className="tabular text-2xl font-semibold tracking-widest">{joinCode}</p>
+        <div className="flex flex-wrap items-stretch gap-3">
+          <a
+            href={`/projecteur/${sessionId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-(--border) bg-(--surface) px-4 text-sm font-medium transition-colors hover:border-(--accent) hover:text-(--accent-text)"
+          >
+            <ExternalLink aria-hidden className="h-4 w-4" />
+            Ouvrir le projecteur
+            <span className="sr-only"> (nouvel onglet)</span>
+          </a>
+          <div className="rounded-lg border border-(--border) bg-(--surface) px-4 py-2 text-center">
+            <p className="text-sm text-(--foreground-muted)">Code de session</p>
+            <p className="tabular font-mono text-2xl font-semibold tracking-widest">{joinCode}</p>
+          </div>
         </div>
       </header>
 
-      <SessionBriefing roundNumber={roundNumber} />
+      {/* ── La barre de conduite ─────────────────────────────────────────── */}
+      <section
+        aria-labelledby="conduite-titre"
+        className="sticky top-0 z-20 -mx-2 mb-6 rounded-xl border border-(--border) bg-(--surface)/95 px-5 py-4 shadow-sm backdrop-blur"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+          <div className="min-w-0">
+            <h2 id="conduite-titre" className="sr-only">Conduite du tour</h2>
+            <RoundStepper status={status} roundNumber={roundNumber} />
+            <p className="mt-2 text-sm text-(--foreground-muted)">
+              {sessionStatusLabel(status)}
+              {' · '}
+              <strong className="tabular font-semibold text-(--foreground)">{ready}/{activeTeams.length}</strong> équipes prêtes
+              {status === 'round_active' && waiting.length > 0 ? (
+                <> · en attente : {waiting.map((t) => t.name).join(', ')}</>
+              ) : null}
+            </p>
+          </div>
 
-      {error ? (
-        <p role="alert" className="mb-6 rounded-lg border border-(--negative) px-4 py-3 text-sm text-(--negative)">
-          {error}
-        </p>
-      ) : null}
-      {notice ? (
-        <p className="mb-6 rounded-lg border border-(--positive) px-4 py-3 text-sm text-(--positive)">
-          {notice}
-        </p>
-      ) : null}
-
-      {/* ── Contrôle du tour ─────────────────────────────────────────────── */}
-      <section className="mb-8 rounded-xl border border-(--border) bg-(--surface) p-6">
-        <h2 className="mb-1 text-xl font-medium">Conduite du tour</h2>
-        <p className="mb-5 max-w-3xl text-sm text-(--foreground-muted)">
-          C’est vous qui décidez du rythme : rien ne se déclenche tout seul. Le chronomètre est
-          indicatif, la partie ne s’arrête jamais d’elle-même.
-        </p>
-
-        <div className="flex flex-wrap gap-3">
-          <Action
-            label={roundNumber === 0 ? 'Ouvrir le tour 1' : `Ouvrir le tour ${roundNumber + 1}`}
-            disabled={disabled || roundNumber >= maxRounds || status === 'round_active'}
-            onClick={() => call('/api/rounds/control', { sessionId, action: 'open' }, 'Tour ouvert.')}
-          />
-          <Action
-            label="Prolonger de 10 minutes"
-            disabled={disabled || status !== 'round_active'}
-            onClick={() => call('/api/facilitator', { sessionId, action: 'extend', minutes: 10 }, 'Tour prolongé.')}
-          />
-
-          {/* Gestes irréversibles : confirmation explicite. Verrouiller fige
-              TOUTES les équipes du pool au même instant. */}
-          <Confirm
-            label="Verrouiller le tour"
-            question={`Verrouiller fige les ${activeTeams.length} équipes au même instant. ${activeTeams.length - ready} n’ont pas fini leur saisie.`}
-            confirming={confirming === 'lock'}
-            onArm={() => setConfirming('lock')}
-            onCancel={() => setConfirming(null)}
-            disabled={disabled || status !== 'round_active'}
-            onConfirm={() => { setConfirming(null); void call('/api/rounds/control', { sessionId, action: 'lock' }, 'Tour verrouillé.'); }}
-          />
-          <Confirm
-            label="Résoudre le tour"
-            question="Le moteur calcule et publie les résultats à tout le pool. Si un invariant est violé, rien n’est écrit et vous pourrez corriger."
-            confirming={confirming === 'resolve'}
-            onArm={() => setConfirming('resolve')}
-            onCancel={() => setConfirming(null)}
-            disabled={disabled || (status !== 'round_active' && status !== 'round_locked')}
-            onConfirm={() => { setConfirming(null); void call('/api/rounds/resolve', { sessionId }, 'Tour résolu — les résultats sont publiés.'); }}
-          />
-          <Confirm
-            label="Clore la session"
-            question="La session passe en « terminée ». Les équipes gardent l’accès à leurs résultats et exports."
-            confirming={confirming === 'complete'}
-            onArm={() => setConfirming('complete')}
-            onCancel={() => setConfirming(null)}
-            disabled={disabled || roundNumber < 3}
-            onConfirm={() => { setConfirming(null); void call('/api/rounds/control', { sessionId, action: 'complete' }, 'Session close.'); }}
-          />
-
-          <a
-            href={`/api/export?type=session_complete&sessionId=${sessionId}`}
-            className="rounded-lg border border-(--border) px-4 py-2.5 text-sm font-medium"
-          >
-            Exporter la session
-          </a>
+          <div className="flex flex-wrap items-center gap-2">
+            {canOpen ? (
+              <Action
+                primary
+                label={openLabel}
+                disabled={disabled}
+                onClick={() => call('/api/rounds/control', { sessionId, action: 'open' }, 'Tour ouvert.')}
+              />
+            ) : null}
+            {status === 'round_active' ? (
+              <>
+                {lockConfirm}
+                <Action
+                  label="Prolonger de 10 min"
+                  disabled={disabled}
+                  onClick={() => call('/api/facilitator', { sessionId, action: 'extend', minutes: 10 }, 'Tour prolongé de 10 minutes.')}
+                />
+                {resolveConfirm}
+              </>
+            ) : null}
+            {status === 'round_locked' ? resolveConfirm : null}
+            {status === 'round_resolving' ? (
+              <p role="status" className="text-sm font-medium text-(--foreground-muted)">Calcul en cours…</p>
+            ) : null}
+            {status !== 'completed' && roundNumber >= 3 && status !== 'round_active' ? (
+              <Confirm
+                label="Clore la session"
+                question="La session passe en « terminée ». Les équipes gardent l’accès à leurs résultats et exports."
+                confirming={confirming === 'complete'}
+                onArm={() => setConfirming('complete')}
+                onCancel={() => setConfirming(null)}
+                disabled={disabled}
+                onConfirm={() => { setConfirming(null); void call('/api/rounds/control', { sessionId, action: 'complete' }, 'Session close.'); }}
+              />
+            ) : null}
+          </div>
         </div>
 
-        {/* ── Les deux documents de séance ────────────────────────────────
-            Ils ne pilotent rien : ils servent à EXPLIQUER, au débriefing,
-            pourquoi le moteur a rendu ce qu'il a rendu. Séparés des gestes de
-            conduite ci-dessus, parce qu'on ne les ouvre pas dans le même
-            moment — ni dans le même état d'esprit. */}
-        <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-(--border) pt-5">
-          <span className="text-sm font-medium">Pour le débriefing</span>
-          <Link
-            href={`/facilitateur/${sessionId}/simulateur`}
-            className="rounded-lg border border-(--border) px-4 py-2 text-sm"
-          >
-            Simulateur d’impacts
-          </Link>
-          <Link
-            href={`/facilitateur/${sessionId}/moteur`}
-            className="rounded-lg border border-(--border) px-4 py-2 text-sm"
-          >
-            Cartographie du moteur
-          </Link>
-          <span className="text-xs text-(--foreground-muted)">
-            Réservés à l’animation : ils donnent les profils-cibles de l’alignement.
-          </span>
-        </div>
+        {error ? (
+          <p role="alert" className="mt-3 rounded-lg bg-(--negative-subtle) px-4 py-2.5 text-sm text-(--negative)">
+            {error}
+          </p>
+        ) : null}
+        <p role="status" className={notice ? 'mt-3 rounded-lg bg-(--positive-subtle) px-4 py-2.5 text-sm text-(--positive)' : 'sr-only'}>
+          {notice ? <><Check aria-hidden className="mr-1.5 inline h-4 w-4" />{notice}</> : ''}
+        </p>
+      </section>
 
-        {/* ── Test d'utilisabilité ────────────────────────────────────────
-            Un protocole séparé de la conduite de partie : on ne l'ouvre pas
-            pendant que la salle joue, mais avant (préparation) et après
-            (débriefing, score SUS du panel). */}
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Link
-            href={`/facilitateur/${sessionId}/protocole`}
-            className="rounded-lg border border-(--border) px-4 py-2 text-sm"
-          >
-            Protocole de test d’utilisabilité
-          </Link>
-        </div>
+      {/* ── Les onglets ──────────────────────────────────────────────────── */}
+      <div
+        role="tablist"
+        aria-label="Sections du pilotage"
+        className="mb-6 flex flex-wrap gap-1 border-b border-(--border)"
+        onKeyDown={(event) => {
+          const index = TABS.findIndex(([id]) => id === tab);
+          const target =
+            event.key === 'ArrowRight' ? TABS[(index + 1) % TABS.length]
+            : event.key === 'ArrowLeft' ? TABS[(index - 1 + TABS.length) % TABS.length]
+            : event.key === 'Home' ? TABS[0]
+            : event.key === 'End' ? TABS[TABS.length - 1]
+            : null;
+          if (!target) return;
+          event.preventDefault();
+          selectTab(target[0], true);
+        }}
+      >
+        {TABS.map(([id, label]) => {
+          const selected = tab === id;
+          return (
+            <button
+              key={id}
+              ref={(node) => { tabRefs.current[id] = node; }}
+              type="button"
+              role="tab"
+              id={`onglet-${id}`}
+              aria-selected={selected}
+              aria-controls={`panneau-${id}`}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => selectTab(id)}
+              className={`-mb-px inline-flex min-h-11 items-center gap-2 border-b-2 px-4 text-sm transition-colors ${
+                selected
+                  ? 'border-(--accent) font-semibold text-(--accent-text)'
+                  : 'border-transparent font-medium text-(--foreground-muted) hover:text-(--foreground)'
+              }`}
+            >
+              {label}
+              {badges[id] ? (
+                <span
+                  className={`tabular rounded-full px-2 text-sm font-semibold ${
+                    id === 'marche' ? 'bg-(--warning-subtle) text-(--warning)' : 'bg-(--surface-muted) text-(--foreground-muted)'
+                  }`}
+                >
+                  {badges[id]}
+                  <span className="sr-only">
+                    {id === 'marche' ? ' plan(s) de War Room à arbitrer' : ' équipes prêtes'}
+                  </span>
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Les panneaux fermés restent montés (masqués) : une carte en cours de
+          composition ne perd pas sa saisie quand on va jeter un œil ailleurs. */}
+      <div role="tabpanel" id="panneau-conduite" aria-labelledby="onglet-conduite" hidden={tab !== 'conduite'} className="space-y-6">
+        <SessionBriefing status={status} />
+
+        <section className="rounded-xl border border-(--border) bg-(--surface) p-6">
+          <h2 className="mb-4 text-xl font-semibold text-(--heading)">Avancement des équipes</h2>
+
+          <div className="min-w-0 overflow-x-auto">
+            <table className="w-full min-w-[52rem] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-(--border) text-left text-(--foreground-muted)">
+                  <th scope="col" className="py-2 pr-4 font-medium">Équipe</th>
+                  <th scope="col" className="py-2 pr-4 font-medium">Code</th>
+                  <th scope="col" className="py-2 pr-4 text-center font-medium">Membres</th>
+                  <th scope="col" className="py-2 pr-4 text-center font-medium">Stratégie Groupe</th>
+                  <th scope="col" className="py-2 pr-4 text-center font-medium">Stratégie DAS</th>
+                  <th scope="col" className="py-2 pr-4 text-center font-medium">Distribution</th>
+                  <th scope="col" className="py-2 pr-4 text-center font-medium">Budget</th>
+                  <th scope="col" className="py-2 pr-4 text-right font-medium">Trésorerie</th>
+                  <th scope="col" className="py-2 pr-4 text-right font-medium">Alignement</th>
+                  <th scope="col" className="py-2 font-medium">État</th>
+                </tr>
+              </thead>
+              <tbody className="tabular">
+                {teams.map((t) => (
+                  <tr key={t.teamId} className="border-b border-(--border) last:border-0">
+                    <th scope="row" className="py-2.5 pr-4 text-left font-medium">
+                      <span className="flex items-center gap-2">
+                        {/* La couleur du groupe, la même que sur l'écran des
+                            participants — doublée de son nom, jamais seule. */}
+                        <span
+                          aria-hidden
+                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: t.colorHex }}
+                        />
+                        {t.name}
+                        <span className="text-sm font-normal text-(--foreground-muted)">{t.colorLabel}</span>
+                      </span>
+                    </th>
+                    <td className="py-2.5 pr-4 font-mono tracking-widest text-(--foreground-muted)">{t.joinCode}</td>
+                    <td className="py-2.5 pr-4 text-center">{t.memberCount}</td>
+                    <td className="py-2.5 pr-4 text-center"><Tick on={t.hasCorporate} /></td>
+                    <td className="py-2.5 pr-4 text-center">
+                      <Tick on={t.dasDone >= t.dasExpected && t.dasExpected > 0} label={`${t.dasDone}/${t.dasExpected}`} />
+                    </td>
+                    <td className="py-2.5 pr-4 text-center">
+                      <Tick on={t.distributionDone >= t.dasExpected && t.dasExpected > 0} label={`${t.distributionDone}/${t.dasExpected}`} />
+                    </td>
+                    <td className="py-2.5 pr-4 text-center"><Tick on={t.hasBudget} /></td>
+                    <td className="py-2.5 pr-4 text-right font-mono">{formatMadCompact(t.treasuryMad)}</td>
+                    <td className="py-2.5 pr-4 text-right font-mono">{t.iaScore === null ? '—' : formatScore(t.iaScore)}</td>
+                    <td className="py-2.5">
+                      {t.isLiquidated ? (
+                        <span className="font-medium text-(--negative)">Liquidée</span>
+                      ) : t.treasuryStatus !== 'sain' ? (
+                        <span className="font-medium text-(--warning)">{treasuryLabel(t.treasuryStatus)}</span>
+                      ) : isReady(t) ? (
+                        <span className="font-medium text-(--positive)">✓ Prête</span>
+                      ) : (
+                        <span className="text-(--foreground-muted)">En cours</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Offrir une étude : levier pédagogique pour raccrocher une équipe. */}
+          <div className="mt-6 border-t border-(--border) pt-5">
+            <h3 className="text-base font-semibold">Offrir un audit d’alignement</h3>
+            <p className="mt-1 mb-3 max-w-2xl text-sm text-(--foreground-muted)">
+              Une équipe qui décroche faute d’information ne débat plus. L’audit approfondi lui est
+              livré gratuitement : son compte de résultat n’est pas grevé.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {activeTeams.map((t) => (
+                <button
+                  key={t.teamId} type="button" disabled={disabled}
+                  onClick={() =>
+                    call('/api/facilitator', {
+                      sessionId, action: 'gift_study', teamId: t.teamId,
+                      studyKey: 'audit_alignement', tier: 'approfondie', dasId: null,
+                    }, `Audit d’alignement offert à ${t.name}.`)
+                  }
+                  className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-(--border) px-3 text-sm disabled:opacity-40 enabled:hover:border-(--accent)"
+                >
+                  <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: t.colorHex }} />
+                  Offrir à {t.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <JoinTeamBlock
+            sessionId={sessionId}
+            teams={teams}
+            canPlay={canPlayInTeam}
+            playingTeamId={playingTeamId}
+            joinTeamAction={joinTeamAction}
+          />
+        </section>
 
         {runs.length > 0 ? (
-          <div className="mt-6 border-t border-(--border) pt-5">
-            <h3 className="mb-2 text-sm font-medium">Dernières résolutions</h3>
+          <section className="rounded-xl border border-(--border) bg-(--surface) p-6">
+            <h2 className="mb-3 text-xl font-semibold text-(--heading)">Dernières résolutions</h2>
             <ul className="space-y-1.5 text-sm">
               {runs.map((r, i) => (
                 <li key={`${r.roundNumber}-${i}`} className="tabular flex flex-wrap gap-x-3">
                   <span>Tour {r.roundNumber}</span>
-                  <span style={{ color: r.status === 'succeeded' ? 'var(--positive)' : 'var(--negative)' }}>
+                  <span className="font-medium" style={{ color: r.status === 'succeeded' ? 'var(--positive)' : 'var(--negative)' }}>
                     {r.status === 'succeeded' ? '✓ réussie' : '✗ échouée'}
                   </span>
                   {r.durationMs ? <span className="text-(--foreground-muted)">{(r.durationMs / 1000).toFixed(1)} s</span> : null}
@@ -291,291 +500,282 @@ export function FacilitatorView({
                 </li>
               ))}
             </ul>
-          </div>
+          </section>
         ) : null}
-      </section>
+      </div>
 
-      {/* ── Avancement des équipes ───────────────────────────────────────── */}
-      <section className="mb-8 rounded-xl border border-(--border) bg-(--surface) p-6">
-        <h2 className="mb-4 text-xl font-medium">Avancement des équipes</h2>
+      <div role="tabpanel" id="panneau-marche" aria-labelledby="onglet-marche" hidden={tab !== 'marche'}>
+        <Fragment key="warroom">{warRoomSection}</Fragment>
 
-        <div className="min-w-0 overflow-x-auto">
-          <table className="w-full min-w-[52rem] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-(--border) text-left">
-                <th className="py-2 pr-4 font-medium">Équipe</th>
-                <th className="py-2 pr-4 font-medium">Code</th>
-                <th className="py-2 pr-4 text-center font-medium">Membres</th>
-                <th className="py-2 pr-4 text-center font-medium">Corporate</th>
-                <th className="py-2 pr-4 text-center font-medium">DAS</th>
-                <th className="py-2 pr-4 text-center font-medium">Distribution</th>
-                <th className="py-2 pr-4 text-center font-medium">Budget</th>
-                <th className="py-2 pr-4 text-right font-medium">Trésorerie</th>
-                <th className="py-2 pr-4 text-right font-medium">IA</th>
-                <th className="py-2 font-medium">État</th>
-              </tr>
-            </thead>
-            <tbody className="tabular">
-              {teams.map((t) => (
-                <tr key={t.teamId} className="border-b border-(--border) last:border-0">
-                  <td className="py-2.5 pr-4 font-medium">
-                    <span className="flex items-center gap-2">
-                      {/* La couleur du groupe, la même que sur l'écran des
-                          participants — doublée de son nom, jamais seule. */}
-                      <span
-                        aria-hidden
-                        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: t.colorHex }}
-                      />
-                      {t.name}
-                      <span className="font-normal text-xs text-(--foreground-muted)">
-                        {t.colorLabel}
-                      </span>
-                    </span>
-                  </td>
-                  <td className="py-2.5 pr-4 tracking-widest text-(--foreground-muted)">{t.joinCode}</td>
-                  <td className="py-2.5 pr-4 text-center">{t.memberCount}</td>
-                  <td className="py-2.5 pr-4 text-center"><Tick on={t.hasCorporate} /></td>
-                  <td className="py-2.5 pr-4 text-center">
-                    <Tick on={t.dasDone >= t.dasExpected && t.dasExpected > 0} label={`${t.dasDone}/${t.dasExpected}`} />
-                  </td>
-                  <td className="py-2.5 pr-4 text-center">
-                    <Tick on={t.distributionDone >= t.dasExpected && t.dasExpected > 0} label={`${t.distributionDone}/${t.dasExpected}`} />
-                  </td>
-                  <td className="py-2.5 pr-4 text-center"><Tick on={t.hasBudget} /></td>
-                  <td className="py-2.5 pr-4 text-right">{formatMadCompact(t.treasuryMad)}</td>
-                  <td className="py-2.5 pr-4 text-right">{t.iaScore === null ? '—' : formatScore(t.iaScore)}</td>
-                  <td className="py-2.5">
-                    {t.isLiquidated ? (
-                      <span className="text-(--negative)">Liquidée</span>
-                    ) : t.treasuryStatus !== 'sain' ? (
-                      <span className="text-(--warning)">{treasuryLabel(t.treasuryStatus)}</span>
-                    ) : isReady(t) ? (
-                      <span className="text-(--positive)">Prête</span>
-                    ) : (
-                      <span className="text-(--foreground-muted)">En cours</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Offrir une étude : levier pédagogique pour raccrocher une équipe. */}
-        <div className="mt-6 border-t border-(--border) pt-5">
-          <h3 className="text-sm font-medium">Offrir une étude à une équipe</h3>
-          <p className="mt-1 mb-3 text-xs text-(--foreground-muted)">
-            Une équipe qui décroche faute d’information ne débat plus. Le geste est gratuit pour
-            elle : son compte de résultat n’est pas grevé.
+        <section className="mb-8 rounded-xl border border-(--border) bg-(--surface) p-6">
+          <h2 className="mb-1 text-xl font-semibold text-(--heading)">Déclencher une opportunité ou une menace</h2>
+          <p className="mb-5 max-w-3xl text-sm text-(--foreground-muted)">
+            Les équipes voient le nom et la description de chaque carte, jamais son amplitude.
+            Déclenchez quand la salle est prête à en discuter.
           </p>
-          <div className="flex flex-wrap gap-2">
-            {teams.filter((t) => !t.isLiquidated).map((t) => (
-              <button
-                key={t.teamId} type="button" disabled={disabled}
-                onClick={() =>
-                  call('/api/facilitator', {
-                    sessionId, action: 'gift_study', teamId: t.teamId,
-                    studyKey: 'audit_alignement', tier: 'approfondie', dasId: null,
-                  }, `Audit d’alignement offert à ${t.name}.`)
-                }
-                className="rounded-lg border border-(--border) px-3 py-1.5 text-sm disabled:opacity-40"
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <label className="block sm:col-span-2">
+              <span className="text-sm font-medium">Carte</span>
+              <select
+                value={selectedCard} onChange={(e) => setSelectedCard(e.target.value)}
+                className="mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
               >
-                Audit → {t.name}
-              </button>
-            ))}
+                {cards.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {DIMENSIONS[c.dimension] ?? c.dimension} — {c.name}
+                    {c.nature === 'opportunite' ? ' (opportunité)' : ' (menace)'}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-medium">Domaine touché</span>
+              <select
+                value={selectedDas} onChange={(e) => setSelectedDas(e.target.value)}
+                className="mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
+              >
+                {das.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </label>
           </div>
-        </div>
 
-        <JoinTeamBlock
-          sessionId={sessionId}
-          teams={teams}
-          canPlay={canPlayInTeam}
-          playingTeamId={playingTeamId}
-          joinTeamAction={joinTeamAction}
-        />
-      </section>
+          {(() => {
+            const card = cards.find((c) => c.key === selectedCard);
+            if (!card) return null;
+            return (
+              <div className="mt-4 rounded-lg bg-(--surface-muted) p-4">
+                <p className="text-sm">{card.description}</p>
+                <p className="mt-2 text-sm text-(--foreground-muted)">
+                  Durée : {card.durationRounds === 0 ? 'permanent' : `${card.durationRounds} tour(s)`}
+                  {card.targetSectors.length > 0 ? ` · secteurs visés : ${card.targetSectors.join(', ')}` : ' · tous secteurs'}
+                  {card.source ? ` · source : ${card.source}` : ''}
+                </p>
+              </div>
+            );
+          })()}
 
-      {/* ── Les trois sections construites par la page serveur ─────────────
-          Chacune arrive ici comme un élément fabriqué côté serveur et
-          désérialisé du flux RSC, puis posé parmi les enfants statiques de
-          <main>. React signalait « Each child in a list should have a unique
-          key » en désignant l'élément créé par FacilitatorPage — pour ScalesSection
-          aujourd'hui, pour SettingsSection quand elle venait encore de la page.
-          L'état de validation que le flux transporte avec l'élément ne
-          correspond pas à sa position réelle, qui est statique.
-
-          Un Fragment à clé, créé ICI, porte l'identité de l'emplacement : la
-          liste de <main> ne contient plus que des éléments à clé, et chaque
-          section redevient l'enfant unique de son Fragment — position où React
-          ne réclame aucune clé. Le rendu est identique. */}
-      <Fragment key="modules">{modulesSection}</Fragment>
-      <Fragment key="scales">{scalesSection}</Fragment>
-      <Fragment key="warroom">{warRoomSection}</Fragment>
-
-      {/* ── Cartes de crise ──────────────────────────────────────────────── */}
-      <SettingsSection
-        sessionId={sessionId}
-        difficulty={difficulty}
-        dials={dials}
-        locked={difficultyLocked}
-        sectors={sectors}
-        call={call}
-        disabled={disabled}
-      />
-
-      {/* ── La réserve mise sur le marché ──────────────────────────────────
-          Ouvrir la diversification est un GESTE PÉDAGOGIQUE, pas un réglage.
-          Tant qu'un domaine reste fermé, les équipes règlent le métier qu'elles
-          ont ; ouvert trop tôt, il devient une échappatoire pour celle qui
-          n'arrive pas à redresser le sien. D'où le levier, tour par tour. */}
-      <section className="mb-8 rounded-xl border border-(--border) bg-(--surface) p-6">
-        <h2 className="mb-1 text-xl font-medium">Domaines ouverts à l’acquisition</h2>
-        <p className="mb-5 max-w-3xl text-sm text-(--foreground-muted)">
-          Un domaine ouvert apparaît sur le marché des équipes, qui peuvent y entrer par
-          rachat — et le pilotent ensuite comme les leurs. Fermer un domaine ne retire rien
-          à celles qui l’exploitent déjà : cela retire seulement la cible du marché.
-        </p>
-
-        <ul className="space-y-2">
-          {das.map((d) => (
-            <li
-              key={d.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-(--border) px-4 py-3"
-            >
-              <span className="min-w-0">
-                <span className="text-sm font-medium">{d.name}</span>
-                <span className="ml-3 text-sm text-(--foreground-muted)">
-                  {!d.hasTargets
-                    ? 'aucune cible provisionnée — non acquérable'
-                    : d.marketOpen
-                      ? 'sur le marché'
-                      : 'en réserve'}
-                </span>
-              </span>
-
-              <button
-                type="button"
-                disabled={disabled || !d.hasTargets}
-                onClick={() =>
-                  call(
-                    '/api/facilitator',
-                    { sessionId, action: 'set_market', dasId: d.id, open: !d.marketOpen },
-                    d.marketOpen
-                      ? `${d.name} retiré du marché.`
-                      : `${d.name} ouvert à l’acquisition.`,
-                  )
-                }
-                className="rounded-lg border px-4 py-2 text-sm disabled:opacity-40"
-                style={{
-                  borderColor: d.marketOpen ? 'var(--accent)' : 'var(--border)',
-                  background: d.marketOpen ? 'var(--surface-muted)' : undefined,
-                  fontWeight: d.marketOpen ? 600 : 400,
-                }}
-              >
-                {/* Le libellé dit l'ACTION, jamais l'état : « ouvert » sur un
-                    bouton laisse toujours douter de ce qu'un clic va faire. */}
-                {d.marketOpen ? 'Retirer du marché' : 'Mettre sur le marché'}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="rounded-xl border border-(--border) bg-(--surface) p-6">
-        <h2 className="mb-1 text-xl font-medium">Opportunités &amp; menaces</h2>
-        <p className="mb-5 max-w-3xl text-sm text-(--foreground-muted)">
-          Les équipes voient le nom et la description de chaque carte, jamais son amplitude.
-          Déclenchez quand la salle est prête à en discuter.
-        </p>
-
-        <div className="grid gap-4 sm:grid-cols-3">
-          <label className="block sm:col-span-2">
-            <span className="text-sm font-medium">Carte</span>
-            <select
-              value={selectedCard} onChange={(e) => setSelectedCard(e.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
-            >
-              {cards.map((c) => (
-                <option key={c.key} value={c.key}>
-                  {DIMENSIONS[c.dimension] ?? c.dimension} — {c.name}
-                  {c.nature === 'opportunite' ? ' (opportunité)' : ' (menace)'}
-                </option>
-              ))}
-            </select>
+          <label className="mt-4 block max-w-sm">
+            <span className="text-sm font-medium">
+              Points de part de marché redistribués : <span className="tabular">{redistribution}</span>
+            </span>
+            <input
+              type="range" min={0} max={15} step={1} value={redistribution}
+              onChange={(e) => setRedistribution(Number(e.target.value))}
+              className="mt-1.5 w-full"
+            />
+            <span className="mt-1 block text-sm text-(--foreground-muted)">
+              À zéro, la carte n’agit que par ses effets économiques. Au-delà, elle déplace
+              directement des parts au sein du pool.
+            </span>
           </label>
 
-          <label className="block">
-            <span className="text-sm font-medium">Domaine touché</span>
-            <select
-              value={selectedDas} onChange={(e) => setSelectedDas(e.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
-            >
-              {das.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </label>
-        </div>
+          <button
+            type="button" disabled={disabled || !selectedCard || !selectedDas}
+            onClick={() =>
+              call('/api/facilitator', {
+                sessionId, action: 'trigger_shock', cardKey: selectedCard,
+                dasId: selectedDas, redistributionPts: redistribution, beneficiaryTeamIds: [],
+              }, 'Carte déclenchée — les équipes la verront dans leur War Room.')
+            }
+            className="mt-5 rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
+          >
+            Déclencher cette carte
+          </button>
 
-        {(() => {
-          const card = cards.find((c) => c.key === selectedCard);
-          if (!card) return null;
-          return (
-            <div className="mt-4 rounded-lg border border-(--border) p-4">
-              <p className="text-sm">{card.description}</p>
-              <p className="mt-2 text-xs text-(--foreground-muted)">
-                Durée : {card.durationRounds === 0 ? 'permanent' : `${card.durationRounds} tour(s)`}
-                {card.targetSectors.length > 0 ? ` · secteurs visés : ${card.targetSectors.join(', ')}` : ' · tous secteurs'}
-                {card.source ? ` · source : ${card.source}` : ''}
-              </p>
+          {activeShocks.length > 0 ? (
+            <div className="mt-6 border-t border-(--border) pt-5">
+              <h3 className="mb-2 text-base font-semibold">Cartes déjà déclenchées</h3>
+              <ul className="tabular space-y-1 text-sm text-(--foreground-muted)">
+                {activeShocks.map((s) => (
+                  <li key={s.id}>
+                    Tour {s.roundNumber} · {cards.find((c) => c.key === s.cardKey)?.name ?? s.cardKey}
+                    {' · '}{das.find((d) => d.id === s.dasId)?.name ?? '—'}
+                    {s.roundsRemaining < 99 ? ` · ${s.roundsRemaining} tour(s) restant(s)` : ' · permanent'}
+                  </li>
+                ))}
+              </ul>
             </div>
-          );
-        })()}
+          ) : null}
+        </section>
 
-        <label className="mt-4 block max-w-sm">
-          <span className="text-sm font-medium">
-            Points de part de marché redistribués : <span className="tabular">{redistribution}</span>
-          </span>
-          <input
-            type="range" min={0} max={15} step={1} value={redistribution}
-            onChange={(e) => setRedistribution(Number(e.target.value))}
-            className="mt-1.5 w-full"
+        {/* ── La réserve mise sur le marché ──────────────────────────────────
+            Ouvrir la diversification est un GESTE PÉDAGOGIQUE, pas un réglage.
+            Tant qu'un domaine reste fermé, les équipes règlent le métier qu'elles
+            ont ; ouvert trop tôt, il devient une échappatoire pour celle qui
+            n'arrive pas à redresser le sien. D'où le levier, tour par tour. */}
+        <section className="mb-8 rounded-xl border border-(--border) bg-(--surface) p-6">
+          <h2 className="mb-1 text-xl font-semibold text-(--heading)">Domaines ouverts à l’acquisition</h2>
+          <p className="mb-5 max-w-3xl text-sm text-(--foreground-muted)">
+            Un domaine ouvert apparaît sur le marché des équipes, qui peuvent y entrer par
+            rachat — et le pilotent ensuite comme les leurs. Fermer un domaine ne retire rien
+            à celles qui l’exploitent déjà : cela retire seulement la cible du marché.
+          </p>
+
+          <ul className="space-y-2">
+            {das.map((d) => (
+              <li
+                key={d.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-(--border) px-4 py-3"
+              >
+                <span className="min-w-0">
+                  <span className="text-sm font-medium">{d.name}</span>
+                  <span
+                    className={`ml-3 rounded-full px-2 py-0.5 text-sm ${
+                      d.marketOpen ? 'bg-(--positive-subtle) font-medium text-(--positive)' : 'text-(--foreground-muted)'
+                    }`}
+                  >
+                    {!d.hasTargets
+                      ? 'aucune cible provisionnée — non acquérable'
+                      : d.marketOpen
+                        ? 'sur le marché'
+                        : 'en réserve'}
+                  </span>
+                </span>
+
+                <button
+                  type="button"
+                  disabled={disabled || !d.hasTargets}
+                  onClick={() =>
+                    call(
+                      '/api/facilitator',
+                      { sessionId, action: 'set_market', dasId: d.id, open: !d.marketOpen },
+                      d.marketOpen
+                        ? `${d.name} retiré du marché.`
+                        : `${d.name} ouvert à l’acquisition.`,
+                    )
+                  }
+                  className="rounded-lg border border-(--border) px-4 py-2 text-sm font-medium disabled:opacity-40 enabled:hover:border-(--accent)"
+                >
+                  {/* Le libellé dit l'ACTION, jamais l'état : « ouvert » sur un
+                      bouton laisse toujours douter de ce qu'un clic va faire. */}
+                  {d.marketOpen ? 'Retirer du marché' : 'Mettre sur le marché'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <SettingsSection
+          part="carte"
+          sessionId={sessionId}
+          difficulty={difficulty}
+          dials={dials}
+          locked={difficultyLocked}
+          sectors={sectors}
+          call={call}
+          disabled={disabled}
+        />
+      </div>
+
+      <div role="tabpanel" id="panneau-reglages" aria-labelledby="onglet-reglages" hidden={tab !== 'reglages'}>
+        <p className="mb-6 max-w-3xl text-sm text-(--foreground-muted)">
+          Ce qui se règle avant la séance, ou entre deux tours : le niveau de difficulté, les
+          décisions ouvertes aux équipes et l’amplitude qu’elles peuvent donner à chacune.
+        </p>
+        <SettingsSection
+          part="difficulte"
+          sessionId={sessionId}
+          difficulty={difficulty}
+          dials={dials}
+          locked={difficultyLocked}
+          sectors={sectors}
+          call={call}
+          disabled={disabled}
+        />
+        {/* Sections construites par la page serveur : un Fragment à clé porte
+            l'identité de chaque emplacement (voir l'historique de ce fichier —
+            React réclamait sinon une clé à l'élément désérialisé du flux RSC). */}
+        <Fragment key="modules">{modulesSection}</Fragment>
+        <Fragment key="scales">{scalesSection}</Fragment>
+      </div>
+
+      <div role="tabpanel" id="panneau-debriefing" aria-labelledby="onglet-debriefing" hidden={tab !== 'debriefing'}>
+        <div className="grid gap-4 md:grid-cols-2">
+          <DebriefLink
+            href={`/facilitateur/${sessionId}/simulateur`}
+            title="Simulateur d’impacts"
+            text="Rejouer une décision pour montrer à une équipe ce qu’un autre choix aurait donné."
           />
-          <span className="mt-1 block text-xs text-(--foreground-muted)">
-            À zéro, le choc n’agit que par ses effets économiques. Au-delà, il déplace
-            directement des parts au sein du pool.
-          </span>
-        </label>
-
-        <button
-          type="button" disabled={disabled || !selectedCard || !selectedDas}
-          onClick={() =>
-            call('/api/facilitator', {
-              sessionId, action: 'trigger_shock', cardKey: selectedCard,
-              dasId: selectedDas, redistributionPts: redistribution, beneficiaryTeamIds: [],
-            }, 'Carte déclenchée — les équipes la verront dans leur War Room.')
-          }
-          className="mt-5 rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
-        >
-          Déclencher cette carte
-        </button>
-
-        {activeShocks.length > 0 ? (
-          <div className="mt-6 border-t border-(--border) pt-5">
-            <h3 className="mb-2 text-sm font-medium">Cartes déjà déclenchées</h3>
-            <ul className="tabular space-y-1 text-sm text-(--foreground-muted)">
-              {activeShocks.map((s) => (
-                <li key={s.id}>
-                  Tour {s.roundNumber} · {cards.find((c) => c.key === s.cardKey)?.name ?? s.cardKey}
-                  {' · '}{das.find((d) => d.id === s.dasId)?.name ?? '—'}
-                  {s.roundsRemaining < 99 ? ` · ${s.roundsRemaining} tour(s) restant(s)` : ' · permanent'}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </section>
+          <DebriefLink
+            href={`/facilitateur/${sessionId}/moteur`}
+            title="Cartographie du moteur"
+            text="Ce que chaque décision déplace dans le calcul — et les profils-cibles de l’alignement. Réservée à l’animation."
+          />
+          <DebriefLink
+            href={`/api/export?type=session_complete&sessionId=${sessionId}`}
+            title="Exporter la session"
+            text="Un classeur Excel de six onglets, décisions de toutes les équipes comprises. Document d’animation, jamais à distribuer."
+            download
+          />
+          <DebriefLink
+            href={`/facilitateur/${sessionId}/protocole`}
+            title="Protocole de test d’utilisabilité"
+            text="À ouvrir avant la séance pour la préparation, et après pour le score SUS du panel."
+          />
+        </div>
+      </div>
     </main>
   );
+}
+
+/**
+ * Où en est le tour, en trois étapes. L'étape courante porte `aria-current` ;
+ * une étape franchie porte une coche — jamais la seule couleur.
+ */
+function RoundStepper({ status, roundNumber }: { status: string; roundNumber: number }) {
+  const upcoming = status === 'draft' || status === 'onboarding';
+  const round = upcoming ? roundNumber + 1 : roundNumber;
+  const current =
+    upcoming ? -1
+    : status === 'round_active' ? 0
+    : status === 'round_locked' || status === 'round_resolving' ? 1
+    : status === 'round_resolved' ? 2
+    : 3;
+  const steps = [`Tour ${round} ouvert`, 'Verrouillé', 'Résolu'];
+
+  return (
+    <ol className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm" aria-label={`Étapes du tour ${round}`}>
+      {steps.map((label, index) => {
+        const done = index < current || (index === current && index === steps.length - 1) || current === 3;
+        const isCurrent = index === current && !done;
+        return (
+          <li key={label} className="flex items-center gap-2" aria-current={isCurrent ? 'step' : undefined}>
+            {index > 0 ? <span aria-hidden className="h-px w-5 bg-(--border-strong)" /> : null}
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium ${
+                isCurrent
+                  ? 'bg-(--accent) text-(--on-accent)'
+                  : done
+                    ? 'bg-(--positive-subtle) text-(--positive)'
+                    : 'bg-(--surface-muted) text-(--foreground-muted)'
+              }`}
+            >
+              {done ? <Check aria-hidden className="h-3.5 w-3.5" strokeWidth={3} /> : null}
+              {label}
+              <span className="sr-only">{done ? ' — fait' : isCurrent ? ' — en cours' : ' — à venir'}</span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function DebriefLink({
+  href, title, text, download = false,
+}: { href: string; title: string; text: string; download?: boolean }) {
+  const className =
+    'block rounded-xl border border-(--border) bg-(--surface) p-5 transition-colors hover:border-(--accent)';
+  const body = (
+    <>
+      <span className="block text-base font-semibold text-(--heading)">{title}</span>
+      <span className="mt-1 block text-sm text-(--foreground-muted)">{text}</span>
+    </>
+  );
+  // Un export est un fichier, pas un écran : lien simple, sans routage client.
+  return download ? <a href={href} className={className}>{body}</a> : <Link href={href} className={className}>{body}</Link>;
 }
 
 function isReady(t: TeamProgress): boolean {
@@ -589,16 +789,24 @@ function isReady(t: TeamProgress): boolean {
 function Tick({ on, label }: { on: boolean; label?: string }) {
   return (
     <span style={{ color: on ? 'var(--positive)' : 'var(--foreground-muted)' }}>
-      {on ? '✓' : '○'}{label ? ` ${label}` : ''}
+      <span aria-hidden>{on ? '✓' : '○'}</span>
+      <span className="sr-only">{on ? 'fait' : 'à faire'}</span>
+      {label ? ` ${label}` : ''}
     </span>
   );
 }
 
-function Action({ label, disabled, onClick }: { label: string; disabled: boolean; onClick: () => void }) {
+function Action({
+  label, disabled, onClick, primary = false,
+}: { label: string; disabled: boolean; onClick: () => void; primary?: boolean }) {
   return (
     <button
       type="button" disabled={disabled} onClick={onClick}
-      className="rounded-lg border border-(--border) px-4 py-2.5 text-sm font-medium disabled:opacity-40"
+      className={`min-h-10 rounded-lg px-4 text-sm font-medium transition-colors disabled:opacity-40 ${
+        primary
+          ? 'bg-(--accent) text-(--on-accent) enabled:hover:bg-(--accent-hover)'
+          : 'border border-(--border) bg-(--surface) enabled:hover:border-(--accent)'
+      }`}
     >
       {label}
     </button>
@@ -610,22 +818,22 @@ function Action({ label, disabled, onClick }: { label: string; disabled: boolean
  * Verrouiller ou résoudre engage toute la salle — un clic ne doit pas suffire.
  */
 function Confirm({
-  label, question, confirming, disabled, onArm, onCancel, onConfirm,
+  label, question, confirming, disabled, onArm, onCancel, onConfirm, primary = false,
 }: {
   label: string; question: string; confirming: boolean; disabled: boolean;
-  onArm: () => void; onCancel: () => void; onConfirm: () => void;
+  onArm: () => void; onCancel: () => void; onConfirm: () => void; primary?: boolean;
 }) {
   if (!confirming) {
-    return <Action label={label} disabled={disabled} onClick={onArm} />;
+    return <Action label={label} disabled={disabled} onClick={onArm} primary={primary} />;
   }
   return (
-    <span className="flex flex-wrap items-center gap-2 rounded-lg border border-(--warning) px-3 py-2">
+    <span role="group" aria-label={label} className="flex flex-wrap items-center gap-2 rounded-lg border border-(--warning) bg-(--warning-subtle) px-3 py-2">
       <span className="max-w-md text-sm text-(--warning)">{question}</span>
       <button type="button" onClick={onConfirm}
-        className="rounded bg-(--accent) hover:bg-(--accent-hover) transition-colors px-3 py-1.5 text-sm font-medium text-(--on-accent)">
-        Confirmer
+        className="min-h-9 rounded-lg bg-(--accent) px-3 text-sm font-medium text-(--on-accent) transition-colors hover:bg-(--accent-hover)">
+        Confirmer : {label.toLowerCase()}
       </button>
-      <button type="button" onClick={onCancel} className="rounded border border-(--border) px-3 py-1.5 text-sm">
+      <button type="button" onClick={onCancel} className="min-h-9 rounded-lg border border-(--border) bg-(--surface) px-3 text-sm">
         Annuler
       </button>
     </span>
@@ -681,14 +889,15 @@ function JoinTeamBlock({
 
   return (
     <div className="mt-6 border-t border-(--border) pt-5">
-      <h3 className="text-sm font-medium">Entrer dans un groupe comme participant</h3>
-      <p className="mt-1 mb-3 text-xs text-(--foreground-muted)">
+      <h3 className="text-base font-semibold">Entrer dans un groupe comme participant</h3>
+      <p className="mt-1 mb-3 max-w-2xl text-sm text-(--foreground-muted)">
         Vous jouez réellement dans l’équipe : vos saisies comptent pour elle. Un bandeau vous
         ramène ici à tout moment, et vous ne pouvez être que dans un groupe à la fois.
       </p>
 
       <label className="mb-3 flex items-center gap-2 text-sm">
         <input
+          id="facilitateur-visible"
           type="checkbox"
           checked={visible}
           onChange={(event) => setVisible(event.target.checked)}
@@ -697,7 +906,7 @@ function JoinTeamBlock({
         M’afficher dans la liste des connectés du groupe
       </label>
 
-      {error ? <p className="mb-3 text-sm text-(--negative)">{error}</p> : null}
+      {error ? <p role="alert" className="mb-3 text-sm text-(--negative)">{error}</p> : null}
 
       <div className="flex flex-wrap gap-2">
         {joinable.map((t) => (
@@ -706,7 +915,7 @@ function JoinTeamBlock({
             type="button"
             disabled={pending}
             onClick={() => join(t.teamId)}
-            className="flex items-center gap-2 rounded-lg border border-(--border) px-3 py-1.5 text-sm disabled:opacity-40"
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-(--border) px-3 text-sm disabled:opacity-40 enabled:hover:border-(--accent)"
           >
             <span
               aria-hidden

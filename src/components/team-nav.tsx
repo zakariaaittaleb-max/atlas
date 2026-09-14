@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { DasSwitcher } from '@/components/das-scope';
 import { PresenceBar } from '@/components/presence-bar';
 import { SidebarNav, type NavGroup } from '@/components/sidebar-nav';
+import { TeamChrome } from '@/components/team-chrome';
 import { getRoundState, getTeamContext, getUser } from '@/lib/dal';
 import { readDisplayConfig } from '@/lib/display-config';
 import { NAV_COOKIE } from '@/lib/display-config-types';
@@ -125,16 +126,9 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
   // Tour fermé : il n'y a plus rien à renseigner, donc rien à compter.
   const todo = open ? await screensToFill(modules) : {};
 
-  return (
-    <div className="min-h-0 flex-1 lg:flex" data-round-locked={open ? undefined : ''}>
-      {/* Premier arrêt de la tabulation : sans lui, clavier et lecteur d'écran
-          traversaient toute la navigation avant d'atteindre chaque écran. */}
-      <a
-        href="#contenu"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-(--accent) focus:px-4 focus:py-2.5 focus:text-sm focus:font-semibold focus:text-(--on-accent)"
-      >
-        Aller au contenu
-      </a>
+  // L'habillage (navigation, argent) est retiré côté client des écrans qui ne
+  // sont pas des écrans d'équipe — voir `TeamChrome`.
+  const sidebar = (
       <SidebarNav
         teamName={team.teamName}
         groups={groups}
@@ -146,8 +140,9 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
         initialCollapsed={jar.get(NAV_COOKIE)?.value === 'collapsed'}
         todo={todo}
       />
+  );
 
-      <div className="flex min-w-0 flex-1 flex-col">
+  const topBar = (
         <div className="sticky top-0 z-20 border-b border-(--border) bg-(--surface)/95 backdrop-blur print:hidden">
           {/* ── L'argent, en permanence ──────────────────────────────────
               Une équipe engageait des dépenses sur quatre écrans sans jamais
@@ -200,14 +195,12 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
             </p>
           ) : null}
         </div>
+  );
 
-        {/* Cible du lien d'évitement. Un conteneur, pas une commande : le
-            contour de focus n'y signalerait rien d'actionnable. */}
-        <div id="contenu" tabIndex={-1} className="flex min-w-0 flex-1 flex-col" style={{ outline: 'none' }}>
-          {children}
-        </div>
-      </div>
-    </div>
+  return (
+    <TeamChrome locked={!open} sidebar={sidebar} topBar={topBar}>
+      {children}
+    </TeamChrome>
   );
 }
 

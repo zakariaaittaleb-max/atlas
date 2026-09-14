@@ -218,6 +218,10 @@ export default async function FacilitatorPage({
           deletePresetAction={deleteModulePresetAction}
         />
       }
+      warRoomPending={warRoomShocks.reduce(
+        (acc, s) => acc + s.responses.filter((r) => r.plan !== null && !r.reviewed).length,
+        0,
+      )}
       warRoomSection={
         <WarRoomSection
           sessionId={sessionId}

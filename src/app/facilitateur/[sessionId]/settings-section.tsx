@@ -55,8 +55,13 @@ const DIMENSIONS = [
 ] as const;
 
 export function SettingsSection({
-  sessionId, difficulty, dials, locked, sectors, call, disabled,
+  sessionId, difficulty, dials, locked, sectors, call, disabled, part = 'tout',
 }: {
+  /**
+   * Les deux blocs ne vivent plus au même endroit de la page : la difficulté
+   * se règle avant la partie, une carte sur mesure se compose pendant.
+   */
+  part?: 'difficulte' | 'carte' | 'tout';
   sessionId: string;
   difficulty: string;
   dials: DifficultyDials;
@@ -80,6 +85,7 @@ export function SettingsSection({
   return (
     <>
       {/* ── Difficulté ─────────────────────────────────────────────────── */}
+      {part === 'carte' ? null : (
       <section className="mb-8 rounded-xl border border-(--border) bg-(--surface) p-6">
         <h2 className="text-xl font-medium">Niveau de difficulté</h2>
         <p className="mt-1 mb-5 max-w-3xl text-sm text-(--foreground-muted)">
@@ -157,8 +163,10 @@ export function SettingsSection({
           Appliquer le niveau
         </button>
       </section>
+      )}
 
       {/* ── Carte sur mesure ───────────────────────────────────────────── */}
+      {part === 'difficulte' ? null : (
       <section className="mb-8 rounded-xl border border-(--border) bg-(--surface) p-6">
         <h2 className="text-xl font-medium">Composer une crise ou une opportunité</h2>
         <p className="mt-1 mb-5 max-w-3xl text-sm text-(--foreground-muted)">
@@ -330,6 +338,7 @@ export function SettingsSection({
           </button>
         </fieldset>
       </section>
+      )}
     </>
   );
 }
