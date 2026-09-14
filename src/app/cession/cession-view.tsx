@@ -239,6 +239,7 @@ export function CessionView({
         {showSell ? (
           <Accordion
             title="Vendre un DAS"
+            indicators={{ topic: 'cession-vente' }}
             defaultOpen={ownListings.length > 0}
             summary={`${ownListings.length} en vente`}
             hint="Céder un DAS libère de la trésorerie et recentre votre portefeuille. L’acheteur non joueur offre toujours moins qu’un concurrent rationnel : c’est un plancher de liquidité, pas une bonne affaire."
@@ -285,6 +286,7 @@ export function CessionView({
         {showAcquire ? (
           <Accordion
             title="Entrer dans un nouveau domaine"
+            indicators={{ topic: 'cession-acquisition' }}
             summary={`${targets.length} cible${targets.length > 1 ? 's' : ''} · ${entryOffers} offre${entryOffers > 1 ? 's' : ''}`}
             hint={
               <>
@@ -325,6 +327,7 @@ export function CessionView({
         {showIntegration ? (
           <Accordion
             title="Intégrer votre filière"
+            indicators={{ topic: 'cession-acquisition' }}
             summary={`${integrationTargets.length} maillon${integrationTargets.length > 1 ? 's' : ''} · ${ownedLinks} détenu${ownedLinks > 1 ? 's' : ''}`}
             hint={
               <>
@@ -373,6 +376,7 @@ export function CessionView({
         {showBid ? (
           <Accordion
             title="DAS en vente dans votre pool"
+            indicators={{ topic: 'cession-acquisition' }}
             defaultOpen={market.length > 0}
             summary={`${market.length} annonce${market.length > 1 ? 's' : ''} · ${myBids.length} offre${myBids.length > 1 ? 's' : ''}`}
             hint="Les offres sont scellées : vous ne voyez ni celles des autres équipes, ni ce que l’acheteur non joueur propose au vendeur. Budgétez votre intégration — sans elle, un rachat détruit jusqu’à 45 % de ce que vous venez de payer."
@@ -427,7 +431,7 @@ function ListingPanel({
     <div className="mt-4 border-t border-(--border) pt-4">
       <dl className="mb-4 grid gap-2 sm:grid-cols-2">
         <div className="rounded-lg bg-(--surface-muted) px-4 py-3">
-          <dt className="flex items-center gap-1.5 text-xs text-(--foreground-muted)">
+          <dt className="flex items-center gap-1.5 text-sm text-(--foreground-muted)">
             Offre de l’acheteur non joueur
             <InfoHint label="Offre de l’acheteur non joueur">
               Visible de vous seul. Ferme et immédiate.
@@ -438,7 +442,7 @@ function ListingPanel({
           </dd>
         </div>
         <div className="rounded-lg bg-(--surface-muted) px-4 py-3">
-          <dt className="flex items-center gap-1.5 text-xs text-(--foreground-muted)">
+          <dt className="flex items-center gap-1.5 text-sm text-(--foreground-muted)">
             Offres reçues de vos concurrents
             <InfoHint label="Offres reçues">
               Leur montant vous restera inconnu jusqu’au dénouement.
@@ -745,7 +749,7 @@ function AcquisitionCard({
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-(--surface-muted) px-3 py-2">
-      <dt className="text-xs text-(--foreground-muted)">{label}</dt>
+      <dt className="text-sm text-(--foreground-muted)">{label}</dt>
       <dd className="mt-0.5 font-medium">{value}</dd>
     </div>
   );

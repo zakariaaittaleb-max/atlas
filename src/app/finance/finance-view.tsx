@@ -227,6 +227,7 @@ export function FinanceView({
           {screenIsOpen(modules, 'finance') ? (
             <Accordion
               title="Vos décisions financières"
+              indicators={{ topic: 'finance-decisions' }}
               anchor="finance-decisions"
               defaultOpen
               summary={creditSummary}

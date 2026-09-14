@@ -3,6 +3,8 @@
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 
+import { IndicatorsButton, type IndicatorsRequest } from '@/components/decision-indicators';
+
 import { InfoHint } from './info-hint';
 
 /**
@@ -16,6 +18,11 @@ import { InfoHint } from './info-hint';
  * `aria-expanded`. Le contenu fermé reste dans le DOM (masqué) : l'impression
  * le déplie, et un champ en cours de saisie ne perd pas son état.
  *
+ * ── LES INDICATEURS D'UNE DÉCISION ─────────────────────────────────────────
+ * Un bloc où l'on décide peut porter `indicators` : un bouton de l'en-tête
+ * ouvre alors, à la demande, les chiffres qui éclairent cette décision. Il ne
+ * replie pas la section, et rien n'est chargé tant qu'on ne l'ouvre pas.
+ *
  * ── S'OUVRIR SUR UN LIEN ───────────────────────────────────────────────────
  * Un lien vers `#ancre` — celle de la section, ou d'un champ qu'elle contient —
  * ouvre la section, fait défiler jusqu'à la cible et la surligne un instant.
@@ -27,6 +34,7 @@ export function Accordion({
   hint,
   defaultOpen = false,
   anchor,
+  indicators,
   children,
 }: {
   title: string;
@@ -37,6 +45,8 @@ export function Accordion({
   defaultOpen?: boolean;
   /** Identifiant de la section, pour y mener par un lien. */
   anchor?: string;
+  /** La fiche d'indicateurs de cette décision, ouverte depuis l'en-tête. */
+  indicators?: IndicatorsRequest;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -93,6 +103,7 @@ export function Accordion({
           </button>
           {hint ? <InfoHint label={title}>{hint}</InfoHint> : null}
         </h3>
+        {indicators ? <IndicatorsButton decision={title} {...indicators} /> : null}
         {summary ? (
           <span className="tabular shrink-0 text-right font-mono text-sm font-medium text-(--foreground)">
             {summary}

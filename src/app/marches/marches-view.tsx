@@ -199,6 +199,7 @@ export function MarchesView({
           {showProcurement ? (
             <Accordion
               title="Fournisseurs"
+              indicators={{ topic: 'marches-fournisseurs', dasId: das.dasId }}
               defaultOpen
               summary={`${proc.length} retenu${proc.length > 1 ? 's' : ''} · ${formatUnits(procTotal)} u.`}
               hint="Le volume engagé détermine votre poids dans leur carnet, donc la remise obtenue — jusqu’à −18 % sur le prix d’achat. Il détermine aussi la matière disponible : en engager moins que vous ne vendez bride l’atelier."
@@ -310,6 +311,7 @@ export function MarchesView({
           {showDistribution ? (
             <Accordion
               title="Distributeurs"
+              indicators={{ topic: 'marches-distributeurs', dasId: das.dasId }}
               summary={overShare ? `${formatPct(shareTotal, 0)} · au-delà de 100 %` : `${dist.length} retenu${dist.length > 1 ? 's' : ''} · ${formatPct(shareTotal, 0)} confié`}
               hint="On ne vend pas là où on n’est pas distribué : votre part de marché est plafonnée par votre couverture. Les couvertures se recoupent — leur somme n’est jamais leur union."
             >

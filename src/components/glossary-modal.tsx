@@ -1,7 +1,7 @@
 'use client';
 
 import { BookOpen, ChevronDown } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { Dialog } from '@/components/ui/dialog';
 
@@ -45,13 +45,16 @@ const GLOSSARY = [
  * Échap, et dont la tabulation s'échappait vers les champs cachés derrière.
  * Chaque terme se déplie par un bouton qui annonce son état.
  */
-export function GlossaryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function GlossaryModal({
+  open, onClose, returnFocus,
+}: { open: boolean; onClose: () => void; returnFocus?: React.RefObject<HTMLElement | null> }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
     <Dialog
       open={open}
       onClose={onClose}
+      returnFocus={returnFocus}
       title="Concepts clés d’Atlas"
       footer={
         <button
@@ -102,10 +105,12 @@ export function GlossaryModal({ open, onClose }: { open: boolean; onClose: () =>
 
 export function GlossaryButton() {
   const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
 
   return (
     <>
       <button
+        ref={trigger}
         type="button"
         onClick={() => setOpen(true)}
         className="inline-flex min-h-9 items-center gap-2 rounded-lg px-2 text-sm font-medium text-(--foreground-muted) underline underline-offset-4 transition-colors hover:text-(--foreground)"
@@ -113,7 +118,7 @@ export function GlossaryButton() {
         <BookOpen aria-hidden className="h-4 w-4" />
         Concepts clés
       </button>
-      <GlossaryModal open={open} onClose={() => setOpen(false)} />
+      <GlossaryModal open={open} onClose={() => setOpen(false)} returnFocus={trigger} />
     </>
   );
 }

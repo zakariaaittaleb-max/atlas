@@ -14,12 +14,16 @@ import { useEffect, useId, useRef } from 'react';
  * Un clic sur le voile ferme aussi : sur un vidéoprojecteur piloté à la souris,
  * aller chercher la croix est un geste de trop.
  *
+ * À la fermeture, le focus revient sur `returnFocus`. Le navigateur le rend de
+ * lui-même à l'élément qui l'avait — mais Safari ne donne pas le focus à un
+ * bouton cliqué, et le clavier repartait alors du haut de la page.
+ *
  * Les clics sont arrêtés au bord de la fenêtre. Ouverte depuis l'en-tête d'un
  * accordéon, elle le replierait sinon à chaque clic dans son contenu — React
  * propage les événements le long de l'arbre des composants, pas du DOM.
  */
 export function Dialog({
-  open, onClose, title, subtitle, children, footer, width = 'md',
+  open, onClose, title, subtitle, children, footer, width = 'md', returnFocus,
 }: {
   open: boolean;
   onClose: () => void;
@@ -28,6 +32,8 @@ export function Dialog({
   children: React.ReactNode;
   footer?: React.ReactNode;
   width?: 'md' | 'lg';
+  /** Le bouton qui a ouvert la fenêtre, où ramener le focus. */
+  returnFocus?: React.RefObject<HTMLElement | null>;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -43,7 +49,10 @@ export function Dialog({
     <dialog
       ref={ref}
       aria-labelledby={titleId}
-      onClose={onClose}
+      onClose={() => {
+        onClose();
+        returnFocus?.current?.focus();
+      }}
       // Échap est géré ici plutôt que laissé au navigateur : Chrome ignore un
       // second « cancel » sans nouveau geste de l'utilisateur, et la fenêtre
       // restait alors ouverte sous un clavier qui insiste.

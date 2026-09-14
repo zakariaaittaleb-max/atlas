@@ -534,6 +534,7 @@ export function StrategieDasView({
             {/* ── Les décisions, une par bloc ───────────────────────────── */}
             <Accordion
               title="Stratégie générique"
+              indicators={{ topic: 'das-strategie', dasId: das.dasId }}
               summary={strategyLabel(d.genericStrategy)}
               hint={<Definitions items={labelled(GENERIC)} />}
               defaultOpen
@@ -555,6 +556,7 @@ export function StrategieDasView({
 
             <Accordion
               title="Positionnement prix"
+              indicators={{ topic: 'das-prix', dasId: das.dasId }}
               summary={`${d.pricePosition} · ${priceMultiplier(d.pricePosition)} du marché`}
               hint="La position seule ne dit rien : « 72 » n’est un choix que si l’on voit qu’on vend 18 % au-dessus du marché. Le moteur traduit 0 en 60 % du prix marché, 50 en prix marché, 100 en 140 %."
             >
@@ -589,6 +591,7 @@ export function StrategieDasView({
 
             <Accordion
               title="Segments servis"
+              indicators={{ topic: 'das-segments', dasId: das.dasId }}
               summary={`${d.servedSegments.length} sur ${das.segments.length}`}
               hint="Un segment de plus élargit le marché adressable et dilue une stratégie de concentration. Chaque segment a sa propre exigence de qualité. Au moins un segment doit rester servi."
             >
@@ -621,6 +624,7 @@ export function StrategieDasView({
             {showInvestments ? (
               <Accordion
                 title="Investissements du tour"
+                indicators={{ topic: 'das-investissements', dasId: das.dasId }}
                 summary={formatMadCompact(engagedOn(d))}
                 hint="Chaque curseur part de ce que vous avez engagé au tour précédent. Le montant se saisit aussi en dirhams. Le « + » de chaque poste dit ce qu’il produit, et quand."
               >
@@ -660,6 +664,7 @@ export function StrategieDasView({
             {isOn(modules, 'das.declare_blue_ocean') ? (
               <Accordion
                 title="Océan bleu"
+                indicators={{ topic: 'das-ocean-bleu', dasId: das.dasId }}
                 summary={d.declareBlueOcean ? 'déclaré' : 'non déclaré'}
                 hint="Vous sortez du calcul à somme nulle pendant deux tours et votre marge est multipliée par 2,5 — en cas de succès. L’entrée coûte cher et peut échouer."
               >

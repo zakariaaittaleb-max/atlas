@@ -273,6 +273,7 @@ export function OrganisationView({
           {anyOn(modules, DIRECTIVES_KEYS) ? (
             <Accordion
               title="Directives du Groupe"
+              indicators={{ topic: 'org-directives', dasId: activeDas }}
               defaultOpen
               summary={
                 context.group === null
@@ -449,6 +450,7 @@ export function OrganisationView({
           {anyOn(modules, HR_KEYS) ? (
             <Accordion
               title="Ressources humaines"
+              indicators={{ topic: 'org-rh', dasId: activeDas }}
               summary={`effectif ${formatUnits(headcountTarget)}`}
               hint="Chaque métier a sa pyramide et sa sensibilité à la formation. Les indicateurs du dernier exercice figurent en tête du bloc : on décide en regardant d’où l’on part."
             >
@@ -476,6 +478,7 @@ export function OrganisationView({
           {isOn(modules, 'org.axes') ? (
             <Accordion
               title="Axes stratégiques"
+              indicators={{ topic: 'org-structure', dasId: activeDas }}
               summary={`${axesChosen} sur 3`}
               hint="Ce domaine dit ce qu’il PRIORISE — et c’est cela qui est mesuré. L’ordre compte : le premier axe pèse trois fois plus que le troisième. Choisir trois priorités n’est un arbitrage que si l’on en écarte d’autres."
             >
@@ -531,6 +534,7 @@ export function OrganisationView({
           {isOn(modules, 'org.delegation') ? (
             <Accordion
               title="Délégation"
+              indicators={{ topic: 'org-structure', dasId: activeDas }}
               summary={`${das.delegationLevel} / 100`}
               hint="Le degré d’autonomie laissé à CE métier. Ni le sommet ni le terrain n’ont raison dans l’absolu : standardiser sert les coûts, décider vite sert une niche exigeante. La forme de structure, elle, se décide dans Stratégie du Groupe."
             >
@@ -559,6 +563,7 @@ export function OrganisationView({
           {isOn(modules, 'org.positions') ? (
             <Accordion
               title="Organigramme"
+              indicators={{ topic: 'org-structure', dasId: activeDas }}
               summary={`${das.positions.length} poste${das.positions.length > 1 ? 's' : ''} · ${keyCount} clé${keyCount > 1 ? 's' : ''}`}
               hint="Déclarer un poste CLÉ, c’est y concentrer l’attention et les moyens. Au-delà de trois, « clé » cesse de vouloir dire quelque chose."
             >
@@ -585,6 +590,7 @@ export function OrganisationView({
           {isOn(modules, 'org.kpis') ? (
             <Accordion
               title="Indicateurs de pilotage"
+              indicators={{ topic: 'org-structure', dasId: activeDas }}
               summary={`${kpisChosen} sur ${context.directions.length}`}
               hint="Choisir un indicateur, c’est décider de ce que la direction va optimiser — donc de ce qu’elle va sacrifier. Un responsable de production suivi sur le coût unitaire et un autre suivi sur le taux de rebut ne prendront pas les mêmes décisions."
             >
@@ -634,6 +640,7 @@ export function OrganisationView({
           {isOn(modules, 'org.budgets') ? (
             <Accordion
               title="Répartition des moyens"
+              indicators={{ topic: 'org-moyens', dasId: activeDas }}
               summary={overBudget ? `dépassement ${formatMadCompact(budgetTotal - context.operatingBudgetMad)}` : `${formatPct(budgetShare, 0)} réparti`}
               hint="Là où va l’argent dit ce que vous faites vraiment. Déclarer une différenciation en finançant la production comme une usine low-cost est l’incohérence que le moteur relève le plus sûrement."
             >

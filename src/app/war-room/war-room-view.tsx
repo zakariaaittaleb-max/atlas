@@ -183,6 +183,7 @@ export function WarRoomView({
                 <Accordion
                   key={shock.shockId}
                   title={shock.name}
+                  indicators={{ topic: 'war-room' }}
                   defaultOpen={!shock.plan && shock.roundsRemaining > 0}
                   summary={
                     shock.plan
