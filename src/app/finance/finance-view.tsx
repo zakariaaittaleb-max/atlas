@@ -62,14 +62,32 @@ const FINANCE_FIELDS = [
     + 'Un siège se dégraisse, il ne se supprime pas : sous un plancher, la charge revient.'],
 ] as const satisfies readonly (readonly [string, 'opexMad', string, string, string])[];
 
+/** Les quatre paliers de détresse de trésorerie (doc 02 §10.2). */
+const TREASURY_STATUS: Record<string, { label: string; hint: string }> = {
+  sain: { label: 'Statut : sain', hint: 'Aucun tour consécutif en trésorerie négative.' },
+  surveillance: {
+    label: 'Statut : surveillance',
+    hint: 'Trésorerie négative depuis un tour. Persister dégrade votre compétitivité et l’attractivité que vous présentez aux investisseurs.',
+  },
+  restructuration: {
+    label: 'Statut : restructuration',
+    hint: 'Trésorerie négative depuis plusieurs tours : le malus de compétitivité s’alourdit, et la banque comme les investisseurs vous jugent plus durement.',
+  },
+  liquidation: {
+    label: 'Statut : liquidation',
+    hint: 'Le palier le plus sévère : l’équipe risque la liquidation si la trésorerie ne se redresse pas.',
+  },
+};
+
 /** Les montants qui se saisissent en valeur, bornés par un fait et non par un écart. */
 const MONEY_FIELDS = [
   ['finance.capital_raise', 'capitalRaisedMad', 'Levée de fonds propres',
     'Vos actionnaires remettent au pot. Élargit directement votre capacité d’endettement — '
-    + 'et se paie 2 % de frais d’émission.'],
+    + 'mais le prix et le plafond que voici dépendent de ce que les investisseurs pensent de vous.'],
   ['finance.dividend', 'dividendMad', 'Dividende',
     'Se vote sur l’exercice clos, et ne peut pas dépasser son résultat net. '
-    + 'Rémunérer l’actionnaire, c’est autant de moins pour financer la croissance.'],
+    + 'Rémunérer l’actionnaire, c’est autant de moins pour financer la croissance — mais une '
+    + 'entreprise mûre qui ne distribue rien perd des points d’attractivité auprès d’eux.'],
 ] as const satisfies readonly (readonly [string, 'capitalRaisedMad' | 'dividendMad', string, string])[];
 
 export function FinanceView({
@@ -148,11 +166,12 @@ export function FinanceView({
 
         <div className="space-y-4">
           {/* ── Les chiffres qui commandent le tour ───────────────────────── */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <StatCard
               label="Trésorerie d’ouverture"
               value={formatMadCompact(context.treasuryMad)}
-              note="Au début du tour"
+              note={TREASURY_STATUS[context.treasuryStatus].label}
+              hint={TREASURY_STATUS[context.treasuryStatus].hint}
             />
             <StatCard
               label="Engagé ce tour"
@@ -178,6 +197,32 @@ export function FinanceView({
                   : 'Aucune dette en cours'
               }
               hint="Ce que la banque prêterait encore : le plus contraignant de deux fois vos fonds propres et de 40 % de votre activité, moins l’encours."
+            />
+            <StatCard
+              label="Attractivité investisseurs"
+              value={context.financeLimits.investorScore === null ? '—' : `${Math.round(context.financeLimits.investorScore)} / 100`}
+              note={
+                context.financeLimits.investorScore === null
+                  ? 'Aucune résolution encore publiée'
+                  : `Frais de levée : ${(context.financeLimits.equityIssueCostPct * 100).toFixed(1).replace('.', ',')} %`
+              }
+              hint={
+                <>
+                  Ce que le marché des capitaux pense de vous : rentabilité, croissance, solidité,
+                  politique de dividende et cohérence stratégique, avec mémoire du tour précédent.
+                  Fixe, ce tour, le coût et le plafond d’une levée de fonds propres et la prime de
+                  risque bancaire.
+                  {context.financeLimits.investorComponents ? (
+                    <span className="mt-2 block space-y-1">
+                      {context.financeLimits.investorComponents.map((c) => (
+                        <span key={c.key} className="block">
+                          <strong className="font-semibold">{c.label}</strong> {Math.round(c.score)}/100 — {c.reading}
+                        </span>
+                      ))}
+                    </span>
+                  ) : null}
+                </>
+              }
             />
           </div>
 
@@ -282,7 +327,9 @@ export function FinanceView({
                   {MONEY_FIELDS.filter(([key]) => isOn(modules, key)).map(
                     ([key, field, label, hint]) => {
                       const ceiling =
-                        field === 'dividendMad' ? context.financeLimits.dividendCeilingMad : null;
+                        field === 'dividendMad' ? context.financeLimits.dividendCeilingMad
+                        : field === 'capitalRaisedMad' ? context.financeLimits.equityRaiseCapMad
+                        : null;
                       return (
                         <div
                           key={key}
@@ -317,15 +364,17 @@ export function FinanceView({
                             <p className="tabular mt-1.5 mb-0 text-xs text-(--foreground-muted)">
                               {formatMadCompact(finance[field])}
                               {field === 'capitalRaisedMad'
-                                ? ` · ${formatMadCompact(finance[field] * 0.02)} de frais`
+                                ? ` · ${formatMadCompact(finance[field] * context.financeLimits.equityIssueCostPct)} de frais`
                                 : ''}
                             </p>
                           ) : null}
                           {ceiling !== null ? (
                             <p className="tabular mt-1.5 mb-0 text-xs text-(--foreground-muted)">
-                              {ceiling > 0
-                                ? `Plafond : ${formatMadCompact(ceiling)}, le résultat du dernier exercice`
-                                : 'Aucun résultat distribuable sur le dernier exercice'}
+                              {field === 'capitalRaisedMad'
+                                ? `Plafond : ${formatMadCompact(ceiling)} · ${(context.financeLimits.equityIssueCostPct * 100).toFixed(1).replace('.', ',')} % de frais d’émission, ce que les investisseurs souscrivent au vu de votre attractivité`
+                                : ceiling > 0
+                                  ? `Plafond : ${formatMadCompact(ceiling)}, le résultat du dernier exercice`
+                                  : 'Aucun résultat distribuable sur le dernier exercice'}
                             </p>
                           ) : null}
                         </div>

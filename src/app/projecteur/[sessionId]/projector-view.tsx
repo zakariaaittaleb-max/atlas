@@ -18,6 +18,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { createClient } from '@/lib/supabase/client';
+import { DasDot } from '@/components/ui/das-dot';
 import { formatMadCompact, formatPct, formatSharePoints, sessionStatusLabel } from '@/lib/format';
 
 export interface PoolStanding {
@@ -28,6 +29,8 @@ export interface PoolStanding {
   rows: {
     teamId: string;
     teamName: string;
+    /** La marque que l'équipe a donnée à SON domaine ici. `null` faute de nom choisi. */
+    brandName: string | null;
     isLiquidated: boolean;
     marketSharePct: number;
     revenueMad: number;
@@ -77,27 +80,35 @@ export function ProjectorView({
         <div className="space-y-10">
           {standings.map((pool) => (
             <section key={pool.dasId}>
-              <h2 className="mb-4 text-3xl font-medium">{pool.dasName}</h2>
+              <h2 className="mb-4 flex items-center gap-3 text-3xl font-medium">
+                <DasDot seed={pool.dasName} className="h-4 w-4" />
+                {pool.dasName}
+              </h2>
 
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="border-b-2 border-(--border) text-left text-xl text-(--foreground-muted)">
-                    <th className="py-3 pr-6 font-medium">Équipe</th>
-                    <th className="py-3 pr-6 text-right font-medium">Part de marché</th>
-                    <th className="py-3 pr-6 text-right font-medium">Variation</th>
-                    <th className="py-3 text-right font-medium">Chiffre d’affaires</th>
+                    <th scope="col" className="py-3 pr-6 font-medium">Marque</th>
+                    <th scope="col" className="py-3 pr-6 text-right font-medium">Part de marché</th>
+                    <th scope="col" className="py-3 pr-6 text-right font-medium">Variation</th>
+                    <th scope="col" className="py-3 text-right font-medium">Chiffre d’affaires</th>
                   </tr>
                 </thead>
                 <tbody className="tabular">
                   {pool.rows.map((row, rank) => (
                     <tr key={row.teamId} className="border-b border-(--border) last:border-0">
-                      <td className="py-4 pr-6 text-3xl font-medium">
+                      <th scope="row" className="py-4 pr-6 text-left text-3xl font-medium">
                         <span className="mr-4 text-(--foreground-muted)">{rank + 1}</span>
-                        {row.teamName}
+                        {row.brandName ?? row.teamName}
+                        {row.brandName ? (
+                          <span className="ml-3 text-lg font-normal text-(--foreground-muted)">
+                            {row.teamName}
+                          </span>
+                        ) : null}
                         {row.isLiquidated ? (
                           <span className="ml-3 text-xl text-(--negative)">liquidée</span>
                         ) : null}
-                      </td>
+                      </th>
                       <td className="py-4 pr-6 text-right text-4xl font-semibold">
                         {formatPct(row.marketSharePct, 1)}
                       </td>

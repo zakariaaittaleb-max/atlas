@@ -126,6 +126,15 @@ export default async function CessionPage() {
           segments: (segments ?? [])
             .filter((s) => String(s.das_id) === String(t.das_id))
             .map((s) => String(s.name)),
+          // Ce que la place en dit, gratuitement (migration 0044) : à afficher
+          // en infobulle avant même d'avoir payé une due diligence au cabinet.
+          marketBand: {
+            revenueMinMad: Number(t.revenue_band_min_mad ?? 0),
+            revenueMaxMad: Number(t.revenue_band_max_mad ?? 0),
+            marketShareBand: t.market_share_band ? String(t.market_share_band) : null,
+            headcountApprox: Number(t.headcount_approx ?? 0),
+            healthBand: t.health_band ? (String(t.health_band) as 'fragile' | 'correcte' | 'solide') : null,
+          },
           // L'équipe doit savoir ce qu'elle fait : entrer dans un métier neuf,
           // ou renforcer une position qu'elle tient déjà.
           consolidation: sellable.some((d) => d.dasId === String(t.das_id)),

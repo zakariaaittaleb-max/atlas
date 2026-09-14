@@ -45,6 +45,7 @@ import {
 } from '@/components/decision-shell';
 import { GlossaryButton } from '@/components/glossary-modal';
 import { Accordion } from '@/components/ui/accordion';
+import { DasDot } from '@/components/ui/das-dot';
 import { ChipToggle, ChoiceCard, Definitions, GroupLegend } from '@/components/ui/form-controls';
 import { InfoHint } from '@/components/ui/info-hint';
 import { StatCard } from '@/components/ui/stat-card';
@@ -450,7 +451,8 @@ export function StrategieDasView({
               </p>
               <h1 className="mt-1 flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight text-(--heading)">
                 {das ? (
-                  <span>
+                  <span className="inline-flex items-center gap-2">
+                    <DasDot seed={das.activityName} />
                     Stratégie de{' '}
                     {/* Le domaine EST une marque : c'est ici qu'on la nomme, dans
                         le titre de l'écran qui la pilote. */}

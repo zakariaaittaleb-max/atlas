@@ -64,6 +64,9 @@ import {
   resolveTransfer,
   treasuryStatus,
 } from './finance';
+import {
+  equityIssueTerms, investorAttractiveness, investorRateAdjustment, type InvestorView,
+} from './investors';
 import { clamp, clamp01, clamp100, makeRng, median, seedFrom } from './math';
 import {
   allocateMarketShares,
@@ -103,6 +106,7 @@ import type {
   ResolutionInput,
   ShockEffects,
   TeamDasSnapshot,
+  TeamSnapshot,
 } from './snapshot';
 import type {
   AlignmentResult,
@@ -208,6 +212,8 @@ export interface TeamOutput {
   treasuryStatus: TreasuryStatus;
   consecutiveNegativeTreasuryRounds: number;
   nextRoundCompetitivenessMalus: number;
+  /** Ce que le marché des capitaux pense du Groupe à la clôture du tour. */
+  investors: InvestorView;
 }
 
 export interface PoolDasSummary {
@@ -1658,6 +1664,13 @@ export function resolveRound(
           )
         : 60) + weightedShock((s) => s.workingCapitalDaysDelta);
 
+    // Les conditions de financement du tour sont celles que les investisseurs
+    // ont fixées à la CLÔTURE du précédent : une levée se négocie sur la
+    // réputation qu'on a, pas sur celle qu'on espère.
+    const issueTerms = equityIssueTerms(
+      team.finance.investorAttractiveness ?? null, team.finance.equityMad, params,
+    );
+
     const pnl = buildPnl(
       {
         revenueMad,
@@ -1696,8 +1709,12 @@ export function resolveRound(
         previousWorkingCapitalMad: team.finance.previousWorkingCapitalMad,
         debtDrawnMad: team.finance.debtDrawnMad,
         debtRepaidMad: team.finance.debtRepaidMad,
-        capitalRaisedMad: team.finance.capitalRaisedMad,
+        // Au-delà du plafond, les investisseurs ne souscrivent pas : la route
+        // d'écriture borne déjà la saisie, le moteur le revérifie.
+        capitalRaisedMad: Math.min(team.finance.capitalRaisedMad, issueTerms.capMad),
         dividendMad: team.finance.dividendMad,
+        equityIssueCostPct: issueTerms.costPct,
+        investorSpreadAdjustment: investorRateAdjustment(team.finance.investorAttractiveness ?? null, params),
         // Répondre à une crise se paie, y compris quand la carte s'avère
         // bénigne : c'est le prix de l'assurance, et c'est l'arbitrage que
         // la war room propose. Le coût était calculé puis jamais débité.
@@ -1751,6 +1768,8 @@ export function resolveRound(
       treasuryStatus: treasury.status,
       consecutiveNegativeTreasuryRounds: treasury.consecutiveNegativeRounds,
       nextRoundCompetitivenessMalus: treasury.nextRoundCompetitivenessMalus,
+      // Provisoire : recalculé après les cessions, qui changent la trésorerie.
+      investors: investorViewOf(team, pnl, alignment.iaFinal, treasury.status, params),
     });
   }
 
@@ -1921,6 +1940,9 @@ export function resolveRound(
     output.treasuryStatus = treasury.status;
     output.consecutiveNegativeTreasuryRounds = treasury.consecutiveNegativeRounds;
     output.nextRoundCompetitivenessMalus = treasury.nextRoundCompetitivenessMalus;
+    // Les investisseurs jugent le Groupe sur sa situation FINALE, cessions
+    // comprises : vendre un domaine pour se désendetter se voit.
+    output.investors = investorViewOf(team, output.pnl, output.alignment.iaFinal, treasury.status, params);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -2206,4 +2228,37 @@ export function checkInvariants(
   }
 
   return failures;
+}
+
+/**
+ * L'indice d'attractivité d'un Groupe, lu sur son compte de résultat du tour.
+ *
+ * Le dividende est jugé contre le résultat de l'exercice CLOS — celui sur
+ * lequel il a été voté — et non contre le résultat du tour, encore inconnu au
+ * moment du vote.
+ */
+function investorViewOf(
+  team: TeamSnapshot,
+  pnl: PnlStatement,
+  iaScore: number,
+  status: TreasuryStatus,
+  params: EngineParams,
+): InvestorView {
+  return investorAttractiveness(
+    {
+      netIncomeMad: pnl.netIncomeMad,
+      equityOpenMad: team.finance.equityMad,
+      equityEndMad: pnl.equityEndMad,
+      revenueMad: pnl.revenueMad,
+      previousRevenueMad: team.finance.previousRevenueMad ?? null,
+      debtEndMad: pnl.debtOutstandingEndMad,
+      treasuryStatus: status,
+      iaScore,
+      dividendMad: pnl.dividendMad,
+      previousDividendMad: team.finance.previousDividendMad ?? 0,
+      distributableIncomeMad: team.finance.previousNetIncomeMad ?? 0,
+      previousScore: team.finance.investorAttractiveness ?? null,
+    },
+    params,
+  );
 }

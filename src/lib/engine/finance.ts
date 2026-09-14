@@ -41,10 +41,17 @@ export function interestExpense(
    * centrale peut détendre, elle ne paie pas l'emprunteur.
    */
   rateDelta = 0,
+  /**
+   * Ce que la banque ajoute ou retranche à sa prime selon ce que le marché
+   * pense du Groupe (voir `investorRateAdjustment`). Le taux total ne devient
+   * jamais négatif.
+   */
+  spreadAdjustment = 0,
 ): number {
   const keyRate = param(params, 'finance.bam_key_rate');
   const effective = Math.max(keyRate + rateDelta, 0);
-  return Math.max(debtMad, 0) * (effective + riskMargin(debtMad, equityMad, params));
+  return Math.max(debtMad, 0) *
+    Math.max(effective + riskMargin(debtMad, equityMad, params) + spreadAdjustment, 0);
 }
 
 // ===========================================================================
@@ -144,6 +151,13 @@ export interface PnlInput {
   capitalRaisedMad?: number;
   /** Dividende voté sur l'exercice clos. */
   dividendMad?: number;
+  /**
+   * Frais et décote d'émission, en part du montant levé, tels que les
+   * investisseurs les fixent (voir `equityIssueTerms`). Absent : frais de base.
+   */
+  equityIssueCostPct?: number;
+  /** Ajustement de la prime de risque bancaire par l'attractivité. */
+  investorSpreadAdjustment?: number;
   divestitureCashMad: number;
   /** Écart de taux imposé par un choc monétaire. Optionnel : 0 par défaut. */
   rateDelta?: number;
@@ -191,6 +205,7 @@ export function buildPnl(input: PnlInput, params: EngineParams): PnlStatement {
   const ebitMad = ebitdaMad - input.depreciationMad;
   const interestMad = interestExpense(
     input.debtMad, input.equityMad, params, input.rateDelta ?? 0,
+    input.investorSpreadAdjustment ?? 0,
   );
   const pretaxIncomeMad = ebitMad - interestMad;
 
@@ -208,7 +223,8 @@ export function buildPnl(input: PnlInput, params: EngineParams): PnlStatement {
   // produit, donc l'équipe encaisse et capitalise le NET. Sans ce coût, lever
   // du capital serait un robinet sans contrepartie.
   const capitalRaisedMad = Math.max(input.capitalRaisedMad ?? 0, 0);
-  const equityIssueCostMad = capitalRaisedMad * param(params, 'finance.equity_issue_cost_pct');
+  const equityIssueCostMad =
+    capitalRaisedMad * (input.equityIssueCostPct ?? param(params, 'finance.equity_issue_cost_pct'));
   const capitalNetMad = capitalRaisedMad - equityIssueCostMad;
   const dividendMad = Math.max(input.dividendMad ?? 0, 0);
 

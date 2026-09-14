@@ -26,19 +26,27 @@ export default async function ProjectorPage({
     .from('game_sessions').select('status, current_round, planned_rounds').eq('id', sessionId).maybeSingle();
   const roundNumber = Number(session?.current_round ?? 0);
 
-  const [{ data: teams }, { data: das }, { data: metrics }, { data: previous }, { data: summaries }] =
+  const [{ data: teams }, { data: das }, { data: metrics }, { data: previous }, { data: summaries }, { data: units }] =
     await Promise.all([
       admin.from('teams').select('id, name, pool_id, is_liquidated').eq('session_id', sessionId),
       admin.from('strategic_units').select('id, name').eq('session_id', sessionId),
       admin.from('team_das_round_metrics').select('team_id, das_id, market_share_pct, revenue_mad, competitiveness_score').eq('round_number', roundNumber),
       admin.from('team_das_round_metrics').select('team_id, das_id, market_share_pct').eq('round_number', roundNumber - 1),
       admin.from('pool_round_summary').select('das_id, unserved_share, installed_share').eq('round_number', roundNumber),
+      // La marque que chaque équipe a donnée à SON domaine : c'est elle qu'on
+      // compare entre concurrents, pas le nom de l'équipe (migration 0033).
+      admin.from('team_units').select('team_id, das_id, brand_name'),
     ]);
 
   const teamById = new Map((teams ?? []).map((t) => [String(t.id), t]));
   const dasName = new Map((das ?? []).map((d) => [String(d.id), String(d.name)]));
   const previousShare = new Map(
     (previous ?? []).map((p) => [`${String(p.team_id)}:${String(p.das_id)}`, Number(p.market_share_pct ?? 0)]),
+  );
+  const brandByTeamDas = new Map(
+    (units ?? [])
+      .filter((u) => u.brand_name)
+      .map((u) => [`${String(u.team_id)}:${String(u.das_id)}`, String(u.brand_name)]),
   );
 
   // Regroupement par DAS : c'est le marché, donc l'unité de classement.
@@ -64,6 +72,7 @@ export default async function ProjectorPage({
     entry.rows.push({
       teamId: String(m.team_id),
       teamName: String(team.name),
+      brandName: brandByTeamDas.get(key) ?? null,
       isLiquidated: Boolean(team.is_liquidated),
       marketSharePct: Number(m.market_share_pct ?? 0),
       revenueMad: Number(m.revenue_mad ?? 0),

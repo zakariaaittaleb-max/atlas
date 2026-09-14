@@ -888,6 +888,14 @@ export async function loadResolutionSnapshot(
         capexHistoryMad: capexRoundsByTeam.get(teamId) ?? [],
         previousWorkingCapitalMad: num(pnl?.working_capital_mad),
         consultingSpendMad: consultingByTeam.get(teamId) ?? 0,
+        // ── Ce que les investisseurs ont retenu du tour précédent ─────────
+        investorAttractiveness:
+          state?.investor_attractiveness === null || state?.investor_attractiveness === undefined
+            ? null
+            : num(state.investor_attractiveness),
+        previousRevenueMad: pnl ? num(pnl.revenue_mad) : null,
+        previousNetIncomeMad: num(pnl?.net_income_mad),
+        previousDividendMad: num(pnl?.dividend_mad),
       },
       units,
       previousClimatSocial: num(state?.climat_social, 70),

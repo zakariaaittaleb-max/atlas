@@ -327,6 +327,18 @@ export interface FinanceSnapshot {
   capexHistoryMad: number[];
   previousWorkingCapitalMad: number;
   consultingSpendMad: number;
+  /**
+   * Ce que les investisseurs ont retenu du tour précédent.
+   *
+   * Optionnels : absents avant la première résolution, et dans les jeux
+   * d'essai antérieurs à l'indice. Absents, les conditions de financement
+   * restent celles de base.
+   */
+  investorAttractiveness?: number | null;
+  previousRevenueMad?: number | null;
+  /** Résultat de l'exercice clos : l'assiette du dividende voté ce tour. */
+  previousNetIncomeMad?: number;
+  previousDividendMad?: number;
 }
 
 export interface TeamSnapshot {

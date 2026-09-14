@@ -206,6 +206,16 @@ export async function POST(request: Request) {
       // Conformité de chaque DAS aux directives du groupe. Par DAS, et non par
       // équipe : c'est tout l'objet de la distinction des deux étages.
       group_alignment: result.groupAlignment,
+      // L'indice d'attractivité et ses composantes, écrits par
+      // `atlas_persist_investors` sur les lignes que le cœur vient d'insérer.
+      investors: result.teams.map((t) => ({
+        teamId: t.teamId,
+        score: t.investors.score,
+        components: t.investors.components,
+        payoutRatio: t.investors.payoutRatio,
+        equityIssueCostPct:
+          t.pnl.capitalRaisedMad > 0 ? t.pnl.equityIssueCostMad / t.pnl.capitalRaisedMad : null,
+      })),
       // État RH par DAS : climat, charge, compétence, rotation, masse salariale.
       das_hr: result.dasHr,
     };

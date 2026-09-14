@@ -222,6 +222,37 @@ export const DEFAULT_PARAMS = {
   // Frais d'émission d'une augmentation de capital : la levée n'est pas
   // gratuite, et c'est ce qui interdit d'en faire un robinet sans coût.
   'finance.equity_issue_cost_pct': 0.02,
+
+  // --- Investisseurs (voir `investors.ts`) ----------------------------------
+  //
+  // Ce que le marché des capitaux pense du Groupe, et le prix qu'il en fait
+  // payer. Le coût des fonds propres est le rendement qu'un actionnaire marocain
+  // exige d'une entreprise industrielle : il sert de ligne de flottaison.
+  'investors.cost_of_equity': 0.12,
+  'investors.weight.rentabilite': 0.3,
+  'investors.weight.croissance': 0.2,
+  'investors.weight.solidite': 0.2,
+  'investors.weight.distribution': 0.15,
+  'investors.weight.coherence': 0.15,
+  // Part de l'opinion du tour précédent dans l'indice publié.
+  'investors.memory': 0.4,
+  // Croissance sous laquelle une entreprise est jugée « mûre », donc attendue
+  // au guichet plutôt qu'au réinvestissement.
+  'investors.mature_growth_threshold': 0.05,
+  // Baisse du dividende tolérée avant que le marché n'y lise une inquiétude,
+  // et les points retirés à la politique de dividende quand il la lit.
+  'investors.dividend_cut_tolerance': 0.2,
+  'investors.dividend_cut_signal': 30,
+  // Décote d'émission au-dessus des frais de base : nulle au-dessus du seuil,
+  // `issue_discount_max` quand plus personne ne veut du titre.
+  'investors.issue_discount_max': 0.2,
+  'investors.issue_discount_threshold': 60,
+  // Plafond d'une levée, en part des fonds propres d'ouverture, de
+  // l'attractivité nulle à l'attractivité maximale.
+  'investors.raise_cap_min_equity_share': 0.1,
+  'investors.raise_cap_max_equity_share': 1,
+  // Écart de prime de risque bancaire, en points de taux, aux deux extrêmes.
+  'investors.rate_span': 0.01,
   // ── Cash pooling ──────────────────────────────────────────────────────────
   // Ce qu'un domaine asséché perd en compétitivité, au maximum. Le malus est
   // proportionnel à la part de son besoin en fonds de roulement qu'on lui a

@@ -34,7 +34,9 @@ import {
 } from '@/lib/decision-types';
 import { createServerClient } from '@/lib/supabase/server';
 import { debtCapacity } from '@/lib/engine/finance';
+import { equityIssueTerms, type InvestorComponent } from '@/lib/engine/investors';
 import { buildParams } from '@/lib/engine/params';
+import type { TreasuryStatus } from '@/lib/engine/types';
 import { latestAtMost, reconductHrDecision, servedSegmentsOrDefault } from './reconduction';
 
 export type {
@@ -102,7 +104,9 @@ async function loadDecisionContextOnce(): Promise<DecisionContext> {
     supabase.from('pnl_statements')
       .select('round_number, treasury_end_mad, revenue_mad, net_income_mad')
       .eq('team_id', team.teamId).lte('round_number', roundNumber).order('round_number'),
-    supabase.from('team_round_state').select('headcount').eq('team_id', team.teamId).eq('round_number', previous).maybeSingle(),
+    supabase.from('team_round_state')
+      .select('headcount, investor_attractiveness, investor_components, treasury_status')
+      .eq('team_id', team.teamId).eq('round_number', previous).maybeSingle(),
     // `lte` : les contrats sont RECONDUITS tant qu'on ne les renégocie pas.
     // L'équipe hérite d'un portefeuille amont et aval de l'exercice précédent ;
     // l'écran doit le lui montrer, pas lui présenter une page blanche.
@@ -167,6 +171,15 @@ async function loadDecisionContextOnce(): Promise<DecisionContext> {
     buildParams(),
   );
 
+  // Une levée se négocie sur la réputation qu'on a, pas sur celle qu'on
+  // espère : le score qui fixe les conditions de CE tour est celui publié à
+  // la résolution PRÉCÉDENTE (voir `resolve.ts`, même règle côté moteur).
+  const investorScore =
+    state && (state as Row).investor_attractiveness !== null
+      ? num((state as Row).investor_attractiveness)
+      : null;
+  const issueTerms = equityIssueTerms(investorScore, num(openingBudget?.equity_mad), buildParams());
+
   const financeLimits: FinanceLimits = {
     equityMad: num(openingBudget?.equity_mad),
     debtOutstandingMad: openingDebtMad,
@@ -177,6 +190,11 @@ async function loadDecisionContextOnce(): Promise<DecisionContext> {
     capacityByRevenueMad: capacity.byRevenueMad,
     dividendCeilingMad: Math.max(num(lastPnl?.net_income_mad), 0),
     lastRevenueMad: num(lastPnl?.revenue_mad),
+    investorScore,
+    investorComponents:
+      ((state as Row | undefined)?.investor_components as InvestorComponent[] | undefined) ?? null,
+    equityIssueCostPct: issueTerms.costPct,
+    equityRaiseCapMad: issueTerms.capMad,
   };
 
   const strategyRow = latestAtMost(strategies as Row[] | null, roundNumber);
@@ -287,6 +305,7 @@ async function loadDecisionContextOnce(): Promise<DecisionContext> {
     status: str(round?.status, 'draft'),
     decisionsOpen: decisionsAreOpen(round?.status as string),
     treasuryMad: num(previousPnl?.treasury_end_mad),
+    treasuryStatus: ((state as Row | undefined)?.treasury_status as TreasuryStatus | undefined) ?? 'sain',
     headcount: num(state?.headcount),
     avgSalaryMad: averageSalary(hrInForce, dasHrStates as Row[] | null, roundNumber),
     debtOutstandingMad: num(previousBudget?.debt_outstanding_mad),

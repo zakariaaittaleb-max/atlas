@@ -460,6 +460,47 @@ Une équipe déficitaire paie quand même la cotisation minimale. Les paramètre
 dans `engine_parameters` et doivent être **revérifiés avant chaque session** — les taux
 changent par loi de finances.
 
+### 9.3 Investisseurs : attractivité, levée et dividende
+
+La levée de fonds propres et le dividende existaient sans interlocuteur : le dividende n'était
+qu'une sortie de trésorerie, la levée un robinet à 2 % de frais quelle que soit la santé du
+Groupe. Le moteur calcule désormais, à chaque résolution, un **indice d'attractivité** (`0–100`,
+`src/lib/engine/investors.ts`) qui fixe au tour suivant le coût et le plafond d'une levée, et la
+prime de risque bancaire.
+
+Cinq composantes, pondérées (`investors.weight.*`) :
+
+| Composante | Ce qu'elle juge |
+|---|---|
+| Rentabilité | rendement des capitaux propres d'ouverture, contre le coût des fonds propres |
+| Croissance | évolution du chiffre d'affaires |
+| Solidité | endettement et palier de détresse de trésorerie |
+| Distribution | dividende rapporté au résultat distribuable, jugé selon le profil de l'équipe — une entreprise qui croît vite et rentablement est pardonnée de tout réinvestir, une entreprise mûre est attendue au guichet ; une **baisse** du dividende est toujours sanctionnée |
+| Cohérence | l'indice d'alignement (§15) : un investisseur finance une histoire qu'il comprend |
+
+```
+score_brut = Σ( poids × note_composante ) / Σ( poids )
+score      = score_précédent === null ? score_brut
+           : (1 − mémoire) × score_brut + mémoire × score_précédent      // investors.memory = 0,4
+```
+
+Les investisseurs ont de la mémoire : une bonne année ne fait pas oublier trois mauvaises.
+
+**Ce que l'indice fixe, au tour SUIVANT** (jamais le même tour : une levée se négocie sur la
+réputation qu'on a, pas sur celle qu'on espère) :
+
+```
+manque   = clamp( (seuil − score) / seuil , 0 , 1 )                      // investors.issue_discount_threshold
+frais_pct = frais_de_base + décote_max × manque^1,3                      // finance.equity_issue_cost_pct, investors.issue_discount_max
+plafond   = fonds_propres_ouverture × ( plafond_min + (plafond_max − plafond_min) × score/100 )
+prime_taux = investors.rate_span × (50 − score) / 50                     // points, appliqués à la marge de risque §9.1
+```
+
+Un Groupe en perte, surendetté et incohérent lève donc plus cher, moins, et emprunte plus cher —
+un Groupe qui tient les trois est récompensé sur les trois à la fois. Avant la première
+résolution, aucune opinion n'est formée : frais de base, plafond calé sur une attractivité
+neutre, aucune prime.
+
 ---
 
 ## 10. Trésorerie

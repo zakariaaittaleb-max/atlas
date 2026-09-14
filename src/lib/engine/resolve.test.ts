@@ -1462,6 +1462,27 @@ describe('bilan de clôture', () => {
     expect(avec.treasuryEndMad).toBeCloseTo(sans.treasuryEndMad + 49_000_000, 0);
   });
 
+  it('fait payer une levée plus cher, et la plafonne, quand les investisseurs boudent', () => {
+    const boude = bilanOf({ capitalRaisedMad: 50_000_000, investorAttractiveness: 10 });
+
+    // Plafond : 120 M × (10 % + 90 % × 0,10) = 22,8 M souscrits, pas 50.
+    expect(boude.capitalRaisedMad).toBeCloseTo(22_800_000, 0);
+    // Décote au-dessus des 2 % de base.
+    expect(boude.equityIssueCostMad / boude.capitalRaisedMad).toBeGreaterThan(0.1);
+  });
+
+  it('juge le Groupe sur sa situation finale et publie un indice borné', () => {
+    const alpha = team('alpha');
+    const result = resolveRound(baseInput({ teams: [alpha] }), params);
+    const { investors } = result.teams[0];
+
+    expect(investors.score).toBeGreaterThanOrEqual(0);
+    expect(investors.score).toBeLessThanOrEqual(100);
+    expect(investors.components.map((c) => c.key)).toEqual([
+      'rentabilite', 'croissance', 'solidite', 'distribution', 'coherence',
+    ]);
+  });
+
   it('arrête l’encours de dette à la clôture', () => {
     const pnl = bilanOf({ debtDrawnMad: 20_000_000, debtRepaidMad: 5_000_000 });
     expect(pnl.debtOutstandingEndMad).toBeCloseTo(30_000_000 + 15_000_000, 0);

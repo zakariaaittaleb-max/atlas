@@ -18,6 +18,8 @@
  * qu'elle a changé. Sans elles, « annuler » n'aurait aucune définition.
  */
 
+import type { TreasuryStatus } from './engine/types';
+
 /** Périmètre d'équipe de l'utilisateur courant. */
 export interface TeamContext {
   userId: string;
@@ -97,6 +99,17 @@ export interface FinanceLimits {
   dividendCeilingMad: number;
   /** Chiffre d'affaires du dernier exercice clos : l'assiette du plafond. */
   lastRevenueMad: number;
+  /**
+   * Ce que les investisseurs ont retenu du dernier tour résolu, 0–100.
+   * `null` avant la première résolution : aucune opinion n'est encore formée.
+   */
+  investorScore: number | null;
+  /** Le détail des cinq composantes, pour l'infobulle de l'écran finance. */
+  investorComponents: { key: string; label: string; score: number; reading: string }[] | null;
+  /** Frais et décote d'une levée ce tour, en part du montant levé — fixés sur `investorScore`. */
+  equityIssueCostPct: number;
+  /** Ce que les investisseurs acceptent de souscrire ce tour. */
+  equityRaiseCapMad: number;
 }
 
 export interface ProcurementLine {
@@ -205,6 +218,8 @@ export interface DecisionContext {
   status: string;
   /** Trésorerie de clôture du tour précédent : l'assiette de tout engagement. */
   treasuryMad: number;
+  /** Palier de détresse à la clôture du tour précédent — `'sain'` par défaut avant la première résolution. */
+  treasuryStatus: TreasuryStatus;
   headcount: number;
   avgSalaryMad: number;
   /** Valeurs affichées : celles du tour, ou celles reconduites de l'exercice clos. */

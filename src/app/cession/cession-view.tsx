@@ -27,6 +27,7 @@ import { useState, useTransition } from 'react';
 import { NumberInput } from '@/components/decision-shell';
 import { DisclosureList } from '@/components/disclosure-list';
 import { Accordion } from '@/components/ui/accordion';
+import { DasDot } from '@/components/ui/das-dot';
 import { ChoiceCard, GroupLegend } from '@/components/ui/form-controls';
 import { InfoHint } from '@/components/ui/info-hint';
 import { StatCard } from '@/components/ui/stat-card';
@@ -113,6 +114,19 @@ export interface AcquisitionTarget {
    * s'additionnent, et c'est le pouvoir de fixation des prix qu'on achète.
    */
   consolidation?: boolean;
+  /**
+   * Ce que la place en dit sur la cible, AVANT toute due diligence — gratuit
+   * (migration 0044). Des fourchettes larges (± 40 %), plus larges que la note
+   * express du cabinet : elles suffisent à cadrer une offre, pas à la chiffrer
+   * précisément. `undefined` pour un maillon de filière, sans fiche de marché.
+   */
+  marketBand?: {
+    revenueMinMad: number;
+    revenueMaxMad: number;
+    marketShareBand: string | null;
+    headcountApprox: number;
+    healthBand: 'fragile' | 'correcte' | 'solide' | null;
+  };
 }
 
 interface MyOffer {
@@ -254,6 +268,7 @@ export function CessionView({
                     <li key={das.dasId} className="rounded-lg border border-(--border) p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <h3 className="flex items-center gap-2 text-base font-semibold">
+                          <DasDot seed={das.name} />
                           {das.name}
                           {listing ? (
                             <span className="rounded-full bg-(--warning-subtle) px-2 py-0.5 text-xs font-semibold text-(--warning)">
@@ -537,6 +552,7 @@ function MarketCard({
     <li className="rounded-lg border border-(--border) p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold">
+          <DasDot seed={listing.das_name} />
           {listing.das_name}
           <InfoHint label="Ce qui n’est pas communiqué">
             Les coûts, la trésorerie et le motif de la vente ne sont pas communiqués. Une due
@@ -652,7 +668,8 @@ function AcquisitionCard({
             </span>
           ) : null}
         </h3>
-        <p className="text-sm text-(--meta) capitalize">
+        <p className="flex items-center gap-1.5 text-sm text-(--meta) capitalize">
+          <DasDot seed={target.dasName} />
           {target.dasName}
           {target.regionKey ? ` · ${target.regionKey.replace(/_/g, ' ')}` : ''}
         </p>
@@ -688,6 +705,8 @@ function AcquisitionCard({
             : 'Racheté par une autre équipe — son nouveau propriétaire décide de ce qu’il vous vend.'}
         </p>
       ) : null}
+
+      {target.marketBand ? <MarketBand band={target.marketBand} /> : null}
 
       {/* Les chiffres avant le formulaire : on lit, puis on chiffre. */}
       <TargetStats targetActorId={target.targetActorId} dueDiligences={dueDiligences} />
@@ -743,6 +762,46 @@ function AcquisitionCard({
         </form>
       )}
     </li>
+  );
+}
+
+const HEALTH_LABELS = {
+  solide: 'Solide',
+  correcte: 'Correcte',
+  fragile: 'Fragile',
+} as const;
+
+/**
+ * Ce que la place dit d'une cible, avant toute due diligence : gratuit, en
+ * fourchettes larges. Distinct du panneau `TargetStats`, qui reste ce que le
+ * cabinet vend — des chiffres exacts, la marge et les passifs non déclarés.
+ */
+function MarketBand({
+  band,
+}: {
+  band: NonNullable<AcquisitionTarget['marketBand']>;
+}) {
+  return (
+    <div className="mt-3 rounded-lg bg-(--surface-muted) px-4 py-3">
+      <p className="flex items-center gap-2 text-sm font-medium text-(--foreground-muted)">
+        Ce que la place en dit
+        <InfoHint label="Ce que la place en dit">
+          Un acquéreur sait, avant d’ouvrir les livres, ce qui se raconte sur une cible : un ordre
+          de grandeur de chiffre d’affaires, une position de marché, un effectif, une réputation de
+          solidité. Fourchettes larges (± 40 %), gratuites. La due diligence du cabinet les resserre
+          et révèle en plus la marge et les passifs non déclarés.
+        </InfoHint>
+      </p>
+      <dl className="tabular mt-2 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+        <Fact
+          label="Chiffre d’affaires"
+          value={`${formatMadCompact(band.revenueMinMad)} – ${formatMadCompact(band.revenueMaxMad)}`}
+        />
+        <Fact label="Part de marché" value={band.marketShareBand ?? '—'} />
+        <Fact label="Effectif" value={`≈ ${formatUnits(band.headcountApprox)}`} />
+        <Fact label="Solidité" value={band.healthBand ? HEALTH_LABELS[band.healthBand] : '—'} />
+      </dl>
+    </div>
   );
 }
 
