@@ -183,16 +183,37 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Annonce introuvable.' }, { status: 404 });
   }
 
-  if (body.action === 'choice') {
+  // Retirer, c'est retirer TOUT DE SUITE : l'annonce disparaît du marché, le
+  // DAS redevient actif et les offres reçues tombent. Longtemps, « retirer »
+  // n'était qu'un choix de vendeur appliqué à la résolution — le DAS restait
+  // affiché « en vente » partout jusque-là, alors que l'équipe l'avait retiré.
+  if (body.action === 'choice' && body.choice !== 'withdraw') {
     await admin.from('das_listings')
       .update({ seller_choice: body.choice }).eq('id', body.listingId);
     return NextResponse.json({ ok: true, choice: body.choice });
   }
 
-  await admin.from('das_listings')
-    .update({ status: 'withdrawn', seller_choice: 'withdraw' }).eq('id', body.listingId);
-  await admin.from('team_units').update({ status: 'active' })
-    .eq('team_id', team.teamId).eq('das_id', owned.das_id);
+  const [{ error: listingError }, { error: unitError }] = await Promise.all([
+    admin.from('das_listings')
+      .update({ status: 'withdrawn', seller_choice: 'withdraw' }).eq('id', body.listingId),
+    admin.from('team_units').update({ status: 'active' })
+      .eq('team_id', team.teamId).eq('das_id', owned.das_id).eq('status', 'listed_for_sale'),
+    admin.from('das_bids').update({ status: 'withdrawn' })
+      .eq('listing_id', body.listingId).eq('status', 'sealed'),
+  ]);
+
+  if (listingError || unitError) {
+    return NextResponse.json(
+      { error: `Retrait refusé : ${(listingError ?? unitError)!.message}` },
+      { status: 500 },
+    );
+  }
+
+  await admin.from('decisions_log').insert({
+    team_id: team.teamId, round_number: roundNumber, decision_type: 'retrait_vente_das',
+    payload: { dasId: owned.das_id, listingId: body.listingId },
+    decided_by: team.userId,
+  });
 
   return NextResponse.json({ ok: true, withdrawn: true });
 }

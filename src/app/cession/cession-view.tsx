@@ -163,7 +163,7 @@ export interface DueDiligenceTier {
 }
 
 export function CessionView({
-  roundNumber, decisionsOpen, sellable, ownListings, market, myBids, targets, myOffers,
+  roundNumber, decisionsOpen, sellable, ownListings: serverListings, market, myBids, targets, myOffers,
   integrationTargets, modules, dueDiligences, buyingPower, dueDiligenceTiers,
 }: {
   buyingPower: BuyingPower;
@@ -185,12 +185,25 @@ export function CessionView({
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Annonces retirées à l'instant : masquées sans attendre le rafraîchissement
+  // du serveur, pour qu'un DAS retiré ne s'affiche plus « en vente » nulle part.
+  const [withdrawnIds, setWithdrawnIds] = useState<ReadonlySet<string>>(new Set());
 
   const disabled = busy || pending || !decisionsOpen;
 
   async function send(body: Record<string, unknown>, endpoint = '/api/divest') {
     setError(null);
     setBusy(true);
+    const withdrawing = body.action === 'withdraw' ? String(body.listingId) : null;
+    if (withdrawing) setWithdrawnIds((prev) => new Set(prev).add(withdrawing));
+    const rollback = () => {
+      if (!withdrawing) return;
+      setWithdrawnIds((prev) => {
+        const next = new Set(prev);
+        next.delete(withdrawing);
+        return next;
+      });
+    };
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -200,16 +213,19 @@ export function CessionView({
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
         setError(payload.error ?? 'Opération refusée.');
+        rollback();
         setBusy(false);
         return;
       }
       startTransition(() => { router.refresh(); setBusy(false); });
     } catch {
       setError('Le réseau est indisponible. Rien n’a été envoyé.');
+      rollback();
       setBusy(false);
     }
   }
 
+  const ownListings = serverListings.filter((l) => !withdrawnIds.has(l.listingId));
   const bidByListing = new Map(myBids.map((b) => [b.listingId, b]));
   const targetIds = new Set(targets.map((t) => t.targetActorId));
   const entryOffers = myOffers.filter((o) => targetIds.has(o.targetActorId)).length;
@@ -508,11 +524,10 @@ function ListingPanel({
           Le choix est arrêté avant le verrouillage du tour — vous pariez sans connaître les
           montants.
         </GroupLegend>
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2">
           {([
             ['npc', 'Céder à l’acheteur non joueur'],
             ['best_bid', 'Retenir la meilleure offre'],
-            ['withdraw', 'Retirer l’annonce'],
           ] as const).map(([value, label]) => (
             <ChoiceCard
               key={value}
@@ -521,6 +536,19 @@ function ListingPanel({
               onSelect={() => onSend({ action: 'choice', listingId: listing.listingId, choice: value })}
             />
           ))}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => onSend({ action: 'withdraw', listingId: listing.listingId })}
+            className="inline-flex min-h-9 items-center rounded-lg border border-(--border) px-4 text-sm font-medium enabled:hover:border-(--negative) enabled:hover:text-(--negative) disabled:opacity-40"
+          >
+            Retirer l’annonce
+          </button>
+          <InfoHint label="Retirer l’annonce">
+            Effet immédiat : le DAS redevient actif, quitte le marché du pool et les offres
+            reçues tombent. Vous pourrez le remettre en vente tant que le tour est ouvert.
+          </InfoHint>
         </div>
       </fieldset>
 
