@@ -1,9 +1,17 @@
+import 'server-only';
+
+import { priceGuide, type Interval } from '@/lib/acquisition-guide';
 import { decisionsAreOpen, getRoundState, requireTeam } from '@/lib/dal';
+import { STUDY_BASE_PRICES, STUDY_TIERS, TIER_PROFILES, studyPrice } from '@/lib/engine/consulting';
+import { buildParams } from '@/lib/engine/params';
+import { isOn } from '@/lib/modules-state';
+import { loadDecisionContext } from '@/lib/server/decision-context';
 import { loadEnabledModules } from '@/lib/server/modules';
-import { createServerClient } from '@/lib/supabase/server';
+import { loadMoneyBar } from '@/lib/server/money-bar';
+import { createAdminClient, createServerClient } from '@/lib/supabase/server';
 
 import {
-  CessionView, type DueDiligenceFields, type IntegrationTarget, type OwnListing,
+  CessionView, type DueDiligence, type DueDiligenceFields, type IntegrationTarget, type OwnListing,
   type PublicListing, type SellableDas,
 } from './cession-view';
 
@@ -89,6 +97,65 @@ export default async function CessionPage() {
     })
     .filter((d): d is SellableDas => d !== null);
 
+  // ── Les repères d'une offre ────────────────────────────────────────────────
+  const studies: DueDiligence[] = (dueDiligences ?? [])
+    .filter((o) => o.target_actor_id)
+    .map((o) => {
+      const payload = o.payload as { subjects?: { fields?: unknown[] }[] } | null;
+      return {
+        targetActorId: String(o.target_actor_id),
+        tier: String(o.tier),
+        errorMargin: Number(o.error_margin),
+        roundNumber: Number(o.round_number),
+        fields: (payload?.subjects?.[0]?.fields ?? []) as DueDiligenceFields,
+      };
+    });
+
+  // Le multiple de valorisation du secteur n'est pas lisible par les équipes
+  // (`strategic_units` n'expose que l'identité) : il est lu ici, côté serveur,
+  // et ne quitte la page que fondu dans une fourchette de prix.
+  const admin = createAdminClient();
+  const [{ data: valuations }, { data: actors }, money, decision] = await Promise.all([
+    admin.from('strategic_units').select('id, valuation_multiple').eq('session_id', team.sessionId),
+    admin.from('ecosystem_actors').select('id, das_id, actor_type')
+      .eq('session_id', team.sessionId)
+      .in('actor_type', ['cible_acquisition', 'fournisseur', 'distributeur']),
+    loadMoneyBar(),
+    // Mémoïsé pour la requête : la navigation l'a déjà chargé.
+    loadDecisionContext(),
+  ]);
+  const multipleByDas = new Map(
+    (valuations ?? []).map((u) => [String(u.id), Number(u.valuation_multiple ?? 5)]),
+  );
+  const actorById = new Map(
+    (actors ?? []).map((a) => [String(a.id), { dasId: String(a.das_id), type: String(a.actor_type) }]),
+  );
+
+  // La plus récente étude de la cible, puisque la liste est triée par tour
+  // décroissant : un palier supérieur racheté ensuite la remplace.
+  const guideFor = (actorId: string, publicRevenue: Interval | null) => {
+    const actor = actorById.get(actorId);
+    if (!actor) return null;
+    const study = studies.find((d) => d.targetActorId === actorId) ?? null;
+    return priceGuide({
+      multiple: multipleByDas.get(actor.dasId) ?? 5,
+      actorType: actor.type,
+      publicRevenue,
+      study,
+    });
+  };
+
+  const params = buildParams();
+  const dueDiligenceTiers = isOn(modules, 'cabinet.due_diligence')
+    ? STUDY_TIERS.map((tier) => ({
+        tier,
+        label: TIER_PROFILES[tier].label,
+        priceMad: studyPrice(STUDY_BASE_PRICES.due_diligence, tier, params),
+        errorMargin: TIER_PROFILES[tier].errorMargin,
+        includesWeakSignals: TIER_PROFILES[tier].includesWeakSignals,
+      }))
+    : [];
+
   return (
     <CessionView
       roundNumber={roundNumber}
@@ -138,6 +205,10 @@ export default async function CessionPage() {
           // L'équipe doit savoir ce qu'elle fait : entrer dans un métier neuf,
           // ou renforcer une position qu'elle tient déjà.
           consolidation: sellable.some((d) => d.dasId === String(t.das_id)),
+          priceGuide: guideFor(String(t.target_actor_id), {
+            lower: Number(t.revenue_band_min_mad ?? 0),
+            upper: Number(t.revenue_band_max_mad ?? 0),
+          }),
         }))}
       myOffers={(myOffers ?? [])
         .filter((o) => String(o.status) === 'sealed')
@@ -147,20 +218,12 @@ export default async function CessionPage() {
           integrationBudgetMad: Number(o.integration_budget_mad),
         }))}
       modules={modules}
-      dueDiligences={(dueDiligences ?? [])
-        .filter((o) => o.target_actor_id)
-        .map((o) => {
-          const payload = o.payload as {
-            subjects?: { fields?: unknown[] }[];
-          } | null;
-          return {
-            targetActorId: String(o.target_actor_id),
-            tier: String(o.tier),
-            errorMargin: Number(o.error_margin),
-            roundNumber: Number(o.round_number),
-            fields: (payload?.subjects?.[0]?.fields ?? []) as DueDiligenceFields,
-          };
-        })}
+      buyingPower={{
+        remainingMad: money ? money.availableMad - money.engagedMad : 0,
+        creditMad: decision.financeLimits.capacityAvailableMad,
+      }}
+      dueDiligenceTiers={dueDiligenceTiers}
+      dueDiligences={studies}
       integrationTargets={(links ?? []).map((l): IntegrationTarget => ({
         targetActorId: String(l.target_actor_id),
         targetName: String(l.target_name),
@@ -169,6 +232,7 @@ export default async function CessionPage() {
         actorType: String(l.actor_type) as IntegrationTarget['actorType'],
         alreadyOwned: Boolean(l.already_owned),
         ownedByMe: Boolean(l.owned_by_me),
+        priceGuide: guideFor(String(l.target_actor_id), null),
       }))}
     />
   );

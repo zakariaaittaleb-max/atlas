@@ -147,6 +147,10 @@ left join lateral (
   select rr.revenue_mad, rr.capacity_units, rr.financial_health
   from ecosystem_actor_rounds rr
   where rr.actor_id = a.id
+    -- La trajectoire d'une cible est provisionnée d'avance jusqu'au dernier
+    -- tour possible : sans cette borne, la fiche publiait dès l'onboarding le
+    -- chiffre d'affaires du tour 10.
+    and rr.round_number <= (select g.current_round from game_sessions g where g.id = a.session_id)
   order by rr.round_number desc
   limit 1
 ) r on true

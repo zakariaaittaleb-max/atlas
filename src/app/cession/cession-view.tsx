@@ -19,8 +19,7 @@
  * liquidité, perte d'intégration, prix de réserve) sont sous les « + ».
  */
 
-import { ChevronDown, TriangleAlert } from 'lucide-react';
-import Link from 'next/link';
+import { TriangleAlert } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
@@ -33,6 +32,7 @@ import { InfoHint } from '@/components/ui/info-hint';
 import { StatCard } from '@/components/ui/stat-card';
 import type { FieldDisclosure } from '@/lib/consulting-types';
 import { isOn, type EnabledModules } from '@/lib/modules-state';
+import { INTEGRATION_REFERENCE as INTEGRATION_SHARE, type PriceGuide } from '@/lib/acquisition-guide';
 import { formatMadCompact, formatPct, formatUnits } from '@/lib/format';
 
 export interface SellableDas {
@@ -84,6 +84,8 @@ export interface IntegrationTarget {
   actorType: 'fournisseur' | 'distributeur';
   alreadyOwned: boolean;
   ownedByMe: boolean;
+  /** Prix de réserve estimé — seulement après une due diligence : un maillon n'a pas de fiche de marché. */
+  priceGuide?: PriceGuide | null;
 }
 
 export interface AcquisitionTarget {
@@ -127,6 +129,8 @@ export interface AcquisitionTarget {
     headcountApprox: number;
     healthBand: 'fragile' | 'correcte' | 'solide' | null;
   };
+  /** Fourchette du prix sous lequel la cible refuse, d'après ce que l'équipe en sait. */
+  priceGuide?: PriceGuide | null;
 }
 
 interface MyOffer {
@@ -141,10 +145,30 @@ interface MyBid {
   integrationBudgetMad: number;
 }
 
+/** Ce que l'équipe peut mettre sur la table ce tour. */
+export interface BuyingPower {
+  /** Trésorerie restante après les engagements déjà saisis ce tour. */
+  remainingMad: number;
+  /** Ce que la banque prêterait encore. */
+  creditMad: number;
+}
+
+/** Un palier de due diligence commandable depuis la carte d'une cible. */
+export interface DueDiligenceTier {
+  tier: string;
+  label: string;
+  priceMad: number;
+  errorMargin: number;
+  includesWeakSignals: boolean;
+}
+
 export function CessionView({
   roundNumber, decisionsOpen, sellable, ownListings, market, myBids, targets, myOffers,
-  integrationTargets, modules, dueDiligences,
+  integrationTargets, modules, dueDiligences, buyingPower, dueDiligenceTiers,
 }: {
+  buyingPower: BuyingPower;
+  /** Vide quand la due diligence est hors du catalogue de la session. */
+  dueDiligenceTiers: DueDiligenceTier[];
   roundNumber: number;
   modules: EnabledModules;
   dueDiligences: DueDiligence[];
@@ -328,6 +352,11 @@ export function CessionView({
                     key={target.targetActorId}
                     target={target}
                     dueDiligences={dueDiligences}
+                    buyingPower={buyingPower}
+                    dueDiligenceTiers={dueDiligenceTiers}
+                    onOrderStudy={(tier) =>
+                      send({ studyKey: 'due_diligence', tier, targetActorId: target.targetActorId }, '/api/consulting')
+                    }
                     existingOffer={myOffers.find((o) => o.targetActorId === target.targetActorId)}
                     disabled={disabled}
                     onSend={(body) => send(body, '/api/acquisitions')}
@@ -373,8 +402,14 @@ export function CessionView({
                       targetName: link.targetName,
                       dasName: link.dasName,
                       regionKey: link.regionKey,
+                      priceGuide: link.priceGuide,
                     }}
                     dueDiligences={dueDiligences}
+                    buyingPower={buyingPower}
+                    dueDiligenceTiers={dueDiligenceTiers}
+                    onOrderStudy={(tier) =>
+                      send({ studyKey: 'due_diligence', tier, targetActorId: link.targetActorId }, '/api/consulting')
+                    }
                     badge={link.actorType === 'fournisseur' ? 'Amont' : 'Aval'}
                     owned={link.ownedByMe ? 'moi' : link.alreadyOwned ? 'autre' : null}
                     existingOffer={myOffers.find((o) => o.targetActorId === link.targetActorId)}
@@ -407,6 +442,7 @@ export function CessionView({
                     key={l.listing_id}
                     listing={l}
                     existingBid={bidByListing.get(l.listing_id)}
+                    buyingPower={buyingPower}
                     disabled={disabled}
                     onSend={send}
                   />
@@ -532,8 +568,9 @@ function IntegrationLoss({ offer, integration }: { offer: number; integration: n
 
 /** Fiche publique d'un DAS en vente, et formulaire d'offre scellée. */
 function MarketCard({
-  listing, existingBid, disabled, onSend,
+  listing, existingBid, disabled, onSend, buyingPower,
 }: {
+  buyingPower: BuyingPower;
   listing: PublicListing;
   existingBid: MyBid | undefined;
   disabled: boolean;
@@ -588,6 +625,13 @@ function MarketCard({
           });
         }}
       >
+        <OfferGuide
+          kind="listing"
+          guide={null}
+          offer={offerValue}
+          integration={integrationValue}
+          buyingPower={buyingPower}
+        />
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className="text-sm font-medium">Votre offre (DH)</span>
@@ -622,9 +666,13 @@ const SIZE_LABELS = {
 /** Fiche d'une cible acquérable, et formulaire d'offre scellée. */
 function AcquisitionCard({
   target, existingOffer, disabled, onSend, badge, owned, dueDiligences,
+  buyingPower, dueDiligenceTiers, onOrderStudy,
 }: {
   target: AcquisitionTarget;
   dueDiligences: DueDiligence[];
+  buyingPower: BuyingPower;
+  dueDiligenceTiers: DueDiligenceTier[];
+  onOrderStudy: (tier: string) => void;
   existingOffer: MyOffer | undefined;
   disabled: boolean;
   onSend: (body: Record<string, unknown>) => void;
@@ -709,7 +757,13 @@ function AcquisitionCard({
       {target.marketBand ? <MarketBand band={target.marketBand} /> : null}
 
       {/* Les chiffres avant le formulaire : on lit, puis on chiffre. */}
-      <TargetStats targetActorId={target.targetActorId} dueDiligences={dueDiligences} />
+      <TargetStats
+        targetActorId={target.targetActorId}
+        dueDiligences={dueDiligences}
+        tiers={dueDiligenceTiers}
+        onOrder={onOrderStudy}
+        disabled={disabled}
+      />
 
       {owned ? null : (
         <form
@@ -724,6 +778,17 @@ function AcquisitionCard({
             });
           }}
         >
+          <OfferGuide
+            kind="target"
+            guide={target.priceGuide}
+            offer={offerValue}
+            integration={integrationValue}
+            buyingPower={buyingPower}
+            onApply={(nextOffer, nextIntegration) => {
+              setOffer(String(nextOffer));
+              setIntegration(String(nextIntegration));
+            }}
+          />
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
               <span className="flex items-center gap-2 text-sm font-medium">
@@ -830,59 +895,209 @@ const TIER_LABELS: Record<string, string> = {
   approfondie: 'étude approfondie',
 };
 
+const TIER_RANK: Record<string, number> = { express: 0, standard: 1, approfondie: 2 };
+
 /**
- * Les chiffres d'une cible, dépliables — et payants.
+ * Les chiffres d'une cible — et leur commande, sur place.
  *
- * Décider d'un montant d'enchère sans connaître le chiffre d'affaires ni la
- * marge de ce qu'on achète est un pari, pas une décision. Mais ces chiffres
- * sont précisément ce que le cabinet vend : les offrir viderait la due
- * diligence de son objet. Le panneau existe donc toujours ; son contenu
- * dépend de ce que l'équipe a payé, et il annonce sa propre marge d'erreur.
+ * Décider d'un montant sans connaître le chiffre d'affaires ni la marge de ce
+ * qu'on achète est un pari, pas une décision. Ces chiffres restent ce que le
+ * cabinet vend, mais il fallait quitter l'écran pour les acheter, retrouver la
+ * cible dans une liste, puis revenir. La commande se passe désormais ici, palier
+ * par palier, et le rapport s'affiche dans la carte au retour — resserrant du
+ * même coup la fourchette de prix au-dessus du formulaire.
  */
 function TargetStats({
-  targetActorId,
-  dueDiligences,
+  targetActorId, dueDiligences, tiers, onOrder, disabled,
 }: {
   targetActorId: string;
   dueDiligences: DueDiligence[];
+  tiers: DueDiligenceTier[];
+  onOrder: (tier: string) => void;
+  disabled: boolean;
 }) {
   // La plus récente : une équipe peut avoir racheté l'étude à un palier
   // supérieur, et c'est alors celle-là qui vaut.
   const study = dueDiligences.find((d) => d.targetActorId === targetActorId);
+  const upgrades = tiers.filter((t) => !study || (TIER_RANK[t.tier] ?? 0) > (TIER_RANK[study.tier] ?? -1));
 
   return (
-    <details className="group mt-3 rounded-lg bg-(--surface-muted) [&_summary::-webkit-details-marker]:hidden">
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm font-medium">
-        <span className="flex-1">
-          Chiffres de la cible
-          <span className="ml-2 font-normal text-(--foreground-muted)">
-            {study
-              ? `${TIER_LABELS[study.tier] ?? study.tier} · tour ${study.roundNumber}`
-              : 'due diligence non commandée'}
-          </span>
+    <div className="mt-3 rounded-lg border border-(--border)">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-(--border) px-4 py-2.5 text-sm font-medium">
+        Chiffres de la cible
+        <span className="font-normal text-(--foreground-muted)">
+          {study
+            ? `${TIER_LABELS[study.tier] ?? study.tier} · tour ${study.roundNumber}`
+            : 'due diligence non commandée'}
         </span>
-        <ChevronDown aria-hidden className="h-4 w-4 text-(--foreground-muted) transition-transform duration-200 group-open:rotate-180" />
-      </summary>
+      </p>
 
-      <div className="border-t border-(--border) px-4 py-3">
+      <div className="px-4 py-3">
         {study ? (
           <>
             <DisclosureList fields={study.fields} />
-            <p className="mt-3 flex items-center gap-2 border-t border-(--border) pt-2 text-xs text-(--foreground-muted)">
+            <p className="mt-3 flex items-center gap-2 border-t border-(--border) pt-2 text-sm text-(--foreground-muted)">
               Chiffres figés à la commande, marge d’erreur comprise.
               <InfoHint label="Précision de la due diligence">
-                Un palier supérieur les resserre et couvre les passifs non déclarés.
+                Un palier supérieur les resserre ; seul le palier approfondi révèle les passifs non
+                déclarés.
               </InfoHint>
             </p>
           </>
         ) : (
-          <p className="text-sm text-(--foreground-muted)">
-            Chiffre d’affaires, part de marché, marge et passifs s’achètent au{' '}
-            <Link href="/cabinet" className="font-medium text-(--accent-text) underline">cabinet</Link>, en due
-            diligence. Sans elle, vous enchérissez sur un nom.
+          <p className="max-w-2xl text-sm text-(--foreground-muted)">
+            Chiffre d’affaires, marge, EBITDA, appétence à céder et passifs non déclarés
+            s’obtiennent en due diligence. Sans elle, le prix de réserve reste une estimation large.
           </p>
         )}
+
+        {upgrades.length > 0 ? (
+          <div className="mt-4">
+            <p className="mb-2 flex items-center gap-2 text-sm font-semibold">
+              {study ? 'Affiner avec un palier supérieur' : 'Commander une due diligence'}
+              <InfoHint label="Coût d’une due diligence">
+                Décaissée à la résolution du tour, comme toute étude du cabinet. La marge d’erreur
+                porte sur chaque chiffre livré. Racheter le même palier ne coûte rien de plus et ne
+                change pas les chiffres.
+              </InfoHint>
+            </p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {upgrades.map((t) => (
+                <button
+                  key={t.tier}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onOrder(t.tier)}
+                  className="rounded-lg border border-(--border) bg-(--surface) p-3 text-left transition-colors enabled:hover:border-(--accent) disabled:opacity-40"
+                >
+                  <span className="block text-sm font-medium">{t.label}</span>
+                  <span className="tabular mt-0.5 block font-mono text-base font-semibold">
+                    {formatMadCompact(t.priceMad)}
+                  </span>
+                  <span className="mt-1 block text-sm text-(--foreground-muted)">
+                    {t.errorMargin > 0 ? `±${Math.round(t.errorMargin * 100)} %` : 'chiffres exacts'}
+                    {t.includesWeakSignals ? ' · passifs non déclarés' : ''}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : tiers.length === 0 && !study ? (
+          <p className="mt-2 text-sm text-(--foreground-muted)">
+            La due diligence n’est pas au catalogue de cette session.
+          </p>
+        ) : null}
       </div>
-    </details>
+    </div>
+  );
+}
+
+/**
+ * Ce qu'il faut avoir sous les yeux pour chiffrer une offre.
+ *
+ * Trois repères, là où l'on tape le montant : le prix sous lequel la cible
+ * refuse (estimé, et d'autant plus large qu'on sait peu de choses d'elle), le
+ * budget d'intégration qui évite de détruire ce qu'on paie, et ce que l'équipe
+ * peut réellement mobiliser. Les alertes suivent la saisie.
+ */
+function OfferGuide({
+  kind, guide, offer, integration, buyingPower, onApply,
+}: {
+  /** Une cible a un prix de réserve ; un DAS en vente, l'offre cachée d'un non-joueur. */
+  kind: 'target' | 'listing';
+  guide: PriceGuide | null | undefined;
+  offer: number;
+  integration: number;
+  buyingPower: BuyingPower;
+  onApply?: (offer: number, integration: number) => void;
+}) {
+  const capacity = Math.max(buyingPower.remainingMad, 0) + Math.max(buyingPower.creditMad, 0);
+  const total = offer + integration;
+  const roundUp = (value: number) => Math.ceil(value / 1_000_000) * 1_000_000;
+  const suggestedOffer = guide ? roundUp(guide.maxMad) : 0;
+  const suggestedIntegration = roundUp(suggestedOffer * INTEGRATION_SHARE);
+
+  return (
+    <div className="mb-4 rounded-lg bg-(--accent-subtle) px-4 py-3">
+      <p className="flex items-center gap-2 text-sm font-semibold text-(--heading)">
+        Pour chiffrer votre offre
+        <InfoHint label="Chiffrer une offre">
+          {kind === 'target' ? (
+            <>
+              En deçà de son <strong>prix de réserve</strong>, la cible refuse et personne n’acquiert.
+              Au-dessus, la meilleure offre scellée l’emporte : c’est un plancher, pas un prix gagnant.{' '}
+              {guide?.source === 'due_diligence'
+                ? 'Estimé depuis votre due diligence, marge d’erreur comprise.'
+                : 'Estimé depuis la fiche de marché (± 40 %), sans connaître l’appétence de la cible à céder : une due diligence le resserre.'}
+            </>
+          ) : (
+            <>
+              Le vendeur compare votre offre à celle d’un acheteur non joueur, qu’il est seul à voir :
+              à peu près la valeur du domaine, moins une décote s’il est en difficulté. Il retient la
+              meilleure.
+            </>
+          )}
+        </InfoHint>
+      </p>
+
+      <dl className="tabular mt-2 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+        {kind === 'target' ? (
+          <Fact
+            label="Prix de réserve estimé"
+            value={guide ? `${formatMadCompact(guide.minMad)} – ${formatMadCompact(guide.maxMad)}` : 'Inconnu sans due diligence'}
+          />
+        ) : (
+          <Fact label="Offre à battre" value="Cachée — celle du non-joueur" />
+        )}
+        <Fact
+          label="Intégration conseillée"
+          value={offer > 0 ? formatMadCompact(offer * INTEGRATION_SHARE) : '20 % de l’offre'}
+        />
+        <Fact label="Vous pouvez mobiliser" value={formatMadCompact(capacity)} />
+      </dl>
+
+      <div className="mt-2 space-y-1.5 text-sm">
+        {kind === 'target' && guide && offer > 0 && offer < guide.minMad ? (
+          <p className="flex items-start gap-2 font-medium text-(--negative)">
+            <TriangleAlert aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+            Sous la fourchette : la cible refusera presque certainement.
+          </p>
+        ) : null}
+        {kind === 'target' && guide && offer >= guide.minMad && offer < guide.maxMad ? (
+          <p className="font-medium text-(--warning)">
+            Dans la fourchette : l’offre peut être refusée. À partir de {formatMadCompact(guide.maxMad)},
+            elle passe le prix de réserve estimé.
+          </p>
+        ) : null}
+        {kind === 'target' && guide && offer >= guide.maxMad ? (
+          <p className="font-medium text-(--positive)">
+            ✓ Au-dessus du prix de réserve estimé — reste à battre les autres équipes.
+          </p>
+        ) : null}
+        {offer > 0 && total > capacity ? (
+          <p className="flex items-start gap-2 font-medium text-(--negative)">
+            <TriangleAlert aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+            Offre et intégration ({formatMadCompact(total)}) dépassent ce que vous pouvez mobiliser :
+            l’écart passera en trésorerie négative.
+          </p>
+        ) : null}
+        {guide?.liabilitiesMad && guide.liabilitiesMad.upper > 0 ? (
+          <p className="font-medium text-(--warning)">
+            Passifs non déclarés estimés : {formatMadCompact(guide.liabilitiesMad.lower)} –{' '}
+            {formatMadCompact(guide.liabilitiesMad.upper)}, à ajouter au coût réel de l’opération.
+          </p>
+        ) : null}
+      </div>
+
+      {kind === 'target' && guide && onApply ? (
+        <button
+          type="button"
+          onClick={() => onApply(suggestedOffer, suggestedIntegration)}
+          className="mt-3 text-sm font-medium text-(--accent-text) underline underline-offset-4"
+        >
+          Reprendre le haut de la fourchette : {formatMadCompact(suggestedOffer)} + {formatMadCompact(suggestedIntegration)} d’intégration
+        </button>
+      ) : null}
+    </div>
   );
 }
