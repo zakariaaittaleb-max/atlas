@@ -223,6 +223,8 @@ export default async function FacilitatorPage({
     <FacilitatorView
       themeChoice={themeChoice}
       visualStyle={String(session?.visual_style ?? 'corporate')}
+      projectorScene={String(session?.projector_scene ?? 'auto')}
+      projectorShockId={session?.projector_shock_id ? String(session.projector_shock_id) : null}
       sessionId={sessionId}
       sessionName={context.sessionName}
       joinCode={String(session?.join_code ?? '')}

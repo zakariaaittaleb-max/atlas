@@ -89,6 +89,14 @@ const CLOCK = new Intl.DateTimeFormat('fr-FR', {
   hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Casablanca',
 });
 
+const PROJECTOR_SCENES = [
+  ['auto', 'Automatique'],
+  ['avancement', 'Avancement'],
+  ['carte', 'Carte en cours'],
+  ['classement', 'Classement'],
+  ['pause', 'Pause'],
+] as const;
+
 const TABS = [
   ['conduite', 'Conduite'],
   ['marche', 'Marché & crises'],
@@ -102,8 +110,11 @@ export function FacilitatorView({
   sessionId, sessionName, joinCode, status, roundNumber, plannedRounds, maxRounds,
   teams, das, cards, activeShocks, runs, difficulty, dials, difficultyLocked, sectors,
   canPlayInTeam, playingTeamId, joinTeamAction, modulesSection, scalesSection,
-  warRoomSection, warRoomPending, themeChoice, visualStyle,
+  warRoomSection, warRoomPending, themeChoice, visualStyle, projectorScene, projectorShockId,
 }: {
+  /** Scène projetée : auto, avancement, carte, classement ou pause. */
+  projectorScene: string;
+  projectorShockId: string | null;
   themeChoice: ThemeChoice;
   /** Style des écrans d'équipe et du projecteur : `corporate` ou `ludique`. */
   visualStyle: string;
@@ -339,6 +350,69 @@ export function FacilitatorView({
               />
             ) : null}
           </div>
+        </div>
+
+        {/* ── Ce que la salle voit ──────────────────────────────────────────
+            Le projecteur suit ce choix en direct, sans qu'on touche l'écran du
+            mur. « Automatique » suit l'état du tour. */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-(--border) pt-3">
+          <span className="text-sm font-medium text-(--foreground-muted)">Au projecteur</span>
+          <div role="group" aria-label="Scène projetée" className="flex flex-wrap gap-1">
+            {PROJECTOR_SCENES.map(([value, label]) => {
+              const on = projectorScene === value;
+              const noShock = value === 'carte' && activeShocks.length === 0;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={on}
+                  disabled={disabled || noShock}
+                  title={noShock ? 'Aucune carte déclenchée pour l’instant' : undefined}
+                  onClick={() =>
+                    void call(
+                      '/api/facilitator',
+                      {
+                        action: 'set_projector_scene', sessionId, scene: value,
+                        shockId: value === 'carte' ? (projectorShockId ?? activeShocks[0]?.id ?? null) : null,
+                      },
+                      `Projecteur : ${label.toLowerCase()}.`,
+                    )
+                  }
+                  className={`min-h-9 rounded-lg px-3 text-sm font-medium transition-colors disabled:opacity-40 ${
+                    on
+                      ? 'bg-(--accent) text-(--on-accent)'
+                      : 'border border-(--border) bg-(--surface) enabled:hover:border-(--accent)'
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          {projectorScene === 'carte' && activeShocks.length > 1 ? (
+            <label className="flex items-center gap-2 text-sm">
+              <span className="sr-only">Carte projetée</span>
+              <select
+                id="carte-projetee"
+                value={projectorShockId ?? ''}
+                disabled={disabled}
+                onChange={(e) =>
+                  void call(
+                    '/api/facilitator',
+                    { action: 'set_projector_scene', sessionId, scene: 'carte', shockId: e.target.value },
+                    'Carte projetée mise à jour.',
+                  )
+                }
+                className="rounded-lg border border-(--border) bg-(--surface) px-2 py-1.5 text-sm"
+              >
+                {activeShocks.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    Tour {s.roundNumber} · {cards.find((c) => c.key === s.cardKey)?.name ?? s.cardKey}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
 
         {error ? (

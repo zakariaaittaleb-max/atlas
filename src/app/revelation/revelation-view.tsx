@@ -43,6 +43,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { ShareBar, type ShareSlice } from '@/components/share-bar';
+
+import { markRevealSeen, RevealStage, useRevealSeen } from './reveal-stage';
 import { InfoHint } from '@/components/ui/info-hint';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -209,6 +211,10 @@ export function RevelationView({
 
   const handleSettled = useCallback(() => setPhase('pose'), []);
 
+  // La mise en scène se joue une fois par tour, sur chaque appareil.
+  const seenKey = `atlas.revelation.${teamId}.${roundNumber}`;
+  const seen = useRevealSeen(seenKey);
+
   if (phase === 'attente') {
     return (
       <Shell roundNumber={roundNumber} teamName={teamName}>
@@ -254,6 +260,37 @@ export function RevelationView({
           </p>
           <style>{`@keyframes atlas-slide { 0% { transform: translateX(-100%);} 100% { transform: translateX(300%);} }`}</style>
         </div>
+      </Shell>
+    );
+  }
+
+  // ── La mise en scène, avant l'analyse ─────────────────────────────────────
+  if (!seen) {
+    const ranked = [...weights].sort((a, b) => b.weight - a.weight);
+    const rank = Math.max(ranked.findIndex((w) => w.teamId === teamId), 0) + 1;
+    const stageShares = rows
+      .filter((r) => r.team_id === teamId && r.round_number === roundNumber)
+      .map((r) => ({
+        dasId: r.das_id,
+        name: r.das_name,
+        share: Number(r.market_share_pct ?? 0),
+        previous: previousByUnit.get(`${teamId}:${r.das_id}`) ?? null,
+      }))
+      .sort((a, b) => b.share - a.share);
+    const hasComparison = Boolean(ownWeight && ownWeight.previousWeight !== ownWeight.weight);
+
+    return (
+      <Shell roundNumber={roundNumber} teamName={teamName} announce="Résultats publiés. La révélation commence.">
+        <RevealStage
+          weight={ownWeight?.weight ?? 0}
+          previousWeight={hasComparison && ownWeight ? ownWeight.previousWeight : null}
+          rank={rank}
+          groupsCount={weights.length}
+          revenueMad={ownWeight?.revenueMad ?? 0}
+          poolRevenueMad={poolRevenue}
+          shares={stageShares}
+          onDone={() => markRevealSeen(seenKey)}
+        />
       </Shell>
     );
   }

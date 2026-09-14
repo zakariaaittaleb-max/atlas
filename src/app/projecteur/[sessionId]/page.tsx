@@ -23,7 +23,7 @@ export default async function ProjectorPage({
   const admin = createAdminClient();
 
   const { data: session } = await admin
-    .from('game_sessions').select('status, current_round, planned_rounds, visual_style').eq('id', sessionId).maybeSingle();
+    .from('game_sessions').select('status, current_round, planned_rounds, visual_style, projector_scene, projector_shock_id, round_soft_deadline').eq('id', sessionId).maybeSingle();
   const roundNumber = Number(session?.current_round ?? 0);
 
   const [{ data: teams }, { data: das }, { data: metrics }, { data: previous }, { data: summaries }, { data: units }] =
@@ -88,8 +88,40 @@ export default async function ProjectorPage({
     entry.rows.sort((a, b) => b.marketSharePct - a.marketSharePct);
   }
 
+  // ── Ce que le facilitateur a choisi de projeter ───────────────────────────
+  const teamIds = (teams ?? []).map((t) => String(t.id));
+  const shockColumns = 'id, card_key, das_id, rounds_remaining';
+  const [{ count: submitted }, { data: shockRow }] = await Promise.all([
+    admin
+      .from('team_round_submissions')
+      .select('team_id', { count: 'exact', head: true })
+      .in('team_id', teamIds.length ? teamIds : ['00000000-0000-0000-0000-000000000000'])
+      .eq('round_number', roundNumber),
+    session?.projector_shock_id
+      ? admin.from('market_shocks').select(shockColumns).eq('id', String(session.projector_shock_id)).maybeSingle()
+      : admin.from('market_shocks').select(shockColumns).eq('session_id', sessionId)
+          .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  const { data: card } = shockRow
+    ? await admin.from('shock_cards').select('name, description, nature').eq('key', String(shockRow.card_key)).maybeSingle()
+    : { data: null };
+
   return (
     <ProjectorView
+      scene={String(session?.projector_scene ?? 'auto')}
+      progress={{ submitted: submitted ?? 0, teams: (teams ?? []).filter((t) => !t.is_liquidated).length }}
+      deadline={session?.round_soft_deadline ? String(session.round_soft_deadline) : null}
+      shock={
+        shockRow && card
+          ? {
+              name: String(card.name),
+              description: String(card.description ?? ''),
+              nature: String(card.nature),
+              dasName: dasName.get(String(shockRow.das_id)) ?? '—',
+              roundsRemaining: Number(shockRow.rounds_remaining),
+            }
+          : null
+      }
       visualStyle={session?.visual_style === 'ludique' ? 'ludique' : 'corporate'}
       sessionId={sessionId}
       sessionName={context.sessionName}

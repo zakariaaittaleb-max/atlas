@@ -71,6 +71,12 @@ const Request = z.discriminatedUnion('action', [
     open: z.boolean(),
   }),
   z.object({
+    action: z.literal('set_projector_scene'),
+    sessionId: z.string().uuid(),
+    scene: z.enum(['auto', 'avancement', 'carte', 'classement', 'pause']),
+    shockId: z.string().uuid().nullable().default(null),
+  }),
+  z.object({
     action: z.literal('set_visual_style'),
     sessionId: z.string().uuid(),
     style: z.enum(['corporate', 'ludique']),
@@ -184,6 +190,34 @@ export async function POST(request: Request) {
       );
 
     return NextResponse.json({ ok: true, level: body.level, dials, overrides });
+  }
+
+  if (body.action === 'set_projector_scene') {
+    // Une carte projetée doit appartenir à CETTE session ; sans choix explicite,
+    // la plus récente.
+    let shockId: string | null = null;
+    if (body.scene === 'carte') {
+      const base = admin.from('market_shocks').select('id').eq('session_id', body.sessionId);
+      const { data: shock } = body.shockId
+        ? await base.eq('id', body.shockId).maybeSingle()
+        : await base.order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (!shock) {
+        return NextResponse.json(
+          { error: 'Aucune carte déclenchée dans cette session : il n’y a rien à projeter.' },
+          { status: 409 },
+        );
+      }
+      shockId = String(shock.id);
+    }
+
+    const { error } = await admin
+      .from('game_sessions')
+      .update({ projector_scene: body.scene, projector_shock_id: shockId })
+      .eq('id', body.sessionId);
+    if (error) {
+      return NextResponse.json({ error: `Projecteur non mis à jour : ${error.message}` }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true });
   }
 
   if (body.action === 'set_visual_style') {

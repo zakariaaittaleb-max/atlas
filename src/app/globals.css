@@ -471,3 +471,31 @@ body[data-anti-select="on"] svg {
   --text-xs: 0.875rem;
   --text-xs--line-height: calc(1.25 / 0.875);
 }
+
+/* ══ Révélation mise en scène ═══════════════════════════════════════════════
+   Utilisées uniquement sous la variante `motion-safe:` : en mouvement réduit,
+   la séquence s'affiche d'un bloc. */
+@keyframes atlas-count {
+  from {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes atlas-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

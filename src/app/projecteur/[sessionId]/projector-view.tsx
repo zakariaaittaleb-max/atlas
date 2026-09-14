@@ -14,7 +14,7 @@
  * hors de l'écran commun.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { createClient } from '@/lib/supabase/client';
@@ -39,15 +39,37 @@ export interface PoolStanding {
   }[];
 }
 
+export interface ProjectedShock {
+  name: string;
+  description: string;
+  nature: string;
+  dasName: string;
+  roundsRemaining: number;
+}
+
 export function ProjectorView({
   sessionId, sessionName, status, roundNumber, plannedRounds, standings, visualStyle,
+  scene, progress, deadline, shock,
 }: {
+  /** Scène choisie par le facilitateur ; `auto` suit l'état du tour. */
+  scene: string;
+  progress: { submitted: number; teams: number };
+  /** Heure de fin annoncée du tour, si le facilitateur en a fixé une. */
+  deadline: string | null;
+  shock: ProjectedShock | null;
   /** Style choisi par le facilitateur pour la session. */
   visualStyle: 'corporate' | 'ludique';
   sessionId: string; sessionName: string; status: string;
   roundNumber: number; plannedRounds: number; standings: PoolStanding[];
 }) {
   const router = useRouter();
+
+  const effective =
+    scene !== 'auto' ? scene
+    : status === 'round_active' || status === 'onboarding' ? 'avancement'
+    : status === 'round_locked' || status === 'round_resolving' ? 'calcul'
+    : status === 'round_resolved' || status === 'completed' ? 'classement'
+    : 'pause';
 
   // Rafraîchissement automatique : le formateur ne doit pas avoir à toucher son
   // clavier au moment où toute la salle regarde l'écran.
@@ -80,7 +102,7 @@ export function ProjectorView({
         </p>
       </header>
 
-      {standings.length === 0 ? (
+      {effective === 'classement' ? (standings.length === 0 ? (
         <p className="text-3xl text-(--foreground-muted)">
           Aucun résultat publié pour l’instant.
         </p>
@@ -153,7 +175,116 @@ export function ProjectorView({
             </section>
           ))}
         </div>
+      )) : effective === 'avancement' ? (
+        <ProgressScene progress={progress} deadline={deadline} />
+      ) : effective === 'carte' ? (
+        <ShockScene shock={shock} />
+      ) : effective === 'calcul' ? (
+        <section aria-live="polite" className="mt-16">
+          <p className="text-7xl font-semibold tracking-tight text-(--heading)">Calcul en cours</p>
+          <p className="mt-6 text-4xl text-(--foreground-muted)">
+            Toutes les équipes découvriront les résultats au même instant.
+          </p>
+        </section>
+      ) : (
+        <section className="mt-16">
+          <p className="text-7xl font-semibold tracking-tight text-(--heading)">Échange en salle</p>
+          <p className="mt-6 text-4xl text-(--foreground-muted)">Le jeu reprend dans un instant.</p>
+        </section>
       )}
     </main>
+  );
+}
+
+/** L'heure courante, rafraîchie chaque seconde après le montage — jamais au rendu serveur. */
+function useNow(): number | null {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const first = window.setTimeout(tick, 0);
+    const id = window.setInterval(tick, 1000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(id);
+    };
+  }, []);
+  return now;
+}
+
+function formatClock(ms: number): string {
+  const total = Math.max(Math.ceil(ms / 1000), 0);
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+/** Combien d'équipes ont soumis, et le temps annoncé qui reste. Aucune équipe n'est nommée. */
+function ProgressScene({
+  progress, deadline,
+}: { progress: { submitted: number; teams: number }; deadline: string | null }) {
+  const now = useNow();
+  const remaining = deadline && now !== null ? new Date(deadline).getTime() - now : null;
+  const pct = progress.teams > 0 ? (progress.submitted / progress.teams) * 100 : 0;
+
+  return (
+    <section aria-label="Avancement du tour" className="mt-12 grid gap-16 lg:grid-cols-2">
+      <div>
+        <p className="text-3xl text-(--foreground-muted)">Équipes ayant soumis leur tour</p>
+        <p className="tabular mt-4 font-mono text-[8rem] leading-none font-semibold">
+          {progress.submitted}
+          <span className="text-(--foreground-muted)"> / {progress.teams}</span>
+        </p>
+        <div
+          role="progressbar"
+          aria-label="Équipes ayant soumis"
+          aria-valuemin={0}
+          aria-valuemax={progress.teams}
+          aria-valuenow={progress.submitted}
+          className="mt-10 h-5 w-full overflow-hidden rounded-full bg-(--surface-muted)"
+        >
+          <div className="h-full rounded-full bg-(--accent)" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+      <div>
+        <p className="text-3xl text-(--foreground-muted)">Temps restant</p>
+        <p className="tabular mt-4 font-mono text-[8rem] leading-none font-semibold">
+          {remaining === null ? '—' : formatClock(remaining)}
+        </p>
+        {remaining !== null && remaining <= 0 ? (
+          <p className="mt-6 text-3xl font-semibold text-(--warning)">Le temps annoncé est écoulé</p>
+        ) : deadline === null ? (
+          <p className="mt-6 text-2xl text-(--foreground-muted)">Pas d’heure de fin annoncée</p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+/** La carte en cours : ce que les équipes lisent dans leur War Room, en grand. */
+function ShockScene({ shock }: { shock: ProjectedShock | null }) {
+  if (!shock) {
+    return <p className="mt-16 text-4xl text-(--foreground-muted)">Aucune carte déclenchée pour l’instant.</p>;
+  }
+  const threat = shock.nature !== 'opportunite';
+  return (
+    <section aria-label="Carte en cours" className="mt-12 max-w-6xl">
+      <p
+        className={`inline-flex rounded-full px-6 py-2 text-2xl font-semibold ${
+          threat ? 'bg-(--negative-subtle) text-(--negative)' : 'bg-(--positive-subtle) text-(--positive)'
+        }`}
+      >
+        {threat ? 'Menace' : 'Opportunité'} · {shock.dasName}
+      </p>
+      <h2 className="mt-8 text-7xl font-semibold tracking-tight text-(--heading)">{shock.name}</h2>
+      {shock.description ? (
+        <p className="mt-8 max-w-5xl text-4xl leading-snug">{shock.description}</p>
+      ) : null}
+      <p className="tabular mt-10 text-2xl text-(--foreground-muted)">
+        {shock.roundsRemaining >= 99
+          ? 'Effet permanent'
+          : `${shock.roundsRemaining} tour${shock.roundsRemaining > 1 ? 's' : ''} d’effet`}
+        {' · '}plans de riposte à rédiger dans la War Room
+      </p>
+    </section>
   );
 }
