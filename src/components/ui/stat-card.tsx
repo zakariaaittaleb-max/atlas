@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, Equal } from 'lucide-react';
 
+import { useT } from '@/components/i18n-provider';
 import type { Delta } from '@/lib/format';
 
 import { InfoHint } from './info-hint';
@@ -51,6 +52,7 @@ export function StatCard({
   polarity?: Polarity;
   invertPolarity?: boolean;
 }) {
+  const t = useT();
   const resolvedPolarity: Polarity = polarity ?? (invertPolarity ? 'inverted' : 'normal');
 
   return (
@@ -78,16 +80,16 @@ export function StatCard({
         {delta ? (
           <>
             <TrendBadge delta={delta} polarity={resolvedPolarity} />
-            <span className="text-xs text-(--meta)">vs tour précédent</span>
+            <span className="text-xs text-(--meta)">{t('stat.vsPrevious')}</span>
           </>
         ) : (
-          <span className="text-sm text-(--meta)">{note ?? 'Premier tour — pas de comparaison'}</span>
+          <span className="text-sm text-(--meta)">{note ?? t('stat.firstRound')}</span>
         )}
       </div>
       {benchmark ? <p className="tabular mt-1 text-sm text-(--meta)">{benchmark}</p> : null}
 
       {trend && trend.length > 1 ? (
-        <Sparkline values={trend} className="mt-4" label={`Trajectoire : ${label}`} />
+        <Sparkline values={trend} className="mt-4" label={t('stat.trend', { label })} />
       ) : null}
     </div>
   );
@@ -100,6 +102,7 @@ export function TrendBadge({
   delta: Delta;
   polarity?: Polarity;
 }) {
+  const t = useT();
   const favourable =
     delta.direction === 'flat' || polarity === 'neutral'
       ? null
@@ -117,7 +120,7 @@ export function TrendBadge({
   const Icon = delta.direction === 'up' ? ArrowUp : delta.direction === 'down' ? ArrowDown : Equal;
   // `delta.label` porte déjà « ↑ + » : l'icône le remplace, le signe reste.
   const text =
-    delta.direction === 'flat' ? 'inchangé' : delta.label.replace(/^[↑↓]\s*/, '');
+    delta.direction === 'flat' ? t('stat.unchanged') : delta.label.replace(/^[↑↓]\s*/, '');
 
   return (
     <span

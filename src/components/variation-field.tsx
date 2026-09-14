@@ -26,6 +26,9 @@ import { useState } from 'react';
 
 import { InfoHint } from '@/components/ui/info-hint';
 import { formatMadCompact, formatUnits } from '@/lib/format';
+
+import { useT } from '@/components/i18n-provider';
+import type { MessageKey } from '@/lib/i18n/messages';
 import {
   clampVariation,
   floorOf,
@@ -46,7 +49,7 @@ export function VariationField({
   hint,
   /** `money` affiche des dirhams, `count` des unités (personnes, volumes). */
   unit = 'money',
-  referenceLabel = 'tour précédent',
+  referenceLabel: referenceLabelProp,
   unset = false,
 }: {
   label: string;
@@ -68,6 +71,8 @@ export function VariationField({
   // Ce que l'équipe tape, laissé intact tant qu'elle n'a pas quitté le champ :
   // regrouper les chiffres à chaque frappe fait sauter le curseur de saisie.
   const [draft, setDraft] = useState<string | null>(null);
+  const t = useT();
+  const referenceLabel = referenceLabelProp ?? t('variation.previousRound');
 
   const rawPct = variationFromValue(reference, value);
   const pct = clampVariation(rawPct, scale.bounds, reference);
@@ -84,7 +89,10 @@ export function VariationField({
    */
   const outOfRange = !pristine && Math.abs(rawPct - pct) > 0.5;
 
-  const word = outOfRange ? 'Hors fourchette' : variationLabel(pct, scale);
+  const scaleWord = variationLabel(pct, scale);
+  const word = outOfRange
+    ? t('variation.outOfRange')
+    : VARIATION_WORDS[scaleWord] ? t(VARIATION_WORDS[scaleWord]) : scaleWord;
   const format = unit === 'money' ? formatMadCompact : formatUnits;
   const floor = floorOf(reference, scale.bounds);
 
@@ -106,9 +114,9 @@ export function VariationField({
           }}
         >
           {word}
-          {pristine ? <span className="ml-1.5 text-(--foreground-muted)">· reconduit</span> : null}
+          {pristine ? <span className="ms-1.5 text-(--foreground-muted)">{t('variation.carried')}</span> : null}
           {!pristine && Math.abs(outOfRange ? rawPct : pct) >= 1 ? (
-            <span className="ml-1.5 text-(--foreground-muted)">
+            <span className="ms-1.5 text-(--foreground-muted)">
               {(outOfRange ? rawPct : pct) > 0 ? '+' : '−'}
               {Math.abs(Math.round(outOfRange ? rawPct : pct))} %
             </span>
@@ -123,7 +131,7 @@ export function VariationField({
         step={1}
         value={Math.round(pct)}
         disabled={disabled}
-        aria-label={`${label} — écart par rapport au ${referenceLabel}`}
+        aria-label={t('variation.sliderAria', { label, reference: referenceLabel })}
         onChange={(event) =>
           onChange(valueFromVariation(reference, Number(event.target.value)))
         }
@@ -132,7 +140,7 @@ export function VariationField({
 
       <div className="tabular mt-1 flex justify-between text-sm text-(--foreground-muted)">
         <span>
-          {floor <= -100 ? 'supprimé' : floor === 0 ? '0 %' : `${floor} %`}
+          {floor <= -100 ? t('variation.removedShort') : floor === 0 ? '0 %' : `${floor} %`}
         </span>
         <span>
           {referenceLabel} : {format(reference.anchor)}
@@ -147,7 +155,7 @@ export function VariationField({
         <input
           type="text"
           inputMode="numeric"
-          aria-label={`${label} — montant en ${unit === 'money' ? 'dirhams' : 'unités'}`}
+          aria-label={t('variation.amountAria', { label, unit: unit === 'money' ? t('variation.dirhams') : t('variation.units') })}
           disabled={disabled}
           value={draft ?? formatUnits(value)}
           onFocus={() => setDraft(value === 0 ? '' : String(Math.round(value)))}
@@ -168,21 +176,36 @@ export function VariationField({
           className="tabular w-40 rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm disabled:opacity-50"
         />
         <span className="text-sm text-(--foreground-muted)">
-          {unit === 'money' ? 'DH' : 'unités'}
+          {unit === 'money' ? 'DH' : t('variation.units')}
           {unit === 'money' && value > 0 ? ` · ${formatMadCompact(value)}` : ''}
         </span>
       </div>
 
       {outOfRange ? (
         <p className="mt-1 text-sm" style={{ color: 'var(--warning)' }}>
-          Votre animateur a resserré la fourchette depuis votre saisie. Ce montant sera
-          ramené à {format(valueFromVariation(reference, pct))} au prochain enregistrement.
+          {t('variation.narrowed', { amount: format(valueFromVariation(reference, pct)) })}
         </p>
       ) : null}
 
     </div>
   );
 }
+
+/** Les mots de l'échelle de variation, dans la langue du participant. */
+const VARIATION_WORDS: Record<string, MessageKey> = {
+  'Supprimé': 'variation.removed',
+  'Inchangé': 'variation.flat',
+  'Faible baisse': 'variation.smallDown',
+  'Baisse moyenne': 'variation.midDown',
+  'Forte baisse': 'variation.bigDown',
+  'Très forte baisse': 'variation.veryBigDown',
+  'Baisse maximale': 'variation.maxDown',
+  'Faible hausse': 'variation.smallUp',
+  'Hausse moyenne': 'variation.midUp',
+  'Forte hausse': 'variation.bigUp',
+  'Très forte hausse': 'variation.veryBigUp',
+  'Hausse maximale': 'variation.maxUp',
+};
 
 /**
  * La couleur ne porte JAMAIS l'information seule — le mot est toujours là.

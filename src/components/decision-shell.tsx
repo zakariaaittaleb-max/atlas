@@ -126,12 +126,13 @@ export function SectionActions({
 }) {
   const [confirming, setConfirming] = useState(false);
   const [validated, setValidated] = useState(false);
+  const t = useT();
 
   if (locked) {
     return (
       <p className="mt-6 flex items-center gap-2 border-t border-(--border) pt-4 text-sm text-(--foreground-muted)">
         <Lock aria-hidden className="h-4 w-4 shrink-0" />
-        Tour verrouillé — ce bloc n’accepte plus de modification.
+        {t('actions.lockedBlock')}
       </p>
     );
   }
@@ -147,7 +148,7 @@ export function SectionActions({
         }}
         className="rounded-lg bg-(--accent) hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent)"
       >
-        Valider {what}
+        {t('actions.validate', { what })}
       </button>
 
       {confirming ? (
@@ -157,24 +158,22 @@ export function SectionActions({
             onClick={() => { onReset(); setConfirming(false); setValidated(false); }}
             className="rounded-lg border border-(--negative) px-4 py-2.5 text-sm font-medium text-(--negative)"
           >
-            Confirmer la réinitialisation
+            {t('actions.confirmReset')}
           </button>
           <button
             type="button" onClick={() => setConfirming(false)}
             className="rounded-lg border border-(--border) px-4 py-2.5 text-sm"
           >
-            Annuler
+            {t('actions.cancel')}
           </button>
-          <span className="text-sm text-(--foreground-muted)">
-            Les valeurs de ce bloc reviendront à ce qu’elles étaient à l’ouverture du tour.
-          </span>
+          <span className="text-sm text-(--foreground-muted)">{t('actions.resetExplain')}</span>
         </>
       ) : (
         <button
           type="button" disabled={!changed} onClick={() => setConfirming(true)}
           className="rounded-lg border border-(--border) px-4 py-2.5 text-sm disabled:opacity-40"
         >
-          Réinitialiser au début du tour
+          {t('actions.reset')}
         </button>
       )}
 
@@ -182,18 +181,14 @@ export function SectionActions({
         <span className="flex items-center gap-2 text-sm text-(--foreground-muted)">
           <span role="status">
             {validated
-              ? '✓ Validé — vos valeurs sont enregistrées.'
+              ? t('actions.validated')
               : recorded
-                ? 'Déjà enregistré ce tour'
-                : 'Pas encore enregistré ce tour'}
+                ? t('actions.recorded')
+                : t('actions.notRecorded')}
           </span>
-          <InfoHint label={`Valider ${what}`}>
-            {recorded
-              ? 'Valider à nouveau écrase l’enregistrement par les valeurs affichées.'
-              : 'Valider écrit les valeurs affichées, même si vous n’y avez pas touché : c’est ainsi qu’on reconduit sciemment les choix du tour précédent.'}
-            <span className="mt-2 block">
-              « Réinitialiser » ramène le bloc à son état d’ouverture du tour.
-            </span>
+          <InfoHint label={t('actions.validate', { what })}>
+            {recorded ? t('actions.hintRecorded') : t('actions.hintNew')}
+            <span className="mt-2 block">{t('actions.hintReset')}</span>
           </InfoHint>
         </span>
       ) : null}
@@ -211,15 +206,18 @@ export function SectionActions({
  */
 export function DasChecklist({
   items, className = 'mb-8',
-}: { items: { label: string; href: string; done: boolean }[]; className?: string }) {
+}: {
+  /** `labelKey` traduit le volet ; `label` reste le repli en français. */
+  items: { label: string; labelKey?: MessageKey; href: string; done: boolean }[];
+  className?: string;
+}) {
+  const t = useT();
   const left = items.filter((i) => !i.done).length;
 
   return (
     <div className={`rounded-xl border border-(--border) bg-(--surface) p-4 ${className}`}>
       <p className="text-sm font-medium">
-        {left === 0
-          ? '✓ Ce domaine est renseigné sur tous les volets.'
-          : `${left} volet${left > 1 ? 's' : ''} à renseigner sur ce domaine`}
+        {left === 0 ? t('checklist.allDone') : t('checklist.left', { count: left })}
       </p>
       <ul className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1.5 text-sm">
         {items.map((item) => (
@@ -232,8 +230,8 @@ export function DasChecklist({
               {/* Le signe double la couleur : jamais d'information portée par
                   la seule teinte. */}
               <span aria-hidden>{item.done ? '✓ ' : '○ '}</span>
-              {item.label}
-              <span className="sr-only">{item.done ? ' — fait' : ' — à faire'}</span>
+              {item.labelKey ? t(item.labelKey) : item.label}
+              <span className="sr-only"> — {item.done ? t('checklist.done') : t('checklist.todo')}</span>
             </a>
           </li>
         ))}
@@ -530,6 +528,7 @@ export function HeadcountStepper({
 export function BudgetGauge({
   allocated, available, label,
 }: { allocated: number; available: number; label: string }) {
+  const t = useT();
   const ratio = available > 0 ? allocated / available : 0;
   const over = ratio > 1;
   const width = Math.min(ratio, 1) * 100;
@@ -540,7 +539,7 @@ export function BudgetGauge({
         <span className="text-sm font-medium">{label}</span>
         <span className="tabular text-sm" style={{ color: over ? 'var(--negative)' : 'var(--foreground-muted)' }}>
           {formatMadCompact(allocated)} / {formatMadCompact(available)}
-          {over ? ` — dépassement de ${formatMadCompact(allocated - available)}` : ''}
+          {over ? ` — ${t('gauge.over', { amount: formatMadCompact(allocated - available) })}` : ''}
         </span>
       </div>
 
@@ -553,8 +552,7 @@ export function BudgetGauge({
 
       {over ? (
         <p className="mt-2 text-sm text-(--negative)">
-          Vous engagez plus que votre trésorerie disponible. Le moteur l’acceptera — et vous
-          passerez en trésorerie négative.
+          {t('gauge.overWarning')}
         </p>
       ) : null}
     </div>

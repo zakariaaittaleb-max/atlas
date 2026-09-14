@@ -19,6 +19,7 @@ import { ChartColumn, LoaderCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useRef, useState } from 'react';
 
+import { useT } from '@/components/i18n-provider';
 import { Dialog } from '@/components/ui/dialog';
 import { StatCard } from '@/components/ui/stat-card';
 import type { IndicatorSheet, IndicatorTopic } from '@/lib/decision-indicators';
@@ -62,15 +63,16 @@ export function IndicatorsButton({
     }
   }, [topic, dasId]);
 
+  const t = useT();
   const subtitle =
     status === 'ready' && sheet
       ? [
           sheet.dasName,
           sheet.roundNumber === null
-            ? 'aucun exercice clos'
+            ? t('indicators.noYear')
             : sheet.roundNumber === 0
-              ? 'situation initiale (T0)'
-              : `dernier exercice clos : tour ${sheet.roundNumber}`,
+              ? t('indicators.initial')
+              : t('indicators.lastYear', { n: sheet.roundNumber }),
         ].filter(Boolean).join(' · ')
       : undefined;
 
@@ -90,7 +92,7 @@ export function IndicatorsButton({
         className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-(--border) bg-(--surface) px-2.5 text-sm font-medium text-(--accent-text) transition-colors hover:border-(--accent) hover:bg-(--accent-subtle)"
       >
         <ChartColumn aria-hidden className="h-4 w-4" />
-        <span className="max-sm:sr-only">Indicateurs</span>
+        <span className="max-sm:sr-only">{t('indicators.button')}</span>
         <span className="sr-only"> : {decision}</span>
       </button>
 
@@ -99,22 +101,22 @@ export function IndicatorsButton({
         onClose={() => setOpen(false)}
         returnFocus={trigger}
         width="lg"
-        title={`Indicateurs — ${decision}`}
+        title={t('indicators.title', { decision })}
         subtitle={subtitle}
         footer={
           <>
             <Link
               href="/dashboard"
-              className="mr-auto text-sm font-medium text-(--accent-text) underline underline-offset-4"
+              className="me-auto text-sm font-medium text-(--accent-text) underline underline-offset-4"
             >
-              Tout le tableau de bord
+              {t('indicators.dashboard')}
             </Link>
             <button
               type="button"
               onClick={() => setOpen(false)}
               className="rounded-lg bg-(--accent) px-4 py-2.5 font-medium text-(--on-accent) transition-colors hover:bg-(--accent-hover)"
             >
-              Revenir à la décision
+              {t('indicators.back')}
             </button>
           </>
         }
@@ -124,9 +126,9 @@ export function IndicatorsButton({
 
           {status === 'error' ? (
             <div role="alert" className="rounded-lg bg-(--negative-subtle) px-4 py-3 text-sm text-(--negative)">
-              Les indicateurs n’ont pas pu être chargés. Vos décisions ne sont pas concernées.{' '}
+              {t('indicators.error')}{' '}
               <button type="button" onClick={() => void load()} className="font-semibold underline">
-                Réessayer
+                {t('indicators.retry')}
               </button>
             </div>
           ) : null}
@@ -139,11 +141,12 @@ export function IndicatorsButton({
 }
 
 function LoadingState() {
+  const t = useT();
   return (
     <>
       <p role="status" className="flex items-center gap-2 text-sm text-(--foreground-muted)">
         <LoaderCircle aria-hidden className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-        Chargement des indicateurs…
+        {t('indicators.loading')}
       </p>
       <div aria-hidden className="mt-4 grid animate-pulse gap-4 motion-reduce:animate-none sm:grid-cols-2 lg:grid-cols-3">
         {[0, 1, 2].map((i) => (
@@ -155,19 +158,20 @@ function LoadingState() {
 }
 
 function SheetBody({ sheet }: { sheet: IndicatorSheet }) {
+  const t = useT();
   return (
     <>
       <p className="max-w-3xl text-(--foreground-muted)">{sheet.question}</p>
 
       {sheet.empty ? (
         <div className="mt-4 rounded-xl border border-(--border) bg-(--surface-muted) p-5">
-          <p className="font-semibold text-(--heading)">Pas encore de chiffres pour cette décision</p>
+          <p className="font-semibold text-(--heading)">{t('indicators.empty')}</p>
           <p className="mt-1.5 max-w-2xl text-sm text-(--foreground-muted)">{sheet.empty}</p>
           <a
             href="/api/export?type=dossier_initial"
             className="mt-3 inline-block text-sm font-medium text-(--accent-text) underline underline-offset-4"
           >
-            Télécharger le dossier initial
+            {t('indicators.download')}
           </a>
         </div>
       ) : null}

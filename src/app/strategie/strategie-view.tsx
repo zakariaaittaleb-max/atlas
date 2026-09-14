@@ -39,6 +39,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useState } from 'react';
 
 import { useDasScope } from '@/components/das-scope';
+import { useT } from '@/components/i18n-provider';
 import {
   BudgetGauge, DasChecklist, DecisionBar, SectionActions,
   type MissingDecision,
@@ -49,7 +50,8 @@ import { DasDot } from '@/components/ui/das-dot';
 import { ChipToggle, ChoiceCard, Definitions, GroupLegend } from '@/components/ui/form-controls';
 import { InfoHint } from '@/components/ui/info-hint';
 import { StatCard } from '@/components/ui/stat-card';
-import { delta, formatMadCompact, formatScore, strategyLabel } from '@/lib/format';
+import { delta, formatMadCompact, formatScore } from '@/lib/format';
+import type { MessageKey } from '@/lib/i18n/messages';
 import {
   dasDecisionDefaults,
   type CorporateValues, type DasDecisionValues, type DasEntry, type DecisionContext,
@@ -86,14 +88,6 @@ const VALUES = [
   'excellence_produit', 'innovation', 'proximite_client', 'accessibilite_prix',
   'efficience_operationnelle', 'responsabilite_sociale', 'ancrage_territorial', 'fiabilite_service',
 ] as const;
-
-const VALUE_LABELS: Record<string, string> = {
-  excellence_produit: 'Excellence produit', innovation: 'Innovation',
-  proximite_client: 'Proximité client', accessibilite_prix: 'Accessibilité prix',
-  efficience_operationnelle: 'Efficience opérationnelle',
-  responsabilite_sociale: 'Responsabilité sociale',
-  ancrage_territorial: 'Ancrage territorial', fiabilite_service: 'Fiabilité de service',
-};
 
 /**
  * Fonctions centralisables, chacune avec la clé du module qui l'ouvre : le
@@ -159,6 +153,7 @@ export function StrategieGroupeView({
   const router = useRouter();
   const autosave = useAutosave();
   const locked = !context.decisionsOpen;
+  const t = useT();
 
   const [corporate, setCorporate] = useState<CorporateValues>(context.corporate);
 
@@ -177,16 +172,14 @@ export function StrategieGroupeView({
       <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-8 lg:py-10">
         <header className="mb-8">
           <p className="text-xs font-semibold tracking-wider text-(--accent-text) uppercase">
-            Tour {context.roundNumber} · niveau Groupe
+            {t('strat.eyebrowGroup', { n: context.roundNumber })}
           </p>
           <h1 className="mt-1 flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight text-(--heading)">
-            Stratégie du Groupe
-            <InfoHint label="Stratégie du Groupe">
-              Ces choix valent pour l’entreprise entière. Chaque domaine devra ensuite s’y
-              situer — en les suivant ou en s’en écartant, les deux se paient. Ce que décide
-              chaque métier se règle dans{' '}
+            {t('strat.groupTitle')}
+            <InfoHint label={t('strat.groupTitle')}>
+              {t('strat.groupIntro')}{' '}
               <a href="/strategie/das" className="font-medium text-(--accent-text) underline">
-                Stratégie du DAS
+                {t('nav.link./strategie/das')}
               </a>.
             </InfoHint>
           </h1>
@@ -195,15 +188,15 @@ export function StrategieGroupeView({
         <section className="rounded-xl border border-(--border) bg-(--surface) p-6">
           {isOn(modules, 'strategie.corporate_strategy') ? (
           <fieldset disabled={locked}>
-            <GroupLegend title="Votre logique de portefeuille">
-              <Definitions items={labelled(CORPORATE)} />
+            <GroupLegend title={t('strat.portfolioLegend')}>
+              <Definitions items={labelled(CORPORATE, t)} />
             </GroupLegend>
             <div className="grid gap-2 sm:grid-cols-2">
               {CORPORATE.map(([value]) => (
                 <ChoiceCard
                   key={value}
                   selected={corporate.corporateStrategy === value}
-                  title={strategyLabel(value)}
+                  title={t(`strategy.${value}` as MessageKey)}
                   onSelect={() => pushCorporate({ ...corporate, corporateStrategy: value })}
                 />
               ))}
@@ -213,16 +206,16 @@ export function StrategieGroupeView({
 
           {isOn(modules, 'strategie.structure_type') ? (
           <fieldset disabled={locked} className="mt-6">
-            <GroupLegend title="Structure organisationnelle">
-              <span className="block">Elle doit suivre votre portefeuille, pas l’inverse.</span>
-              <span className="mt-2 block"><Definitions items={labelled(STRUCTURES)} /></span>
+            <GroupLegend title={t('strat.structureLegend')}>
+              <span className="block">{t('strat.structureNote')}</span>
+              <span className="mt-2 block"><Definitions items={labelled(STRUCTURES, t)} /></span>
             </GroupLegend>
             <div className="grid gap-2 sm:grid-cols-3">
               {STRUCTURES.map(([value]) => (
                 <ChoiceCard
                   key={value}
                   selected={corporate.structureType === value}
-                  title={strategyLabel(value)}
+                  title={t(`strategy.${value}` as MessageKey)}
                   onSelect={() => pushCorporate({ ...corporate, structureType: value })}
                 />
               ))}
@@ -232,16 +225,13 @@ export function StrategieGroupeView({
 
           {anyOn(modules, CENTRALISATION_KEYS) ? (
           <fieldset disabled={locked} className="mt-6">
-            <GroupLegend title="Fonctions pilotées au siège">
-              Centraliser mutualise les coûts et ralentit les divisions. Sur des métiers
-              étrangers, cela produit surtout de la coordination.
-            </GroupLegend>
+            <GroupLegend title={t('strat.hqLegend')}>{t('strat.hqNote')}</GroupLegend>
             <div className="flex flex-wrap gap-2">
               {FUNCTIONS.filter(([, , moduleKey]) => isOn(modules, moduleKey)).map(
-                ([key, label]) => (
+                ([key]) => (
                   <ChipToggle
                     key={key}
-                    label={label}
+                    label={t(`function.${key}` as MessageKey)}
                     on={corporate[key] as boolean}
                     onToggle={() => pushCorporate({ ...corporate, [key]: !corporate[key] })}
                   />
@@ -253,17 +243,14 @@ export function StrategieGroupeView({
 
           {anyOn(modules, ['strategie.shared_production', 'strategie.shared_rd']) ? (
           <fieldset disabled={locked} className="mt-6">
-            <GroupLegend title="Mutualisation effective">
-              Distincte de la centralisation : on peut centraliser les achats sans que les
-              métiers achètent les mêmes choses. Seul le partage réel compte.
-            </GroupLegend>
+            <GroupLegend title={t('strat.sharingLegend')}>{t('strat.sharingNote')}</GroupLegend>
             <div className="flex flex-wrap gap-2">
               {isOn(modules, 'strategie.shared_production') ? (
-                <ChipToggle label="Production partagée" on={corporate.sharedProduction}
+                <ChipToggle label={t('strat.sharedProduction')} on={corporate.sharedProduction}
                   onToggle={() => pushCorporate({ ...corporate, sharedProduction: !corporate.sharedProduction })} />
               ) : null}
               {isOn(modules, 'strategie.shared_rd') ? (
-                <ChipToggle label="R&D mutualisée" on={corporate.sharedRd}
+                <ChipToggle label={t('strat.sharedRd')} on={corporate.sharedRd}
                   onToggle={() => pushCorporate({ ...corporate, sharedRd: !corporate.sharedRd })} />
               ) : null}
             </div>
@@ -272,21 +259,18 @@ export function StrategieGroupeView({
 
           {anyOn(modules, ['strategie.value1', 'strategie.value2']) ? (
           <fieldset disabled={locked} className="mt-6">
-            <GroupLegend title="Vos deux valeurs communiquées">
-              Elles ne coûtent rien et pèsent sur votre alignement. Annoncer l’excellence en
-              jouant le prix bas est une contradiction que le moteur relève.
-            </GroupLegend>
+            <GroupLegend title={t('strat.valuesLegend')}>{t('strat.valuesNote')}</GroupLegend>
             <div className="grid gap-3 sm:grid-cols-2">
               {isOn(modules, 'strategie.value1') ? (
                 <ValueSelect
-                  label="Première valeur" value={corporate.value1}
+                  label={t('strat.value1')} value={corporate.value1}
                   exclude={corporate.value2}
                   onChange={(v) => pushCorporate({ ...corporate, value1: v })}
                 />
               ) : null}
               {isOn(modules, 'strategie.value2') ? (
                 <ValueSelect
-                  label="Seconde valeur" value={corporate.value2}
+                  label={t('strat.value2')} value={corporate.value2}
                   exclude={corporate.value1}
                   onChange={(v) => pushCorporate({ ...corporate, value2: v })}
                 />
@@ -297,20 +281,15 @@ export function StrategieGroupeView({
 
           {anyOn(modules, ['strategie.vision', 'strategie.mission']) ? (
           <fieldset disabled={locked} className="mt-6">
-            <GroupLegend title="Vision et mission du Groupe">
-              L’entreprise n’en a qu’une, et elle se déclare ici — les domaines ne la
-              réécrivent pas, ils la déclinent en axes dans l’écran Organisation. Ces énoncés
-              ne sont PAS notés : un score tiré de mots-clés serait arbitraire. C’est la
-              déclinaison en axes, elle, qui pèse sur votre alignement.
-            </GroupLegend>
+            <GroupLegend title={t('strat.visionLegend')}>{t('strat.visionNote')}</GroupLegend>
             <div className="grid gap-4 sm:grid-cols-2">
               {isOn(modules, 'strategie.vision') ? (
                 <label className="block">
-                  <span className="text-sm">Vision du Groupe</span>
+                  <span className="text-sm">{t('strat.vision')}</span>
                   <textarea
                     rows={3} maxLength={600}
                     defaultValue={corporate.vision ?? ''}
-                    placeholder="Ce que le Groupe veut devenir d’ici cinq ans."
+                    placeholder={t('strat.visionPlaceholder')}
                     onBlur={(e) => pushCorporate({ ...corporate, vision: e.target.value || null })}
                     className="mt-2 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
                   />
@@ -318,11 +297,11 @@ export function StrategieGroupeView({
               ) : null}
               {isOn(modules, 'strategie.mission') ? (
                 <label className="block">
-                  <span className="text-sm">Mission du Groupe</span>
+                  <span className="text-sm">{t('strat.mission')}</span>
                   <textarea
                     rows={3} maxLength={600}
                     defaultValue={corporate.mission ?? ''}
-                    placeholder="Ce qu’il apporte, à qui, et en quoi c’est différent."
+                    placeholder={t('strat.missionPlaceholder')}
                     onBlur={(e) => pushCorporate({ ...corporate, mission: e.target.value || null })}
                     className="mt-2 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
                   />
@@ -333,7 +312,7 @@ export function StrategieGroupeView({
           ) : null}
 
           <SectionActions
-            what="la stratégie du Groupe"
+            what={t('strat.validateGroup')}
             locked={locked}
             changed={changed}
             recorded={context.corporateRecorded}
@@ -397,6 +376,7 @@ export function StrategieDasView({
   const autosave = useAutosave();
   const { activeDasId } = useDasScope();
   const locked = !context.decisionsOpen;
+  const t = useT();
 
   const [dasState, setDasState] = useState<Record<string, DasDecisionValues>>(() =>
     Object.fromEntries(context.das.map((d) => [d.dasId, d.decision])),
@@ -447,13 +427,13 @@ export function StrategieDasView({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold tracking-wider text-(--accent-text) uppercase">
-                Tour {context.roundNumber} · niveau domaine
+                {t('strat.eyebrowDas', { n: context.roundNumber })}
               </p>
               <h1 className="mt-1 flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight text-(--heading)">
                 {das ? (
                   <span className="inline-flex items-center gap-2">
                     <DasDot seed={das.activityName} />
-                    Stratégie de{' '}
+                    {t('strat.dasTitlePrefix')}{' '}
                     {/* Le domaine EST une marque : c'est ici qu'on la nomme, dans
                         le titre de l'écran qui la pilote. */}
                     <BrandName
@@ -464,14 +444,12 @@ export function StrategieDasView({
                     />
                   </span>
                 ) : (
-                  'Stratégie du domaine'
+                  t('strat.dasTitleFallback')
                 )}
-                <InfoHint label="Stratégie du domaine">
-                  Ces choix ne concernent que le domaine piloté. Changez de domaine dans la barre
-                  du haut pour renseigner les autres. Ce qui vaut pour l’entreprise entière se
-                  règle dans{' '}
+                <InfoHint label={t('strat.dasTitleFallback')}>
+                  {t('strat.dasIntro')}{' '}
                   <a href="/strategie" className="font-medium text-(--accent-text) underline">
-                    Stratégie du Groupe
+                    {t('strat.groupTitle')}
                   </a>.
                 </InfoHint>
               </h1>
@@ -486,35 +464,35 @@ export function StrategieDasView({
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard
                 size="sm"
-                label="Stratégie générique"
-                value={strategyLabel(d.genericStrategy)}
+                label={t('strat.cardGeneric')}
+                value={t(`strategy.${d.genericStrategy}` as MessageKey)}
                 delta={context.roundNumber > 0 && d.genericStrategy === b.genericStrategy ? { value: 0, label: '=', direction: 'flat' } : null}
-                note={context.roundNumber > 0 ? `Changée — était : ${strategyLabel(b.genericStrategy)}` : undefined}
+                note={context.roundNumber > 0 ? t('strat.changedWas', { value: t(`strategy.${b.genericStrategy}` as MessageKey) }) : undefined}
                 polarity="neutral"
               />
               <StatCard
-                label="Prix vs marché"
+                label={t('strat.cardPrice')}
                 value={priceMultiplier(d.pricePosition)}
                 delta={context.roundNumber > 0 ? delta(pricePct(d.pricePosition), pricePct(b.pricePosition), (v) => `${formatScore(v, 0)} pts`) : null}
                 polarity="neutral"
-                hint={`Position ${d.pricePosition} sur 100. 0 = agressif (60 % du prix marché), 50 = prix marché, 100 = premium (140 %).`}
+                hint={t('strat.priceHint', { position: d.pricePosition })}
               />
               <StatCard
-                label="Segments servis"
+                label={t('strat.cardSegments')}
                 value={`${d.servedSegments.length} / ${das.segments.length}`}
                 delta={context.roundNumber > 0 ? delta(d.servedSegments.length, b.servedSegments.length, (v) => formatScore(v, 0)) : null}
                 polarity="neutral"
               />
               {showInvestments ? (
                 <StatCard
-                  label="Engagé sur ce domaine"
+                  label={t('strat.cardEngaged')}
                   value={formatMadCompact(engagedOn(d))}
                   delta={context.roundNumber > 0 ? delta(engagedOn(d), engagedOn(b), (v) => formatMadCompact(v)) : null}
                   polarity="neutral"
                   hint={
                     context.treasuryMad > 0
-                      ? `${formatScore((engagedOn(d) / context.treasuryMad) * 100, 1)} % de la trésorerie du Groupe. Investissements, R&D et marketing de ce domaine.`
-                      : 'Investissements, R&D et marketing de ce domaine.'
+                      ? t('strat.engagedHintShare', { share: formatScore((engagedOn(d) / context.treasuryMad) * 100, 1) })
+                      : t('strat.engagedHint')
                   }
                 />
               ) : null}
@@ -523,7 +501,7 @@ export function StrategieDasView({
             <div className="grid gap-4 lg:grid-cols-5">
               <div className="lg:col-span-3">
                 <BudgetGauge
-                  label="Engagé sur l’ensemble de vos domaines ce tour"
+                  label={t('strat.gaugeAll')}
                   allocated={engaged}
                   available={context.treasuryMad}
                 />
@@ -535,20 +513,20 @@ export function StrategieDasView({
 
             {/* ── Les décisions, une par bloc ───────────────────────────── */}
             <Accordion
-              title="Stratégie générique"
+              title={t('strat.cardGeneric')}
               indicators={{ topic: 'das-strategie', dasId: das.dasId }}
-              summary={strategyLabel(d.genericStrategy)}
-              hint={<Definitions items={labelled(GENERIC)} />}
+              summary={t(`strategy.${d.genericStrategy}` as MessageKey)}
+              hint={<Definitions items={labelled(GENERIC, t)} />}
               defaultOpen
             >
               <fieldset disabled={locked}>
-                <legend className="sr-only">Stratégie générique</legend>
+                <legend className="sr-only">{t('strat.cardGeneric')}</legend>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {GENERIC.map(([value]) => (
                     <ChoiceCard
                       key={value}
                       selected={d.genericStrategy === value}
-                      title={strategyLabel(value)}
+                      title={t(`strategy.${value}` as MessageKey)}
                       onSelect={() => pushDas(das.dasId, { ...d, genericStrategy: value })}
                     />
                   ))}
@@ -557,48 +535,47 @@ export function StrategieDasView({
             </Accordion>
 
             <Accordion
-              title="Positionnement prix"
+              title={t('strat.pricingTitle')}
               indicators={{ topic: 'das-prix', dasId: das.dasId }}
-              summary={`${d.pricePosition} · ${priceMultiplier(d.pricePosition)} du marché`}
-              hint="La position seule ne dit rien : « 72 » n’est un choix que si l’on voit qu’on vend 18 % au-dessus du marché. Le moteur traduit 0 en 60 % du prix marché, 50 en prix marché, 100 en 140 %."
+              summary={t('strat.pricingSummary', { position: d.pricePosition, pct: priceMultiplier(d.pricePosition) })}
+              hint={t('strat.pricingHint')}
             >
               <fieldset disabled={locked}>
-                <legend className="sr-only">Positionnement prix</legend>
+                <legend className="sr-only">{t('strat.pricingTitle')}</legend>
                 <p className="tabular flex flex-wrap items-baseline gap-x-3">
                   <span className="font-mono text-2xl font-medium">{d.pricePosition}</span>
                   <span className="text-(--foreground-muted)">
-                    = {priceMultiplier(d.pricePosition)} du prix marché
+                    {t('strat.pricingEquals', { pct: priceMultiplier(d.pricePosition) })}
                   </span>
                 </p>
                 <input
                   type="range" min={0} max={100} step={1} value={d.pricePosition}
-                  aria-label="Positionnement prix, de 0 (agressif) à 100 (premium)"
+                  aria-label={t('strat.pricingAria')}
                   onChange={(e) => pushDas(das.dasId, { ...d, pricePosition: Number(e.target.value) })}
                   className="mt-3 w-full accent-(--accent)"
                 />
                 <div className="mt-1 flex justify-between text-sm text-(--foreground-muted)">
-                  <span>0 — agressif</span>
-                  <span>50 — prix marché</span>
-                  <span>100 — premium</span>
+                  <span>{t('strat.pricingLow')}</span>
+                  <span>{t('strat.pricingMid')}</span>
+                  <span>{t('strat.pricingHigh')}</span>
                 </div>
                 <p className="tabular mt-3 text-sm text-(--foreground-muted)">
-                  Tour précédent : {b.pricePosition} ({priceMultiplier(b.pricePosition)})
-                  {d.pricePosition !== b.pricePosition ? (
-                    <> · {d.pricePosition > b.pricePosition ? '↑ +' : '↓ −'}
-                      {Math.abs(d.pricePosition - b.pricePosition)} points</>
-                  ) : ' · inchangé'}
+                  {t('strat.previousRound', { position: b.pricePosition, pct: priceMultiplier(b.pricePosition) })}
+                  {d.pricePosition !== b.pricePosition
+                    ? ` · ${t(d.pricePosition > b.pricePosition ? 'strat.pointsUp' : 'strat.pointsDown', { n: Math.abs(d.pricePosition - b.pricePosition) })}`
+                    : ` · ${t('strat.unchanged')}`}
                 </p>
               </fieldset>
             </Accordion>
 
             <Accordion
-              title="Segments servis"
+              title={t('strat.cardSegments')}
               indicators={{ topic: 'das-segments', dasId: das.dasId }}
-              summary={`${d.servedSegments.length} sur ${das.segments.length}`}
-              hint="Un segment de plus élargit le marché adressable et dilue une stratégie de concentration. Chaque segment a sa propre exigence de qualité. Au moins un segment doit rester servi."
+              summary={t('strat.segmentsSummary', { served: d.servedSegments.length, total: das.segments.length })}
+              hint={t('strat.segmentsHint')}
             >
               <fieldset disabled={locked}>
-                <legend className="sr-only">Segments servis</legend>
+                <legend className="sr-only">{t('strat.cardSegments')}</legend>
                 <div className="flex flex-wrap gap-2">
                   {das.segments.map((seg) => {
                     const on = d.servedSegments.includes(seg.key);
@@ -625,20 +602,20 @@ export function StrategieDasView({
 
             {showInvestments ? (
               <Accordion
-                title="Investissements du tour"
+                title={t('strat.investTitle')}
                 indicators={{ topic: 'das-investissements', dasId: das.dasId }}
                 summary={formatMadCompact(engagedOn(d))}
-                hint="Chaque curseur part de ce que vous avez engagé au tour précédent. Le montant se saisit aussi en dirhams. Le « + » de chaque poste dit ce qu’il produit, et quand."
+                hint={t('strat.investHint')}
               >
                 <fieldset disabled={locked}>
-                  <legend className="sr-only">Investissements du tour</legend>
+                  <legend className="sr-only">{t('strat.investTitle')}</legend>
                   <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                     {INVESTMENTS.filter(([key]) => isOn(modules, key)).map(
-                      ([key, field, label, hint]) => (
+                      ([key, field]) => (
                         <VariationField
                           key={key}
-                          label={label}
-                          hint={hint}
+                          label={t(`invest.${field}.label` as MessageKey)}
+                          hint={t(`invest.${field}.hint` as MessageKey)}
                           value={d[field]}
                           reference={referenceOf(b[field], endowmentReference(key, basis))}
                           scale={scales[FAMILY_OF[key]]}
@@ -649,15 +626,12 @@ export function StrategieDasView({
                     )}
                   </div>
                   <p className="tabular mt-5 border-t border-(--border) pt-4 text-sm text-(--foreground-muted)">
-                    Total engagé sur ce domaine :{' '}
+                    {t('strat.investTotal')}{' '}
                     <strong className="font-mono text-(--foreground)">{formatMadCompact(engagedOn(d))}</strong>
-                    {' · '}tour précédent {formatMadCompact(engagedOn(b))}
-                    {context.treasuryMad > 0 ? (
-                      <>
-                        {' · '}
-                        {formatScore((engagedOn(d) / context.treasuryMad) * 100, 1)} % de la trésorerie
-                      </>
-                    ) : null}
+                    {' · '}{t('strat.investPrevious', { amount: formatMadCompact(engagedOn(b)) })}
+                    {context.treasuryMad > 0
+                      ? ` · ${t('strat.investShare', { share: formatScore((engagedOn(d) / context.treasuryMad) * 100, 1) })}`
+                      : null}
                   </p>
                 </fieldset>
               </Accordion>
@@ -665,15 +639,15 @@ export function StrategieDasView({
 
             {isOn(modules, 'das.declare_blue_ocean') ? (
               <Accordion
-                title="Océan bleu"
+                title={t('strat.blueOceanTitle')}
                 indicators={{ topic: 'das-ocean-bleu', dasId: das.dasId }}
-                summary={d.declareBlueOcean ? 'déclaré' : 'non déclaré'}
-                hint="Vous sortez du calcul à somme nulle pendant deux tours et votre marge est multipliée par 2,5 — en cas de succès. L’entrée coûte cher et peut échouer."
+                summary={d.declareBlueOcean ? t('strat.blueOceanDeclared') : t('strat.blueOceanNot')}
+                hint={t('strat.blueOceanHint')}
               >
                 <fieldset disabled={locked}>
-                  <legend className="sr-only">Océan bleu</legend>
+                  <legend className="sr-only">{t('strat.blueOceanTitle')}</legend>
                   <ChipToggle
-                    label="Déclarer un océan bleu sur ce domaine"
+                    label={t('strat.blueOceanToggle')}
                     on={d.declareBlueOcean}
                     onToggle={() => pushDas(das.dasId, { ...d, declareBlueOcean: !d.declareBlueOcean })}
                   />
@@ -683,7 +657,7 @@ export function StrategieDasView({
 
             <div className="rounded-xl border border-(--border) bg-(--surface) px-5 pb-5">
               <SectionActions
-                what={`la stratégie de ${das.name}`}
+                what={t('strat.validateDas', { name: das.name })}
                 locked={locked}
                 changed={changed}
                 recorded={das.decisionRecorded}
@@ -699,13 +673,14 @@ export function StrategieDasView({
         ) : (
           <>
             <BudgetGauge
-              label="Engagé sur l’ensemble de vos domaines ce tour"
+              label={t('strat.gaugeAll')}
               allocated={engaged}
               available={context.treasuryMad}
             />
             <p className="mt-6 rounded-xl border border-(--border) bg-(--surface) px-6 py-5 text-(--foreground-muted)">
-              Vous n’exploitez aucun domaine d’activité pour l’instant. Un rachat sur le{' '}
-              <a href="/cession" className="underline">marché des acquisitions</a> en ajoutera un.
+              {t('strat.noDas')}{' '}
+              <a href="/cession" className="underline">{t('strat.noDasLink')}</a>{' '}
+              {t('strat.noDasEnd')}
             </p>
           </>
         )}
@@ -737,17 +712,18 @@ function engagedOn(d: DasDecisionValues): number {
 /** Les cinq volets d'un domaine, et où les renseigner. */
 export function checklistOf(das: DasEntry) {
   return [
-    { label: 'Stratégie', href: '/strategie/das', done: das.progress.strategy },
-    { label: 'Organisation', href: '/organisation', done: das.progress.organisation },
-    { label: 'Ressources humaines', href: '/organisation', done: das.progress.hr },
-    { label: 'Achats', href: '/marches', done: das.progress.procurement },
-    { label: 'Distribution', href: '/marches', done: das.progress.distribution },
+    { label: 'Stratégie', labelKey: 'check.strategy' as const, href: '/strategie/das', done: das.progress.strategy },
+    { label: 'Organisation', labelKey: 'check.organisation' as const, href: '/organisation', done: das.progress.organisation },
+    { label: 'Ressources humaines', labelKey: 'check.hr' as const, href: '/organisation', done: das.progress.hr },
+    { label: 'Achats', labelKey: 'check.procurement' as const, href: '/marches', done: das.progress.procurement },
+    { label: 'Distribution', labelKey: 'check.distribution' as const, href: '/marches', done: das.progress.distribution },
   ];
 }
 
 function ValueSelect({
   label, value, exclude, onChange,
 }: { label: string; value: string; exclude: string; onChange: (v: string) => void }) {
+  const t = useT();
   return (
     <label className="block">
       <span className="text-sm font-medium">{label}</span>
@@ -756,16 +732,19 @@ function ValueSelect({
         className="mt-1.5 w-full rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm"
       >
         {VALUES.filter((v) => v !== exclude).map((v) => (
-          <option key={v} value={v}>{VALUE_LABELS[v]}</option>
+          <option key={v} value={v}>{t(`value.${v}` as MessageKey)}</option>
         ))}
       </select>
     </label>
   );
 }
 
-/** Des options du moteur, avec leur libellé lisible, pour la bulle d'aide. */
-function labelled(items: readonly (readonly [string, string])[]) {
-  return items.map(([value, description]) => [strategyLabel(value), description] as const);
+/** Des options du moteur, avec leur libellé et leur définition dans la langue du participant. */
+function labelled(items: readonly (readonly [string, string])[], t: (key: MessageKey) => string) {
+  return items.map(([value]) => [
+    t(`strategy.${value}` as MessageKey),
+    t(`strategyDef.${value}` as MessageKey),
+  ] as const);
 }
 
 /**

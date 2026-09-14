@@ -10,6 +10,8 @@
 
 import { useState, useTransition } from 'react';
 
+import { useT } from '@/components/i18n-provider';
+
 type Result = { ok: true; name: string } | { ok: false; error: string };
 
 export function BrandName({
@@ -29,6 +31,7 @@ export function BrandName({
   const [draft, setDraft] = useState(brandName ?? '');
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const t = useT();
 
   function submit() {
     setError(null);
@@ -53,7 +56,7 @@ export function BrandName({
           onClick={() => setEditing(true)}
           className="text-sm font-normal text-(--accent) underline"
         >
-          {brandName ? 'renommer' : 'nommer votre marque'}
+          {brandName ? t('brand.rename') : t('brand.name')}
         </button>
       </span>
     );
@@ -72,7 +75,7 @@ export function BrandName({
           if (e.key === 'Escape') { setDraft(brandName ?? ''); setEditing(false); }
         }}
         placeholder={activityName}
-        aria-label="Nom de votre marque"
+        aria-label={t('brand.aria')}
         className="rounded-lg border border-(--border) bg-(--background) px-3 py-1.5 text-2xl"
       />
       <button
@@ -81,18 +84,18 @@ export function BrandName({
         disabled={pending}
         className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-3 py-1.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
       >
-        Enregistrer
+        {t('brand.save')}
       </button>
       <button
         type="button"
         onClick={() => { setDraft(brandName ?? ''); setEditing(false); }}
         className="text-sm text-(--foreground-muted) underline"
       >
-        Annuler
+        {t('actions.cancel')}
       </button>
       {/* Vider le champ est une décision, pas une faute : on le dit. */}
       <span className="text-xs text-(--foreground-muted)">
-        Laisser vide pour revenir à « {activityName} »
+        {t('brand.emptyHint', { name: activityName })}
       </span>
       {error ? <span className="text-sm text-(--negative)">{error}</span> : null}
     </span>
