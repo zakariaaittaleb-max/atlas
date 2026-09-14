@@ -344,3 +344,130 @@ body[data-anti-select="on"] svg {
     -webkit-print-color-adjust: exact;
   }
 }
+
+
+/* ══ Style « ludique » ════════════════════════════════════════════════════════
+   Choisi par le facilitateur pour une session (colonne `visual_style`). Posé sur
+   <html> pour les écrans d'équipe, sur un conteneur pour le projecteur et les
+   aperçus. Mêmes exigences que le style sobre : chaque couleur de texte tient
+   4,5:1 contre le fond où elle apparaît (violet #6D28D9 : 7,1:1 sur blanc).
+   Trois états de thème, comme plus haut : clair par défaut, sombre selon le
+   système sauf choix explicite, sombre imposé. */
+[data-style="ludique"] {
+  --background: #fbf7ff;
+  --surface: #ffffff;
+  --surface-muted: #f6f0ff;
+  --border: #e9ddff;
+  --border-strong: #7c6a9a;
+  --foreground: #1f1535;
+  --foreground-muted: #54476b;
+  --meta: #6b5e84;
+  --heading: #5b21b6;
+  --accent: #6d28d9;
+  --accent-hover: #5b21b6;
+  --accent-text: #6d28d9;
+  --accent-subtle: #f1e8ff;
+  --on-accent: #ffffff;
+  --focus: #7c3aed;
+  --series-1: #7c3aed;
+  --series-2: #f97316;
+  --series-3: #0891b2;
+  --series-4: #eab308;
+  --series-5: #ec4899;
+  --grid: #efe6ff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-style="ludique"],
+  :root:not([data-theme="light"]) [data-style="ludique"] {
+    --background: #120b21;
+    --surface: #1c1330;
+    --surface-muted: #271c40;
+    --border: #3b2d5c;
+    --border-strong: #7c6a9a;
+    --foreground: #f7f3ff;
+    --foreground-muted: #bdb2d6;
+    --meta: #bdb2d6;
+    --heading: #ddd0ff;
+    --accent: #c4b5fd;
+    --accent-hover: #ddd6fe;
+    --accent-text: #d8ccff;
+    --accent-subtle: #2e1f55;
+    --on-accent: #120b21;
+    --focus: #c4b5fd;
+    --series-1: #a78bfa;
+    --series-2: #fb923c;
+    --series-3: #22d3ee;
+    --series-4: #facc15;
+    --series-5: #f472b6;
+    --grid: #271c40;
+  }
+}
+
+:root[data-theme="dark"][data-style="ludique"],
+:root[data-theme="dark"] [data-style="ludique"] {
+  --background: #120b21;
+  --surface: #1c1330;
+  --surface-muted: #271c40;
+  --border: #3b2d5c;
+  --border-strong: #7c6a9a;
+  --foreground: #f7f3ff;
+  --foreground-muted: #bdb2d6;
+  --meta: #bdb2d6;
+  --heading: #ddd0ff;
+  --accent: #c4b5fd;
+  --accent-hover: #ddd6fe;
+  --accent-text: #d8ccff;
+  --accent-subtle: #2e1f55;
+  --on-accent: #120b21;
+  --focus: #c4b5fd;
+  --series-1: #a78bfa;
+  --series-2: #fb923c;
+  --series-3: #22d3ee;
+  --series-4: #facc15;
+  --series-5: #f472b6;
+  --grid: #271c40;
+}
+
+/* Titres arrondis et cartes plus douces : le décor change, pas la lisibilité. */
+[data-style="ludique"] :is(h1, h2, h3) {
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+  letter-spacing: 0;
+}
+[data-style="ludique"] .rounded-xl {
+  border-radius: 1.25rem;
+}
+[data-style="ludique"] .rounded-lg {
+  border-radius: 0.875rem;
+}
+[data-style="ludique"] .stat-card {
+  box-shadow: 0 3px 0 var(--border);
+}
+
+/* ══ Palier de projection ════════════════════════════════════════════════════
+   Sur un vidéoprojecteur, dans une salle éclairée, 4,5:1 ne suffit plus aux
+   chiffres qu'on lit à cinq mètres. En thème clair, les textes secondaires et
+   les variations montent à 7:1 au moins ; le thème sombre y est déjà. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) [data-surface="projection"] {
+    --foreground-muted: #374151;
+    --positive: #065f46;
+    --negative: #991b1b;
+    --warning: #92400e;
+  }
+}
+:root[data-theme="light"] [data-surface="projection"] {
+  --foreground-muted: #374151;
+  --positive: #065f46;
+  --negative: #991b1b;
+  --warning: #92400e;
+}
+
+/* ══ 14 px minimum ═══════════════════════════════════════════════════════════
+   `text-xs` servait à des notes et des légendes qui portent de l'information :
+   à 12 px, elles ne se lisaient plus projetées. Le plus petit corps du jeu est
+   désormais 14 px. */
+@theme {
+  --text-xs: 0.875rem;
+  --text-xs--line-height: calc(1.25 / 0.875);
+}

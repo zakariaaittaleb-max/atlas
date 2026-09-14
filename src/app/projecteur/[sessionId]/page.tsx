@@ -23,7 +23,7 @@ export default async function ProjectorPage({
   const admin = createAdminClient();
 
   const { data: session } = await admin
-    .from('game_sessions').select('status, current_round, planned_rounds').eq('id', sessionId).maybeSingle();
+    .from('game_sessions').select('status, current_round, planned_rounds, visual_style').eq('id', sessionId).maybeSingle();
   const roundNumber = Number(session?.current_round ?? 0);
 
   const [{ data: teams }, { data: das }, { data: metrics }, { data: previous }, { data: summaries }, { data: units }] =
@@ -90,6 +90,7 @@ export default async function ProjectorPage({
 
   return (
     <ProjectorView
+      visualStyle={session?.visual_style === 'ludique' ? 'ludique' : 'corporate'}
       sessionId={sessionId}
       sessionName={context.sessionName}
       status={String(session?.status ?? 'draft')}

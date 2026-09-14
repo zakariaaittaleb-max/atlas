@@ -1,4 +1,8 @@
 import 'server-only';
+import { cookies as readCookies } from 'next/headers';
+
+import { parseThemeChoice, THEME_COOKIE } from '@/lib/appearance';
+import { readDisplayConfig } from '@/lib/display-config';
 
 import { notFound } from 'next/navigation';
 
@@ -212,8 +216,13 @@ export default async function FacilitatorPage({
       };
     });
 
+  const [jar, displayConfig] = await Promise.all([readCookies(), readDisplayConfig()]);
+  const themeChoice = parseThemeChoice(jar.get(THEME_COOKIE)?.value) ?? displayConfig.theme;
+
   return (
     <FacilitatorView
+      themeChoice={themeChoice}
+      visualStyle={String(session?.visual_style ?? 'corporate')}
       sessionId={sessionId}
       sessionName={context.sessionName}
       joinCode={String(session?.join_code ?? '')}

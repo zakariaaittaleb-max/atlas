@@ -71,6 +71,11 @@ const Request = z.discriminatedUnion('action', [
     open: z.boolean(),
   }),
   z.object({
+    action: z.literal('set_visual_style'),
+    sessionId: z.string().uuid(),
+    style: z.enum(['corporate', 'ludique']),
+  }),
+  z.object({
     // Carte de crise ou d'opportunité composée par le facilitateur.
     action: z.literal('create_shock_card'),
     sessionId: z.string().uuid(),
@@ -179,6 +184,17 @@ export async function POST(request: Request) {
       );
 
     return NextResponse.json({ ok: true, level: body.level, dials, overrides });
+  }
+
+  if (body.action === 'set_visual_style') {
+    const { error } = await admin
+      .from('game_sessions')
+      .update({ visual_style: body.style })
+      .eq('id', body.sessionId);
+    if (error) {
+      return NextResponse.json({ error: `Style non appliqué : ${error.message}` }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true });
   }
 
   if (body.action === 'create_shock_card') {

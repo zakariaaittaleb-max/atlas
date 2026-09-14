@@ -1,9 +1,13 @@
 import 'server-only';
 
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
+import { ThemeToggle } from '@/components/theme-toggle';
+import { parseThemeChoice, THEME_COOKIE } from '@/lib/appearance';
 import { getUser } from '@/lib/dal';
+import { readDisplayConfig } from '@/lib/display-config';
 import { sessionStatusLabel } from '@/lib/format';
 import { isSuperAdminEmail } from '@/lib/security-config';
 import { DAS_CATALOG } from '@/lib/server/das-catalog';
@@ -20,6 +24,8 @@ export default async function FacilitatorIndexPage() {
   if (!user) redirect('/login');
 
   const admin = createAdminClient();
+  const [jar, displayConfig] = await Promise.all([cookies(), readDisplayConfig()]);
+  const themeChoice = parseThemeChoice(jar.get(THEME_COOKIE)?.value) ?? displayConfig.theme;
   const { data: sessions } = await admin
     .from('game_sessions')
     .select('id, name, status, current_round, planned_rounds, join_code, created_at')
@@ -29,6 +35,7 @@ export default async function FacilitatorIndexPage() {
   return (
     <main className="mx-auto w-full min-w-0 max-w-4xl px-6 py-10">
       <div className="mb-6 flex items-center justify-end gap-4 text-sm">
+        <ThemeToggle initial={themeChoice} />
         {isSuperAdminEmail(user.email) ? (
           <Link href="/admin/security" className="hover:underline">
             Sécurité (super-admin)

@@ -5,6 +5,8 @@ import { DasSwitcher } from '@/components/das-scope';
 import { PresenceBar } from '@/components/presence-bar';
 import { SidebarNav, type NavGroup } from '@/components/sidebar-nav';
 import { TeamChrome } from '@/components/team-chrome';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { parseThemeChoice, THEME_COOKIE } from '@/lib/appearance';
 import { getRoundState, getTeamContext, getUser } from '@/lib/dal';
 import { readDisplayConfig } from '@/lib/display-config';
 import { NAV_COOKIE } from '@/lib/display-config-types';
@@ -149,6 +151,7 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
   const open = status === 'round_active' || status === 'onboarding';
   // Tour fermé : il n'y a plus rien à renseigner, donc rien à compter.
   const todo = open ? await screensToFill(modules) : {};
+  const themeChoice = parseThemeChoice(jar.get(THEME_COOKIE)?.value) ?? config.theme;
 
   // L'habillage (navigation, argent) est retiré côté client des écrans qui ne
   // sont pas des écrans d'équipe — voir `TeamChrome`.
@@ -202,11 +205,10 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
             ) : null}
             {/* Un seul abonnement de présence par onglet : le canal temps réel
                 refuse un second abonné au même nom. */}
-            {presence ? (
-              <span className="ml-auto self-center">
-                <PresenceBar context={presence} />
-              </span>
-            ) : null}
+            <span className="ml-auto flex items-center gap-4 self-center">
+              {presence ? <PresenceBar context={presence} /> : null}
+              <ThemeToggle initial={themeChoice} />
+            </span>
           </div>
 
           {/* ── Le domaine piloté, là où il gouverne la saisie ─────────── */}

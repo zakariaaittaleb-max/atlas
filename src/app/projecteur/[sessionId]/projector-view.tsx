@@ -40,8 +40,10 @@ export interface PoolStanding {
 }
 
 export function ProjectorView({
-  sessionId, sessionName, status, roundNumber, plannedRounds, standings,
+  sessionId, sessionName, status, roundNumber, plannedRounds, standings, visualStyle,
 }: {
+  /** Style choisi par le facilitateur pour la session. */
+  visualStyle: 'corporate' | 'ludique';
   sessionId: string; sessionName: string; status: string;
   roundNumber: number; plannedRounds: number; standings: PoolStanding[];
 }) {
@@ -63,7 +65,13 @@ export function ProjectorView({
   }, [sessionId, router]);
 
   return (
-    <main className="min-h-screen px-10 py-8">
+    // `data-surface="projection"` : palier de contraste renforcé (7:1) pour une
+    // lecture à cinq mètres, sur un vidéoprojecteur qui délave les couleurs.
+    <main
+      data-surface="projection"
+      data-style={visualStyle === 'ludique' ? 'ludique' : undefined}
+      className="min-h-screen bg-(--background) px-10 py-8 text-(--foreground)"
+    >
       <header className="mb-8 flex flex-wrap items-baseline justify-between gap-4">
         <h1 className="text-5xl font-semibold tracking-tight">{sessionName}</h1>
         <p className="tabular text-2xl text-(--foreground-muted)">

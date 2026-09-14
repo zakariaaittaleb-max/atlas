@@ -29,7 +29,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Fragment, useEffect, useRef, useState, useTransition } from 'react';
 
+import { ThemeToggle } from '@/components/theme-toggle';
 import type { DifficultyDials } from '@/lib/difficulty-types';
+import type { ThemeChoice } from '@/lib/display-config-types';
 import { formatMadCompact, formatScore, sessionStatusLabel, treasuryLabel } from '@/lib/format';
 
 import { SessionBriefing } from './session-briefing';
@@ -100,8 +102,11 @@ export function FacilitatorView({
   sessionId, sessionName, joinCode, status, roundNumber, plannedRounds, maxRounds,
   teams, das, cards, activeShocks, runs, difficulty, dials, difficultyLocked, sectors,
   canPlayInTeam, playingTeamId, joinTeamAction, modulesSection, scalesSection,
-  warRoomSection, warRoomPending,
+  warRoomSection, warRoomPending, themeChoice, visualStyle,
 }: {
+  themeChoice: ThemeChoice;
+  /** Style des écrans d'équipe et du projecteur : `corporate` ou `ludique`. */
+  visualStyle: string;
   sessionId: string; sessionName: string; joinCode: string; status: string;
   roundNumber: number; plannedRounds: number; maxRounds: number;
   teams: TeamProgress[];
@@ -257,6 +262,9 @@ export function FacilitatorView({
           </p>
         </div>
         <div className="flex flex-wrap items-stretch gap-3">
+          <div className="self-center">
+            <ThemeToggle initial={themeChoice} />
+          </div>
           <a
             href={`/projecteur/${sessionId}`}
             target="_blank"
@@ -720,6 +728,7 @@ export function FacilitatorView({
           Ce qui se règle avant la séance, ou entre deux tours : le niveau de difficulté, les
           décisions ouvertes aux équipes et l’amplitude qu’elles peuvent donner à chacune.
         </p>
+        <StyleSection sessionId={sessionId} current={visualStyle} disabled={disabled} call={call} />
         <SettingsSection
           part="difficulte"
           sessionId={sessionId}
@@ -763,6 +772,72 @@ export function FacilitatorView({
         </div>
       </div>
     </main>
+  );
+}
+
+const VISUAL_STYLES = [
+  ['corporate', 'Sobre',
+   'Bleu nuit, formes nettes : l’allure des outils de pilotage réels. Pour un public de cadres.'],
+  ['ludique', 'Ludique',
+   'Violet vif, titres arrondis, cartes plus douces : l’atmosphère d’un jeu. Pour une promotion d’étudiants.'],
+] as const;
+
+/**
+ * Le style de la session. Il habille les écrans d'équipe et le projecteur, sans
+ * toucher aux règles ni aux contrastes — les deux palettes tiennent AA.
+ */
+function StyleSection({
+  sessionId, current, disabled, call,
+}: {
+  sessionId: string;
+  current: string;
+  disabled: boolean;
+  call: (path: string, body: Record<string, unknown>, ok: string) => Promise<Record<string, unknown> | null>;
+}) {
+  return (
+    <section className="mb-8 rounded-xl border border-(--border) bg-(--surface) p-6">
+      <h2 className="text-xl font-semibold text-(--heading)">Style visuel des équipes</h2>
+      <p className="mt-1 mb-5 max-w-3xl text-sm text-(--foreground-muted)">
+        S’applique aux écrans des équipes et au projecteur, dès leur prochain affichage. Chaque
+        participant garde son propre choix de thème clair ou sombre.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {VISUAL_STYLES.map(([value, label, hint]) => {
+          const on = current === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={on}
+              disabled={disabled || on}
+              onClick={() =>
+                void call(
+                  '/api/facilitator',
+                  { action: 'set_visual_style', sessionId, style: value },
+                  `Style « ${label} » appliqué aux écrans des équipes et au projecteur.`,
+                )
+              }
+              className="rounded-lg border p-4 text-left transition-colors enabled:hover:border-(--accent) disabled:cursor-default"
+              style={{ borderColor: on ? 'var(--accent)' : 'var(--border)' }}
+            >
+              {/* Un aperçu dans les jetons du style lui-même. */}
+              <span
+                aria-hidden
+                data-style={value === 'ludique' ? 'ludique' : undefined}
+                className="mb-3 flex h-16 items-end gap-2 rounded-lg bg-(--background) p-2.5"
+              >
+                <span className="h-full w-2/5 rounded-lg border border-(--border) bg-(--surface)" />
+                <span className="h-2/3 w-1/5 rounded-lg bg-(--accent)" />
+                <span className="h-1/2 w-1/6 rounded-lg" style={{ background: 'var(--series-2)' }} />
+                <span className="h-1/3 w-1/6 rounded-lg" style={{ background: 'var(--series-3)' }} />
+              </span>
+              <span className="block font-semibold">{on ? '✓ ' : ''}{label}</span>
+              <span className="mt-1 block text-sm text-(--foreground-muted)">{hint}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
