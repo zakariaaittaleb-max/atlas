@@ -3,9 +3,12 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 
 import { DashboardScreen } from './dashboard-screen';
+import { OnboardingPath } from './onboarding-path';
+import { OnboardingToggle } from './onboarding-toggle';
 import { getRoundState, requireTeam } from '@/lib/dal';
 import { readDisplayConfig } from '@/lib/display-config';
 import { parseViewLevel, VIEW_COOKIE } from '@/lib/display-config-types';
+import { ONBOARDING_COOKIE } from '@/lib/onboarding';
 import { loadDashboardContext } from '@/lib/server/dashboard-context';
 import { treasuryLabel } from '@/lib/format';
 
@@ -23,6 +26,9 @@ export default async function DashboardPage() {
   const currentRound = (round?.current_round as number) ?? 0;
   // Le niveau choisi par ce membre prime ; à défaut, celui fixé par l'admin.
   const initialView = parseViewLevel(jar.get(VIEW_COOKIE)?.value) ?? config.defaultView;
+  // Le parcours de prise en main vaut jusqu'à la première résolution.
+  const firstRound = context.resolvedRounds === 0;
+  const onboardingHidden = jar.get(ONBOARDING_COOKIE)?.value === 'masque';
 
   return (
     <main className="mx-auto w-full min-w-0 max-w-6xl px-6 py-8 lg:py-10">
@@ -45,6 +51,8 @@ export default async function DashboardPage() {
         </div>
       </header>
 
+      {firstRound && !onboardingHidden ? <OnboardingPath /> : null}
+
       <DashboardScreen context={context} sections={config.sections} initialView={initialView} />
 
       {/* Apporté par le protocole de test d'utilisabilité : le participant doit
@@ -57,6 +65,12 @@ export default async function DashboardPage() {
           Donner mon avis sur Atlas
         </Link>
         {' '}(2 minutes).
+        {firstRound && onboardingHidden ? (
+          <>
+            {' · '}
+            <OnboardingToggle hidden />
+          </>
+        ) : null}
       </footer>
     </main>
   );
