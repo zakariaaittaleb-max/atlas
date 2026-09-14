@@ -55,11 +55,12 @@ export async function loadOrgContext(): Promise<OrgContext> {
     supabase.from('das_direction_budgets').select('*').eq('team_id', team.teamId).lte('round_number', roundNumber),
     supabase.from('das_direction_kpis').select('*').eq('team_id', team.teamId).lte('round_number', roundNumber),
     supabase.from('das_positions').select('*').eq('team_id', team.teamId).lte('round_number', roundNumber),
-    // Le chiffre d'affaires de CHAQUE domaine, exercices clos compris ceux de
-    // l'historique de départ (tours 0 et −1) : l'assiette des budgets se
-    // calcule domaine par domaine.
+    // Le chiffre d'affaires de CHAQUE domaine : l'assiette des budgets se
+    // calcule domaine par domaine. `lte` et non `lt`, comme pour l'état RH : une
+    // ligne du tour courant n'existe qu'après sa résolution — ou, au tour 0,
+    // c'est l'historique de départ, le seul chiffre connu.
     supabase.from('team_das_round_metrics').select('das_id, round_number, revenue_mad')
-      .eq('team_id', team.teamId).lt('round_number', roundNumber),
+      .eq('team_id', team.teamId).lte('round_number', roundNumber),
     supabase.from('team_round_state').select('headcount')
       .eq('team_id', team.teamId).eq('round_number', roundNumber - 1).maybeSingle(),
     // Les directives ARRÊTÉES AU GROUPE, affichées en lecture seule : sans
@@ -127,12 +128,19 @@ export async function loadOrgContext(): Promise<OrgContext> {
     const lastRevenue = ((dasRevenueRows ?? []) as Row[])
       .filter((r) => str(r.das_id) === dasId && num(r.revenue_mad) > 0)
       .sort((a, b) => num(b.round_number) - num(a.round_number))[0];
-    const seededBudget = ((budgets ?? []) as Row[])
-      .filter((b) => str(b.das_id) === dasId && num(b.round_number) === 0)
+    const dasBudgets = ((budgets ?? []) as Row[]).filter((b) => str(b.das_id) === dasId);
+    const budgetSumAt = (round: number) => dasBudgets
+      .filter((b) => num(b.round_number) === round)
       .reduce((acc, b) => acc + num(b.budget_mad), 0);
+    // La dernière répartition SAISIE. Écrire un autre bloc (axes, délégation)
+    // crée la conception du tour sans recopier les budgets : lire le seul tour
+    // de la conception affichait alors toutes les directions à zéro.
+    const lastBudgetRound = dasBudgets.reduce(
+      (acc, b) => Math.max(acc, num(b.round_number)), -Infinity,
+    );
     const operatingBudgetMad = lastRevenue
       ? num(lastRevenue.revenue_mad) * OPERATING_BUDGET_SHARE
-      : seededBudget;
+      : budgetSumAt(0) || (Number.isFinite(lastBudgetRound) ? budgetSumAt(lastBudgetRound) : 0);
 
     // Le tour effectif : le plus récent où une conception existe.
     const design = ((designs ?? []) as Row[])
@@ -181,9 +189,15 @@ export async function loadOrgContext(): Promise<OrgContext> {
       axisKeys: sameRound(axes as Row[] | null)
         .sort((a, b) => num(a.priority) - num(b.priority))
         .map((a) => str(a.axis_key)),
-      budgets: sameRound(budgets as Row[] | null).map((b) => ({
-        directionKey: str(b.direction_key), budgetMad: num(b.budget_mad),
-      })),
+      budgets: (() => {
+        const own = sameRound(budgets as Row[] | null);
+        const rows = own.length > 0
+          ? own
+          : dasBudgets.filter((b) => num(b.round_number) === lastBudgetRound);
+        return rows.map((b) => ({
+          directionKey: str(b.direction_key), budgetMad: num(b.budget_mad),
+        }));
+      })(),
       kpis: sameRound(kpis as Row[] | null).map((k) => ({
         directionKey: str(k.direction_key), kpiKey: str(k.kpi_key),
       })),
