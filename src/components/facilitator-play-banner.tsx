@@ -3,6 +3,8 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 
+import { useT } from '@/components/i18n-provider';
+
 type PlayResult = { ok: true } | { ok: false; error: string };
 
 /**
@@ -31,6 +33,7 @@ export function FacilitatorPlayBanner({
   const router = useRouter();
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
+  const t = useT();
 
   // Le projecteur est l'écran de toute la salle : y afficher « Vous jouez dans
   // Équipe B », boutons compris, révélait l'équipe du facilitateur à tous et
@@ -40,7 +43,7 @@ export function FacilitatorPlayBanner({
   return (
     <div className="flex flex-wrap items-center justify-center gap-3 bg-(--accent) px-4 py-2 text-sm font-medium text-(--on-accent)">
       <span>
-        Vous jouez dans <strong>{teamName}</strong> — vos saisies comptent pour cette équipe.
+        {t('play.banner', { team: teamName })}
       </span>
 
       <button
@@ -53,7 +56,7 @@ export function FacilitatorPlayBanner({
         disabled={pending}
         className="rounded-md bg-white/20 px-3 py-1 hover:bg-white/30 disabled:opacity-50"
       >
-        {visible ? 'Passer en discret' : 'Me rendre visible'}
+        {visible ? t('play.hide') : t('play.show')}
       </button>
 
       <button
@@ -67,7 +70,7 @@ export function FacilitatorPlayBanner({
         disabled={pending}
         className="rounded-md bg-white/20 px-3 py-1 hover:bg-white/30 disabled:opacity-50"
       >
-        {pending ? 'Retour…' : "Revenir à l'animation"}
+        {pending ? t('play.leaving') : t('play.leave')}
       </button>
     </div>
   );

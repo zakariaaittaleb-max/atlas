@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 
+import { useT } from '@/components/i18n-provider';
 import { NextStep, type Step } from '@/components/next-step';
 
 /**
@@ -29,6 +30,7 @@ export function TeamChrome({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const t = useT();
   const bare = BARE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 
   if (bare) return <>{children}</>;
@@ -39,9 +41,9 @@ export function TeamChrome({
           traversaient toute la navigation avant d'atteindre chaque écran. */}
       <a
         href="#contenu"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-(--accent) focus:px-4 focus:py-2.5 focus:text-sm focus:font-semibold focus:text-(--on-accent)"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:start-3 focus:z-50 focus:rounded-lg focus:bg-(--accent) focus:px-4 focus:py-2.5 focus:text-sm focus:font-semibold focus:text-(--on-accent)"
       >
-        Aller au contenu
+        {t('shell.skipToContent')}
       </a>
       {sidebar}
 

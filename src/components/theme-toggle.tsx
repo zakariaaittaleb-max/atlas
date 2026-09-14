@@ -11,13 +11,15 @@
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { useState } from 'react';
 
+import { useT } from '@/components/i18n-provider';
 import { THEME_COOKIE, THEME_COOKIE_MAX_AGE } from '@/lib/appearance';
+import type { MessageKey } from '@/lib/i18n/messages';
 import type { ThemeChoice } from '@/lib/display-config-types';
 
-const OPTIONS: [ThemeChoice, string, typeof Sun][] = [
-  ['system', 'Suivre le système', Monitor],
-  ['light', 'Thème clair', Sun],
-  ['dark', 'Thème sombre', Moon],
+const OPTIONS: [ThemeChoice, MessageKey, typeof Sun][] = [
+  ['system', 'theme.system', Monitor],
+  ['light', 'theme.light', Sun],
+  ['dark', 'theme.dark', Moon],
 ];
 
 /** Retenu pour le prochain rendu serveur, et appliqué au document sans attendre. */
@@ -30,6 +32,7 @@ function applyTheme(next: ThemeChoice) {
 
 export function ThemeToggle({ initial }: { initial: ThemeChoice }) {
   const [choice, setChoice] = useState<ThemeChoice>(initial);
+  const t = useT();
 
   function choose(next: ThemeChoice) {
     setChoice(next);
@@ -39,10 +42,11 @@ export function ThemeToggle({ initial }: { initial: ThemeChoice }) {
   return (
     <div
       role="group"
-      aria-label="Thème d’affichage"
+      aria-label={t('theme.group')}
       className="inline-flex shrink-0 rounded-lg border border-(--border) bg-(--surface) p-0.5"
     >
-      {OPTIONS.map(([value, label, Icon]) => {
+      {OPTIONS.map(([value, labelKey, Icon]) => {
+        const label = t(labelKey);
         const on = choice === value;
         return (
           <button

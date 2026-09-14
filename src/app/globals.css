@@ -499,3 +499,13 @@ body[data-anti-select="on"] svg {
     transform: none;
   }
 }
+
+/* ══ Arabe ═══════════════════════════════════════════════════════════════════
+   Geist et Fredoka ne portent pas l'alphabet arabe : texte courant et titres
+   passent sur Noto Sans Arabic, chiffres et sigles latins compris. */
+:root[lang="ar"] body {
+  font-family: var(--font-arabic), var(--font-sans), system-ui, sans-serif;
+}
+:root[lang="ar"] :is(h1, h2, h3) {
+  font-family: var(--font-arabic), var(--font-sans), system-ui, sans-serif;
+}

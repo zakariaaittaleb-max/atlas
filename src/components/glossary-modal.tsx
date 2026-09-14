@@ -17,6 +17,7 @@
 import { BookOpen, Search } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 
+import { useT } from '@/components/i18n-provider';
 import { Dialog } from '@/components/ui/dialog';
 import { GLOSSARY } from '@/lib/glossary';
 
@@ -90,6 +91,7 @@ export function GlossaryModal({
 }
 
 export function GlossaryButton() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
 
@@ -102,7 +104,7 @@ export function GlossaryButton() {
         className="inline-flex min-h-9 items-center gap-2 rounded-lg px-2 text-sm font-medium text-(--foreground-muted) transition-colors hover:bg-(--surface-muted) hover:text-(--foreground)"
       >
         <BookOpen aria-hidden className="h-4 w-4" />
-        Glossaire
+        {t('glossary.button')}
       </button>
       <GlossaryModal open={open} onClose={() => setOpen(false)} returnFocus={trigger} />
     </>

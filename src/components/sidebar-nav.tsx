@@ -21,6 +21,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useRef, useState } from 'react';
 
+import { useT } from '@/components/i18n-provider';
 import { NAV_COOKIE, PREFERENCE_COOKIE_MAX_AGE } from '@/lib/display-config-types';
 
 export interface NavGroup {
@@ -62,6 +63,7 @@ interface SidebarProps {
 export function SidebarNav(props: SidebarProps) {
   const [collapsed, setCollapsed] = useState(props.initialCollapsed);
   const drawer = useRef<HTMLDialogElement>(null);
+  const t = useT();
 
   function toggleCollapsed() {
     const next = !collapsed;
@@ -79,7 +81,7 @@ export function SidebarNav(props: SidebarProps) {
           className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium hover:bg-(--surface-muted)"
         >
           <Menu aria-hidden className="h-5 w-5" />
-          Menu
+          {t('nav.menu')}
         </button>
         <span className="truncate font-semibold text-(--heading)">Atlas · {props.teamName}</span>
         <StatusDot open={props.decisionsOpen} label={`${props.roundLabel} · ${props.statusLabel}`} compact />
@@ -87,18 +89,18 @@ export function SidebarNav(props: SidebarProps) {
 
       <dialog
         ref={drawer}
-        aria-label="Navigation"
+        aria-label={t('nav.drawer')}
         onClick={(event) => {
           if (event.target === drawer.current) drawer.current?.close();
         }}
-        className="m-0 h-dvh max-h-none w-[min(20rem,88vw)] max-w-none border-r border-(--border) bg-(--surface) p-0 text-(--foreground) backdrop:bg-black/40 open:flex open:flex-col lg:hidden"
+        className="m-0 h-dvh max-h-none w-[min(20rem,88vw)] max-w-none border-e border-(--border) bg-(--surface) p-0 text-(--foreground) backdrop:bg-black/40 open:flex open:flex-col lg:hidden"
       >
         <div className="flex items-center justify-between px-4 py-3">
           <span className="font-semibold text-(--heading)">Atlas · {props.teamName}</span>
           <button
             type="button"
             onClick={() => drawer.current?.close()}
-            aria-label="Fermer le menu"
+            aria-label={t('nav.closeMenu')}
             className="rounded-lg p-2 hover:bg-(--surface-muted)"
           >
             <X aria-hidden className="h-5 w-5" />
@@ -109,8 +111,8 @@ export function SidebarNav(props: SidebarProps) {
 
       {/* ── À partir de 1024 px : la barre latérale ────────────────────── */}
       <aside
-        aria-label="Navigation principale"
-        className="sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-(--border) bg-(--surface) transition-[width] duration-200 ease-out lg:flex print:hidden"
+        aria-label={t('nav.main')}
+        className="sticky top-0 hidden h-dvh shrink-0 flex-col border-e border-(--border) bg-(--surface) transition-[width] duration-200 ease-out lg:flex print:hidden"
         style={{ width: collapsed ? 'var(--sidebar-rail)' : 'var(--sidebar-width)' }}
       >
         <div className={`flex items-center gap-2 px-3 pt-4 pb-3 ${collapsed ? 'flex-col' : ''}`}>
@@ -125,14 +127,14 @@ export function SidebarNav(props: SidebarProps) {
           <button
             type="button"
             onClick={toggleCollapsed}
-            aria-label={collapsed ? 'Déplier la navigation' : 'Replier la navigation'}
-            title={collapsed ? 'Déplier la navigation' : 'Replier la navigation'}
+            aria-label={collapsed ? t('nav.expand') : t('nav.collapse')}
+            title={collapsed ? t('nav.expand') : t('nav.collapse')}
             className="rounded-lg p-2 text-(--foreground-muted) hover:bg-(--surface-muted) hover:text-(--foreground)"
           >
             {collapsed ? (
-              <PanelLeftOpen aria-hidden className="h-5 w-5" />
+              <PanelLeftOpen aria-hidden className="h-5 w-5 rtl:-scale-x-100" />
             ) : (
-              <PanelLeftClose aria-hidden className="h-5 w-5" />
+              <PanelLeftClose aria-hidden className="h-5 w-5 rtl:-scale-x-100" />
             )}
           </button>
         </div>
@@ -158,6 +160,7 @@ function NavBody({
   onExpandRequest?: () => void;
 }) {
   const pathname = usePathname();
+  const t = useT();
   const [closed, setClosed] = useState<Set<string>>(new Set());
 
   // L'écran courant est le lien au chemin le plus long qui préfixe l'URL :
@@ -182,10 +185,10 @@ function NavBody({
       <div className={`mx-3 mb-3 rounded-lg bg-(--surface-muted) ${collapsed ? 'flex justify-center p-2' : 'px-3 py-2.5'}`}>
         <StatusDot open={decisionsOpen} label={`${roundLabel} · ${statusLabel}`} compact={collapsed} />
         {!collapsed && decisionsOpen && Object.keys(todo).length > 0 ? (
-          <p className="mt-1 pl-4.5 text-sm text-(--foreground-muted)">
+          <p className="mt-1 ps-4.5 text-sm text-(--foreground-muted)">
             {remaining === 0
-              ? 'Toutes vos décisions sont renseignées'
-              : `${remaining} décision${remaining > 1 ? 's' : ''} à renseigner`}
+              ? t('nav.allDone')
+              : t('nav.todo', { count: remaining })}
           </p>
         ) : null}
       </div>
@@ -224,13 +227,13 @@ function NavBody({
                         {groupTodo > 0 ? (
                           <span
                             aria-hidden
-                            className="absolute -top-1 -right-1.5 h-2.5 w-2.5 rounded-full border-2 border-(--surface) bg-(--warning)"
+                            className="absolute -top-1 -end-1.5 h-2.5 w-2.5 rounded-full border-2 border-(--surface) bg-(--warning)"
                           />
                         ) : null}
                       </span>
                       <span className="sr-only">
                         {group.label}
-                        {groupTodo > 0 ? ` — ${groupTodo} décision${groupTodo > 1 ? 's' : ''} à renseigner` : ''}
+                        {groupTodo > 0 ? ` — ${t('nav.todo', { count: groupTodo })}` : ''}
                       </span>
                     </button>
                   )}
@@ -249,18 +252,18 @@ function NavBody({
                   className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-xs font-semibold tracking-wider text-(--foreground-muted) uppercase hover:bg-(--surface-muted) disabled:cursor-default disabled:hover:bg-transparent"
                 >
                   <Icon aria-hidden className="h-4 w-4 shrink-0" />
-                  <span className="flex-1 text-left">{group.label}</span>
+                  <span className="flex-1 text-start">{group.label}</span>
                   {/* Groupe replié : son compte reste visible, sinon replier
                       reviendrait à cacher ce qui reste à faire. */}
                   {!isOpen && groupTodo > 0 ? (
                     <span className="tabular rounded-full bg-(--warning-subtle) px-2 text-sm font-semibold tracking-normal text-(--warning) normal-case">
-                      {groupTodo}
-                      <span className="sr-only"> décision{groupTodo > 1 ? 's' : ''} à renseigner</span>
+                      <span aria-hidden>{groupTodo}</span>
+                      <span className="sr-only">{t('nav.todo', { count: groupTodo })}</span>
                     </span>
                   ) : null}
                   <ChevronDown
                     aria-hidden
-                    className={`h-4 w-4 transition-transform duration-200 ${isOpen ? '' : '-rotate-90'} ${containsActive ? 'opacity-0' : ''}`}
+                    className={`h-4 w-4 transition-transform duration-200 ${isOpen ? '' : '-rotate-90 rtl:rotate-90'} ${containsActive ? 'opacity-0' : ''}`}
                   />
                 </button>
                 {isOpen ? (
@@ -289,19 +292,19 @@ function NavBody({
           {/* Le dossier initial reste accessible tout au long de la partie :
               les trames de matrices servent jusqu'au débriefing. */}
           <li>
-            <UtilityLink href="/api/export?type=dossier_initial" icon={Download} label="Dossier initial" collapsed={collapsed} download />
+            <UtilityLink href="/api/export?type=dossier_initial" icon={Download} label={t('nav.initialDossier')} collapsed={collapsed} download />
           </li>
           <li>
-            <UtilityLink href="/api/export?type=resultats_tour" icon={Download} label="Mes résultats" collapsed={collapsed} download />
+            <UtilityLink href="/api/export?type=resultats_tour" icon={Download} label={t('nav.myResults')} collapsed={collapsed} download />
           </li>
           {showSurvey ? (
             <li>
-              <UtilityLink href="/sus" icon={MessageSquareText} label="Questionnaire de satisfaction" collapsed={collapsed} onNavigate={onNavigate} />
+              <UtilityLink href="/sus" icon={MessageSquareText} label={t('nav.survey')} collapsed={collapsed} onNavigate={onNavigate} />
             </li>
           ) : null}
           {showAdmin ? (
             <li>
-              <UtilityLink href="/admin/config" icon={SlidersHorizontal} label="Configuration admin" collapsed={collapsed} onNavigate={onNavigate} />
+              <UtilityLink href="/admin/config" icon={SlidersHorizontal} label={t('nav.adminConfig')} collapsed={collapsed} onNavigate={onNavigate} />
             </li>
           ) : null}
         </ul>
@@ -313,11 +316,11 @@ function NavBody({
         <form action="/api/auth/logout" method="post">
           <button
             type="submit"
-            title="Se déconnecter"
+            title={t('nav.logout')}
             className={`flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium text-(--foreground-muted) hover:bg-(--negative-subtle) hover:text-(--negative) ${collapsed ? 'justify-center' : ''}`}
           >
             <LogOut aria-hidden className="h-5 w-5 shrink-0" />
-            {collapsed ? <span className="sr-only">Se déconnecter</span> : 'Se déconnecter'}
+            {collapsed ? <span className="sr-only">{t('nav.logout')}</span> : t('nav.logout')}
           </button>
         </form>
       </div>
@@ -343,7 +346,7 @@ function NavLink({
       onClick={onNavigate}
       aria-current={active ? 'page' : undefined}
       className={`flex items-center gap-3 rounded-lg py-2 text-sm transition-colors duration-150 ${
-        collapsed ? 'justify-center px-2.5' : indent ? 'pr-2.5 pl-9' : 'px-2.5'
+        collapsed ? 'justify-center px-2.5' : indent ? 'pe-2.5 ps-9' : 'px-2.5'
       } ${
         active
           ? 'bg-(--accent-subtle) font-semibold text-(--accent-text)'
@@ -386,12 +389,13 @@ function UtilityLink({
  * jamais seule — un nombre ou une coche se lisent sans elle.
  */
 function FillState({ count }: { count: number | undefined }) {
+  const t = useT();
   if (count === undefined) return null;
   if (count === 0) {
     return (
       <>
         <CircleCheck aria-hidden className="h-4 w-4 shrink-0 text-(--positive-icon)" />
-        <span className="sr-only"> — renseigné</span>
+        <span className="sr-only"> — {t('nav.filled')}</span>
       </>
     );
   }
@@ -403,7 +407,7 @@ function FillState({ count }: { count: number | undefined }) {
       >
         {count}
       </span>
-      <span className="sr-only"> — {count} décision{count > 1 ? 's' : ''} à renseigner</span>
+      <span className="sr-only"> — {t('nav.todo', { count })}</span>
     </>
   );
 }

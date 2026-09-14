@@ -19,6 +19,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { PresenceContext } from '@/lib/presence-types';
 import { createClient } from '@/lib/supabase/client';
+import { useT } from '@/components/i18n-provider';
 
 export function PresenceBar({ context }: { context: PresenceContext }) {
   const [onlineIds, setOnlineIds] = useState<readonly string[]>([]);
@@ -66,6 +67,7 @@ export function PresenceBar({ context }: { context: PresenceContext }) {
     };
   }, [sessionId, teamId, userId, hidden]);
 
+  const t = useT();
   const online = useMemo(() => new Set(onlineIds), [onlineIds]);
   const ownOnline = context.roster.filter((member) => online.has(member.userId)).length;
   const others = context.teams.filter((team) => team.id !== teamId);
@@ -79,11 +81,11 @@ export function PresenceBar({ context }: { context: PresenceContext }) {
           style={{ backgroundColor: context.teamColor.hex }}
         />
         <span className="tabular">
-          {ownOnline} connecté{ownOnline > 1 ? 's' : ''}
+          {t('presence.online', { count: ownOnline })}
         </span>
       </summary>
 
-      <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-(--border) bg-(--surface) p-4 text-sm shadow-lg">
+      <div className="absolute end-0 z-20 mt-2 w-72 rounded-xl border border-(--border) bg-(--surface) p-4 text-sm shadow-lg">
         <p className="flex items-center gap-2 font-medium">
           <span
             aria-hidden
@@ -101,7 +103,7 @@ export function PresenceBar({ context }: { context: PresenceContext }) {
             // donc pas se voir « en ligne ». Le dire « hors ligne » ressemblerait
             // à une panne — c'est son propre choix de discrétion qu'il lit ici.
             const isOnline = online.has(member.userId) || (isSelf && hidden);
-            const status = isSelf && hidden ? 'discret' : isOnline ? 'en ligne' : 'hors ligne';
+            const status = isSelf && hidden ? t('presence.statusHidden') : isOnline ? t('presence.statusOnline') : t('presence.statusOffline');
             return (
               <li key={member.userId} className="flex items-center gap-2">
                 <span
@@ -118,14 +120,14 @@ export function PresenceBar({ context }: { context: PresenceContext }) {
                 />
                 <span className={isOnline ? '' : 'text-(--foreground-muted)'}>
                   {member.name}
-                  {isSelf ? ' (vous)' : ''}
+                  {isSelf ? ` ${t('presence.self')}` : ''}
                 </span>
                 {member.isFacilitator ? (
                   <span className="rounded bg-(--surface-muted) px-1.5 py-0.5 text-xs text-(--foreground-muted)">
-                    Facilitateur
+                    {t('presence.facilitator')}
                   </span>
                 ) : null}
-                <span className="ml-auto shrink-0 text-xs text-(--foreground-muted)">
+                <span className="ms-auto shrink-0 text-xs text-(--foreground-muted)">
                   {status}
                 </span>
               </li>

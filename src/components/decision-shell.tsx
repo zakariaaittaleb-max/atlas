@@ -36,9 +36,11 @@ import { Circle, CircleCheck, CloudOff, LoaderCircle, Lock, PencilLine } from 'l
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { useT } from '@/components/i18n-provider';
 import { InfoHint } from '@/components/ui/info-hint';
+import type { MessageKey } from '@/lib/i18n/messages';
 import { formatMadCompact, formatScore, formatUnits } from '@/lib/format';
-import { SAVE_LABELS, type SaveState } from '@/lib/use-autosave';
+import type { SaveState } from '@/lib/use-autosave';
 
 export interface MissingDecision {
   label: string;
@@ -69,6 +71,7 @@ const SAVE_ICONS: Record<SaveState, typeof Circle> = {
 export function SaveIndicator({
   state, pending, lastError, savedAt = null,
 }: { state: SaveState; pending: number; lastError: string | null; savedAt?: number | null }) {
+  const t = useT();
   const colour =
     state === 'saved' ? 'var(--positive)'
     : state === 'error' || state === 'locked' ? 'var(--negative)'
@@ -79,8 +82,8 @@ export function SaveIndicator({
   // qui dit l'essentiel : rien n'est perdu.
   const label =
     lastError && (state === 'error' || state === 'locked') ? lastError
-    : state === 'saved' && savedAt !== null ? `${SAVE_LABELS.saved} à ${clockOf(savedAt)}`
-    : SAVE_LABELS[state];
+    : state === 'saved' && savedAt !== null ? t('save.savedAt', { time: clockOf(savedAt) })
+    : t(`save.${state}` as MessageKey);
   const announce = state === 'saved' || state === 'error' || state === 'locked' ? label : '';
 
   return (
@@ -91,7 +94,7 @@ export function SaveIndicator({
       />
       <span>{label}</span>
       {pending > 0 ? (
-        <span className="tabular text-(--foreground-muted)">({pending} en attente)</span>
+        <span className="tabular text-(--foreground-muted)">{t('save.queued', { count: pending })}</span>
       ) : null}
       <span role="status" className="sr-only">{announce}</span>
     </p>
@@ -251,6 +254,7 @@ export function DecisionBar({
   onValidate: () => void | Promise<void>;
 }) {
   const router = useRouter();
+  const t = useT();
   const blocked = missing.length > 0 || !decisionsOpen;
 
   return (
@@ -259,15 +263,11 @@ export function DecisionBar({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <SaveIndicator state={state} pending={pending} lastError={lastError} savedAt={savedAt} />
-            <InfoHint label="Enregistrement de vos saisies">
-              Vos saisies sont enregistrées au fil de la frappe : le bouton de droite ne
-              sauvegarde rien. Il envoie ce qui reste en file, puis ouvre le récapitulatif
-              du tour, d’où votre équipe le soumet.
-            </InfoHint>
+            <InfoHint label={t('bar.hintTitle')}>{t('bar.hint')}</InfoHint>
           </div>
           {missing.length > 0 ? (
             <p className="mt-1 text-sm text-(--foreground-muted)">
-              Manquant :{' '}
+              {t('bar.missingList')}{' '}
               {missing.map((m, i) => (
                 <span key={m.href + m.label}>
                   {i > 0 ? ' · ' : ''}
@@ -288,10 +288,10 @@ export function DecisionBar({
           className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-6 py-3 font-medium text-(--on-accent) disabled:opacity-40"
         >
           {!decisionsOpen
-            ? 'Tour verrouillé'
+            ? t('bar.locked')
             : missing.length > 0
-              ? `${missing.length} décision${missing.length > 1 ? 's' : ''} manquante${missing.length > 1 ? 's' : ''}`
-              : 'Relire et soumettre le tour'}
+              ? t('bar.missing', { count: missing.length })
+              : t('bar.review')}
         </button>
       </div>
 

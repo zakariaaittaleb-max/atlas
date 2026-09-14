@@ -6,8 +6,11 @@ import { GlossaryButton } from '@/components/glossary-modal';
 import { PresenceBar } from '@/components/presence-bar';
 import { SidebarNav, type NavGroup } from '@/components/sidebar-nav';
 import { TeamChrome } from '@/components/team-chrome';
+import { LanguageSwitcher } from '@/components/language-switcher';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { parseThemeChoice, THEME_COOKIE } from '@/lib/appearance';
+import type { MessageKey } from '@/lib/i18n/messages';
+import { getT } from '@/lib/i18n/server';
 import { getRoundState, getTeamContext, getUser } from '@/lib/dal';
 import { readDisplayConfig } from '@/lib/display-config';
 import { NAV_COOKIE } from '@/lib/display-config-types';
@@ -93,29 +96,6 @@ const STEP_HREFS = [
   '/recapitulatif',
 ];
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Session non ouverte',
-  onboarding: 'Onboarding — décisions ouvertes',
-  round_active: 'Décisions ouvertes',
-  round_locked: 'Tour verrouillé',
-  round_resolving: 'Calcul en cours',
-  round_resolved: 'Résultats publiés',
-  completed: 'Session terminée',
-};
-
-/**
- * Ce que dit le bandeau quand la saisie est fermée. Les champs restent lisibles
- * (voir `data-round-locked` dans globals.css) : il faut donc dire, en mots,
- * pourquoi ils ne répondent plus.
- */
-const READ_ONLY_NOTICE: Record<string, string> = {
-  draft: 'Session pas encore ouverte — lecture seule.',
-  round_locked: 'Tour verrouillé — lecture seule. Les valeurs affichées sont celles que le moteur a reçues.',
-  round_resolving: 'Calcul en cours — lecture seule. Les valeurs affichées sont celles que le moteur a reçues.',
-  round_resolved: 'Résultats publiés — lecture seule jusqu’à l’ouverture du tour suivant.',
-  completed: 'Session terminée — lecture seule.',
-};
-
 export async function TeamShell({ children }: { children: React.ReactNode }) {
   const team = await getTeamContext();
   // Pas d'équipe (connexion, facilitateur, admin) : l'écran reste nu.
@@ -130,6 +110,7 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
     getUser(),
     cookies(),
   ]);
+  const t = await getT();
 
   // Un écran dont plus aucun champ n'est ouvert n'a rien à montrer : garder son
   // lien ferait croire à une panne à qui l'ouvrirait. Le Dashboard et la
@@ -138,7 +119,13 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
   const visible = (href: string) =>
     href === '/dashboard' || href === '/revelation' || href === '/recapitulatif' || openScreens.has(href);
   const groups = GROUPS
-    .map((group) => ({ ...group, links: group.links.filter((link) => visible(link.href)) }))
+    .map((group) => ({
+      ...group,
+      label: t(`nav.group.${group.id}` as MessageKey),
+      links: group.links
+        .filter((link) => visible(link.href))
+        .map((link) => ({ ...link, label: t(`nav.link.${link.href}` as MessageKey) })),
+    }))
     .filter((group) => group.links.length > 0);
 
   const visibleLinks = groups.flatMap((group) => group.links);
@@ -160,8 +147,8 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
       <SidebarNav
         teamName={team.teamName}
         groups={groups}
-        roundLabel={currentRound === 0 ? 'T0' : `Tour ${currentRound}`}
-        statusLabel={STATUS_LABELS[status] ?? status}
+        roundLabel={currentRound === 0 ? t('round.onboarding') : t('round.number', { n: currentRound })}
+        statusLabel={t(`status.${status}` as MessageKey)}
         decisionsOpen={open}
         showSurvey={visible('/sus')}
         showAdmin={isSuperAdminEmail(user?.email)}
@@ -179,36 +166,37 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
             {money ? (
               <>
               {config.showBudget ? (
-                <MoneyItem label="Vous disposez de" value={formatMadCompact(money.availableMad)} className="max-sm:hidden">
+                <MoneyItem label={t('money.available')} value={formatMadCompact(money.availableMad)} className="max-sm:hidden">
                   {config.showCredits && money.drawnThisRoundMad > 0 ? (
                     <span className="text-sm text-(--meta)">
-                      dont {formatMadCompact(money.drawnThisRoundMad)} de crédit pris
+                      {t('money.drawn', { amount: formatMadCompact(money.drawnThisRoundMad) })}
                     </span>
                   ) : null}
                 </MoneyItem>
               ) : null}
               <MoneyItem
-                label="Engagé ce tour"
+                label={t('money.engaged')}
                 value={formatMadCompact(money.engagedMad)}
                 tone={config.showBudget && money.engagedMad > money.availableMad ? 'negative' : undefined}
               />
               {config.showBudget ? (
                 <MoneyItem
-                  label="Il vous reste"
+                  label={t('money.remaining')}
                   value={formatMadCompact(money.availableMad - money.engagedMad)}
                   tone={money.availableMad - money.engagedMad < 0 ? 'negative' : undefined}
                 />
               ) : null}
               {config.showCredits && money.debtOutstandingMad > 0 ? (
-                <MoneyItem label="Crédits en cours" value={formatMadCompact(money.debtOutstandingMad)} className="max-sm:hidden" />
+                <MoneyItem label={t('money.debt')} value={formatMadCompact(money.debtOutstandingMad)} className="max-sm:hidden" />
               ) : null}
               </>
             ) : null}
             {/* Un seul abonnement de présence par onglet : le canal temps réel
                 refuse un second abonné au même nom. */}
-            <span className="ml-auto flex items-center gap-3 self-center">
+            <span className="ms-auto flex items-center gap-3 self-center">
               {/* Sur téléphone, on consulte : la présence s'efface derrière les chiffres. */}
               {presence ? <span className="max-sm:hidden"><PresenceBar context={presence} /></span> : null}
+              <LanguageSwitcher />
               <GlossaryButton />
               <ThemeToggle initial={themeChoice} />
             </span>
@@ -220,7 +208,9 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
           {!open ? (
             <p className="flex items-center gap-2 border-t border-(--border) bg-(--warning-subtle) px-6 py-2 text-sm font-medium text-(--warning)">
               <Lock aria-hidden className="h-4 w-4 shrink-0" />
-              {READ_ONLY_NOTICE[status] ?? 'Lecture seule.'}
+              {['draft', 'round_locked', 'round_resolving', 'round_resolved', 'completed'].includes(status)
+                ? t(`readOnly.${status}` as MessageKey)
+                : t('readOnly.default')}
             </p>
           ) : null}
         </div>

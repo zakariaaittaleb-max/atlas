@@ -22,6 +22,7 @@
 import { usePathname } from 'next/navigation';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
+import { useT } from '@/components/i18n-provider';
 import { InfoHint } from '@/components/ui/info-hint';
 import {
   DAS_COOKIE, DAS_COOKIE_MAX_AGE, resolveActiveDas,
@@ -109,6 +110,7 @@ const DAS_SCOPED_ROUTES = new Set(['/strategie/das', '/organisation', '/marches'
 export function DasSwitcher() {
   const { das, activeDasId, setActiveDas } = useDasScope();
   const pathname = usePathname();
+  const t = useT();
 
   if (das.length === 0) return null;
   if (!DAS_SCOPED_ROUTES.has(pathname)) return null;
@@ -117,15 +119,13 @@ export function DasSwitcher() {
     <div className="border-t border-(--border) bg-(--surface)">
       <div className="mx-auto flex w-full min-w-0 max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-6 py-2.5">
         <span className="flex items-center gap-2 text-sm font-medium text-(--foreground-muted)">
-          Domaine piloté
-          <InfoHint label="Domaine piloté">
-            {das.length > 1
-              ? 'Stratégie du DAS, achats, distribution, organisation et RH portent sur le domaine choisi ici. Renseignez-le partout, puis passez au suivant.'
-              : 'Votre unique domaine. Un rachat sur le marché des acquisitions en ajoutera d’autres ici.'}
+          {t('das.piloted')}
+          <InfoHint label={t('das.piloted')}>
+            {das.length > 1 ? t('das.pilotedHintMany') : t('das.pilotedHintOne')}
           </InfoHint>
         </span>
 
-        <div role="group" aria-label="Domaine d'activité piloté" className="flex flex-wrap gap-2">
+        <div role="group" aria-label={t('das.group')} className="flex flex-wrap gap-2">
           {das.map((d) => {
             const on = d.dasId === activeDasId;
             return (
@@ -144,7 +144,7 @@ export function DasSwitcher() {
                     sur la seule teinte, y compris sur un vidéoprojecteur. */}
                 {on ? '✓ ' : ''}{d.name}
                 {d.status === 'listed_for_sale' ? (
-                  <span className="ml-1.5 font-normal text-(--warning)">· en vente</span>
+                  <span className="ms-1.5 font-normal text-(--warning)">{t('das.forSale')}</span>
                 ) : null}
               </button>
             );
@@ -165,26 +165,27 @@ export function DasSwitcher() {
  * du haut étant collée, ils restent visibles pendant toute la saisie.
  */
 function DasVitalsLine({ das }: { das: DasOption | null }) {
+  const t = useT();
   if (!das) return null;
   const v = das.vitals;
 
   if (!v) {
     return (
-      <p className="text-sm text-(--foreground-muted) lg:ml-auto">Aucun exercice clos pour ce domaine</p>
+      <p className="text-sm text-(--foreground-muted) lg:ms-auto">{t('das.noClosedYear')}</p>
     );
   }
 
   const growthTone = toneOf(v.growth);
   return (
-    <div className="flex w-full min-w-0 flex-wrap items-center gap-x-5 gap-y-1 lg:ml-auto lg:w-auto">
+    <div className="flex w-full min-w-0 flex-wrap items-center gap-x-5 gap-y-1 lg:ms-auto lg:w-auto">
       <dl className="tabular flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
         <Vital
-          label="Croissance"
+          label={t('das.growth')}
           value={formatSignedPct(v.growth)}
           tone={growthTone}
         />
         <Vital
-          label="Part de marché"
+          label={t('das.marketShare')}
           value={formatPct(v.marketShare)}
           // Une part inchangée ne s'annonce pas « ↑ +0,0 pt » : seul un écart d'au moins 0,05 point s'écrit.
           detail={
@@ -192,21 +193,20 @@ function DasVitalsLine({ das }: { das: DasOption | null }) {
               v.marketShareDelta !== null && Math.abs(v.marketShareDelta) >= 0.0005
                 ? `${formatSharePoints(v.marketShareDelta)} pt`
                 : null,
-              v.poolMedianShare !== null ? `médiane du pool ${formatPct(v.poolMedianShare)}` : null,
+              v.poolMedianShare !== null ? t('das.poolMedian', { value: formatPct(v.poolMedianShare) }) : null,
             ].filter(Boolean).join(' · ') || undefined
           }
         />
-        <Vital label="Poids dans le Groupe" value={formatPct(v.weightInGroup, 0)} />
+        <Vital label={t('das.weight')} value={formatPct(v.weightInGroup, 0)} />
         <Vital
-          label="Marge"
+          label={t('das.margin')}
           value={formatPct(v.margin)}
           tone={v.margin !== null && v.margin < 0 ? 'negative' : null}
         />
       </dl>
-      <InfoHint label="Chiffres du domaine">
-        {v.roundNumber >= 0 ? `Exercice ${v.roundNumber}, le dernier clos. ` : 'Chiffres de la dotation. '}
-        Croissance : variation du chiffre d’affaires sur l’exercice précédent. Poids : part du
-        chiffre d’affaires du Groupe. Marge : EBITDA rapporté au chiffre d’affaires. Médiane du pool : part de marché médiane des groupes sur ce domaine, au même exercice.
+      <InfoHint label={t('das.vitalsTitle')}>
+        {v.roundNumber >= 0 ? t('das.vitalsYear', { n: v.roundNumber }) : t('das.vitalsEndowment')}{' '}
+        {t('das.vitalsHint')}
       </InfoHint>
     </div>
   );

@@ -13,6 +13,8 @@ import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { useT } from '@/components/i18n-provider';
+
 export interface Step {
   href: string;
   label: string;
@@ -20,22 +22,23 @@ export interface Step {
 
 export function NextStep({ steps }: { steps: Step[] }) {
   const pathname = usePathname();
+  const t = useT();
   const index = steps.findIndex((s) => s.href === pathname);
   if (index < 0 || index === steps.length - 1) return null;
   const next = steps[index + 1];
 
   return (
-    <nav aria-label="Étape suivante" className="mx-auto w-full min-w-0 max-w-5xl px-6 pb-10 print:hidden">
+    <nav aria-label={t('next.aria')} className="mx-auto w-full min-w-0 max-w-5xl px-6 pb-10 print:hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-(--border) pt-5">
         <p className="tabular text-sm text-(--foreground-muted)">
-          Étape {index + 1} sur {steps.length}
+          {t('next.position', { index: index + 1, total: steps.length })}
         </p>
         <Link
           href={next.href}
           className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-(--border) bg-(--surface) px-4 text-sm font-medium transition-colors hover:border-(--accent) hover:text-(--accent-text)"
         >
-          Étape suivante : {next.label}
-          <ArrowRight aria-hidden className="h-4 w-4" />
+          {t('next.link', { label: next.label })}
+          <ArrowRight aria-hidden className="h-4 w-4 rtl:-scale-x-100" />
         </Link>
       </div>
     </nav>
