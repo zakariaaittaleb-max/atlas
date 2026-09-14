@@ -24,7 +24,9 @@
 import { ArrowRight, Check, Lock, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 
+import { useT } from '@/components/i18n-provider';
 import { InfoHint } from '@/components/ui/info-hint';
+import type { MessageKey } from '@/lib/i18n/messages';
 import type { FinanceLimits, FinanceValues } from '@/lib/decision-types';
 import { formatMadCompact } from '@/lib/format';
 
@@ -51,15 +53,10 @@ interface LeverState {
   anchor?: string;
 }
 
-/** Les titres courts : l'intitulé du référentiel est une phrase d'action. */
-const TITLES: Record<string, string> = {
-  cash_pooling: 'Cash pooling',
-  emission_dette: 'Émission de dette',
-  spin_off: 'Spin-off ou cession',
-  acquisition_consolidation: 'Acquisition de consolidation',
-  retention_benefices: 'Rétention des bénéfices',
-  levee_capital: 'Levée de fonds propres',
-};
+/** Les titres courts, traduits (`lever.title.*`) : l'intitulé du référentiel est une phrase d'action. */
+const TITLED = new Set(['cash_pooling', 'emission_dette', 'spin_off', 'acquisition_consolidation', 'retention_benefices', 'levee_capital']);
+
+type Translate = (key: MessageKey, vars?: Record<string, string | number>) => string;
 
 const md = (v: number) => formatMadCompact(v);
 
@@ -72,15 +69,16 @@ export function leverStates(
   finance: FinanceValues,
   limits: FinanceLimits,
   dasCount: number,
+  t: Translate,
 ): Map<string, LeverState> {
   const states = new Map<string, LeverState>();
 
   for (const lever of levers) {
-    const title = TITLES[lever.key] ?? lever.category;
+    const title = TITLED.has(lever.key) ? t(`lever.title.${lever.key}` as MessageKey) : lever.category;
     const base = { title };
 
     if (!lever.available) {
-      states.set(lever.key, { ...base, status: 'closed', line: 'Fermé par l’animateur pour cette session' });
+      states.set(lever.key, { ...base, status: 'closed', line: t('lever.closed') });
       continue;
     }
 
@@ -92,10 +90,10 @@ export function leverStates(
           anchor: 'levier-credit',
           status: credit > 0 ? 'active' : limits.capacityAvailableMad <= 0 && credit >= 0 ? 'blocked' : 'ready',
           line:
-            credit > 0 ? `Tirage de ${md(credit)} ce tour`
-            : credit < 0 ? `Remboursement de ${md(-credit)} ce tour`
-            : limits.capacityAvailableMad > 0 ? `Capacité disponible : ${md(limits.capacityAvailableMad)}`
-            : 'La banque ne prête pas en l’état',
+            credit > 0 ? t('lever.drawThisRound', { amount: md(credit) })
+            : credit < 0 ? t('lever.repayThisRound', { amount: md(-credit) })
+            : limits.capacityAvailableMad > 0 ? t('lever.capacity', { amount: md(limits.capacityAvailableMad) })
+            : t('lever.bankNo'),
         });
         break;
       }
@@ -105,7 +103,7 @@ export function leverStates(
           ...base,
           anchor: 'levier-capital',
           status: raised > 0 ? 'active' : 'ready',
-          line: raised > 0 ? `Levée de ${md(raised)} · ${md(raised * 0.02)} de frais` : 'Aucune levée ce tour',
+          line: raised > 0 ? t('lever.raised', { amount: md(raised), fees: md(raised * 0.02) }) : t('lever.noRaise'),
         });
         break;
       }
@@ -117,9 +115,9 @@ export function leverStates(
           anchor: 'levier-dividende',
           status: !distributable ? 'blocked' : dividend === 0 ? 'active' : 'ready',
           line:
-            !distributable ? 'Aucun résultat distribuable pour l’instant'
-            : dividend === 0 ? `100 % retenus sur ${md(limits.dividendCeilingMad)} distribuables`
-            : `Dividende de ${md(dividend)} : rétention partielle`,
+            !distributable ? t('lever.noDistributable')
+            : dividend === 0 ? t('lever.retained', { amount: md(limits.dividendCeilingMad) })
+            : t('lever.partial', { amount: md(dividend) }),
         });
         break;
       }
@@ -131,9 +129,9 @@ export function leverStates(
           anchor: 'levier-cash-pooling',
           status: dasCount < 2 ? 'blocked' : moves.length > 0 ? 'active' : 'ready',
           line:
-            dasCount < 2 ? 'Exige au moins deux domaines dans le portefeuille'
-            : moves.length > 0 ? `${md(moved)} déplacés entre ${moves.length} domaines`
-            : 'Aucun transfert ce tour',
+            dasCount < 2 ? t('lever.twoUnits')
+            : moves.length > 0 ? t('lever.moved', { amount: md(moved), units: moves.length })
+            : t('lever.noTransfer'),
         });
         break;
       }
@@ -141,7 +139,7 @@ export function leverStates(
         states.set(lever.key, {
           ...base,
           status: 'elsewhere',
-          line: 'Se décide sur l’écran Cession & acquisitions',
+          line: t('lever.elsewhere'),
         });
     }
   }
@@ -150,11 +148,11 @@ export function leverStates(
 }
 
 const STATUS = {
-  active: { label: 'Actionné', icon: Check, tone: 'bg-(--accent) text-(--on-accent)' },
-  ready: { label: 'Disponible', icon: null, tone: 'bg-(--surface-muted) text-(--foreground-muted) ring-1 ring-(--border)' },
-  elsewhere: { label: 'Disponible', icon: null, tone: 'bg-(--surface-muted) text-(--foreground-muted) ring-1 ring-(--border)' },
-  blocked: { label: 'Indisponible', icon: TriangleAlert, tone: 'bg-(--warning-subtle) text-(--warning)' },
-  closed: { label: 'Fermé', icon: Lock, tone: 'bg-(--surface-muted) text-(--meta) ring-1 ring-(--border)' },
+  active: { icon: Check, tone: 'bg-(--accent) text-(--on-accent)' },
+  ready: { icon: null, tone: 'bg-(--surface-muted) text-(--foreground-muted) ring-1 ring-(--border)' },
+  elsewhere: { icon: null, tone: 'bg-(--surface-muted) text-(--foreground-muted) ring-1 ring-(--border)' },
+  blocked: { icon: TriangleAlert, tone: 'bg-(--warning-subtle) text-(--warning)' },
+  closed: { icon: Lock, tone: 'bg-(--surface-muted) text-(--meta) ring-1 ring-(--border)' },
 } as const;
 
 export function LeversSection({
@@ -165,8 +163,14 @@ export function LeversSection({
   limits: FinanceLimits;
   dasCount: number;
 }) {
+  const t = useT();
   if (levers.length === 0) return null;
-  const states = leverStates(levers, finance, limits, dasCount);
+  const states = leverStates(levers, finance, limits, dasCount, t);
+  const category = (value: string) => {
+    const key = `lever.category.${value}` as MessageKey;
+    const text = t(key);
+    return text === key ? value : text;
+  };
   const isOut = (key: string) => ['closed', 'blocked'].includes(states.get(key)!.status);
   const actionable = levers.filter((lever) => !isOut(lever.key));
   const unavailable = levers.filter((lever) => isOut(lever.key));
@@ -191,12 +195,12 @@ export function LeversSection({
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold tracking-wide text-(--accent-text) uppercase">
-                {lever.category}
+                {category(lever.category)}
               </span>
               {/* L'état se lit en mot et en pictogramme, jamais par la seule teinte. */}
               <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-sm font-semibold ${status.tone}`}>
                 {StatusIcon ? <StatusIcon aria-hidden className="h-3.5 w-3.5" strokeWidth={2.5} /> : null}
-                {status.label}
+                {t(`lever.status.${state.status}` as MessageKey)}
               </span>
             </div>
 
@@ -205,13 +209,13 @@ export function LeversSection({
               <InfoHint label={state.title}>
                 <span className="block text-(--foreground-muted)">{lever.actionLabel}</span>
                 <span className="mt-2 block">
-                  <strong className="font-semibold text-(--positive)">↑ Si ça réussit</strong> — {lever.successNote}
+                  <strong className="font-semibold text-(--positive)">{t('lever.success')}</strong> — {lever.successNote}
                 </span>
                 <span className="mt-2 block">
-                  <strong className="font-semibold text-(--negative)">↓ Le risque majeur</strong> — {lever.riskNote}
+                  <strong className="font-semibold text-(--negative)">{t('lever.risk')}</strong> — {lever.riskNote}
                 </span>
                 <span className="mt-2 block text-(--foreground-muted)">
-                  <strong className="font-semibold">Pourquoi ça marche</strong> — {lever.rationaleNote}
+                  <strong className="font-semibold">{t('lever.why')}</strong> — {lever.rationaleNote}
                 </span>
               </InfoHint>
             </h3>
@@ -226,8 +230,8 @@ export function LeversSection({
                   href={lever.screen ?? '/cession'}
                   className="inline-flex items-center gap-1.5 text-sm font-medium text-(--accent-text) hover:underline"
                 >
-                  Ouvrir Cession &amp; acquisitions
-                  <ArrowRight aria-hidden className="h-4 w-4" />
+                  {t('lever.openCession')}
+                  <ArrowRight aria-hidden className="h-4 w-4 rtl:-scale-x-100" />
                 </Link>
               ) : state.anchor && state.status !== 'blocked' ? (
                 <a
@@ -245,8 +249,8 @@ export function LeversSection({
                       : 'bg-(--accent) text-(--on-accent) hover:bg-(--accent-hover)'
                   }`}
                 >
-                  {state.status === 'active' ? 'Ajuster' : 'Régler'}
-                  <ArrowRight aria-hidden className="h-4 w-4" />
+                  {state.status === 'active' ? t('lever.adjust') : t('lever.set')}
+                  <ArrowRight aria-hidden className="h-4 w-4 rtl:-scale-x-100" />
                 </a>
               ) : null}
             </div>
@@ -258,7 +262,7 @@ export function LeversSection({
         de même taille que les leviers qu'on peut réellement actionner. */}
     {unavailable.length > 0 ? (
       <p className="mt-3 text-sm text-(--foreground-muted)">
-        <span className="font-medium text-(--foreground)">Pas actionnables ce tour : </span>
+        <span className="font-medium text-(--foreground)">{t('lever.unavailable')} </span>
         {unavailable.map((lever, index) => {
           const state = states.get(lever.key)!;
           return (
