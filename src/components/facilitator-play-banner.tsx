@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 
 type PlayResult = { ok: true } | { ok: false; error: string };
@@ -29,7 +29,13 @@ export function FacilitatorPlayBanner({
   setVisibilityAction: (input: { visible: boolean }) => Promise<PlayResult>;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [pending, startTransition] = useTransition();
+
+  // Le projecteur est l'écran de toute la salle : y afficher « Vous jouez dans
+  // Équipe B », boutons compris, révélait l'équipe du facilitateur à tous et
+  // rendait le mode discret sans objet.
+  if (pathname.startsWith('/projecteur')) return null;
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-3 bg-(--accent) px-4 py-2 text-sm font-medium text-(--on-accent)">

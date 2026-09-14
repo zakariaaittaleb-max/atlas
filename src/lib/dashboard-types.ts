@@ -101,6 +101,12 @@ export interface DashboardContext {
   teamName: string;
   roundNumber: number;
   hasResults: boolean;
+  /**
+   * Tours effectivement résolus. Le tour 0 est la dotation : trésorerie et
+   * chiffre d'affaires y ont un sens, pas le résultat ni la marge, qui ne sont
+   * calculés qu'à la première résolution.
+   */
+  resolvedRounds: number;
   treasuryStatus: string;
   group: GroupPoint[];
   das: DasSeries[];

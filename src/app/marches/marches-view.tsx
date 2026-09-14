@@ -111,7 +111,7 @@ export function MarchesView({
       <StatCard
         key="available"
         label="Matière disponible ce tour"
-        value={formatUnits(available)}
+        value={`${formatUnits(available)} unités`}
         note={
           short
             ? `Sous les ${formatUnits(das.supply.soldLastRound)} vendus l’an dernier`
@@ -123,7 +123,7 @@ export function MarchesView({
     <StatCard
       key="lost"
       label="Demande non servie"
-      value={formatUnits(das.supply.lostLastRound)}
+      value={`${formatUnits(das.supply.lostLastRound)} unités`}
       note={das.supply.lostLastRound > 0 ? 'Ventes perdues au dernier exercice' : 'Aucune vente perdue au dernier exercice'}
       hint="Des clients voulaient acheter et n’ont pas été servis : c’est le seul chiffre qui dit qu’on a sous-approvisionné ou sous-distribué."
     />,

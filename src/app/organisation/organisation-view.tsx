@@ -236,7 +236,7 @@ export function OrganisationView({
       <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-8 lg:py-10">
         <header className="mb-6">
           <p className="text-xs font-semibold tracking-wider text-(--accent-text) uppercase">
-            Exercice {context.roundNumber} · {context.teamName} · niveau domaine
+            Tour {context.roundNumber} · {context.teamName} · niveau domaine
           </p>
           <h1 className="mt-1 flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight text-(--heading)">
             Organisation &amp; RH

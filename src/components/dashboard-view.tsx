@@ -269,15 +269,18 @@ function PilotView({
   const last = group[group.length - 1];
   const previous = group[group.length - 2];
   const trend = (key: keyof GroupPoint) => group.map((p) => p[key] as number);
-  const card = (key: 'treasuryMad' | 'revenueMad' | 'netIncomeMad' | 'iaScore', label: string, unit: string) => (
-    <StatCard
-      key={key}
-      label={label}
-      value={show(last[key], unit)}
-      delta={previous ? delta(last[key], previous[key], (v) => show(v, unit)) : null}
-      trend={trend(key)}
-    />
-  );
+  const card = (key: 'treasuryMad' | 'revenueMad' | 'netIncomeMad' | 'iaScore', label: string, unit: string) =>
+    context.resolvedRounds === 0 && RESULT_METRICS.has(key) ? (
+      <StatCard key={key} label={label} value="—" note={NOT_YET_PUBLISHED} />
+    ) : (
+      <StatCard
+        key={key}
+        label={label}
+        value={show(last[key], unit)}
+        delta={previous ? delta(last[key], previous[key], (v) => show(v, unit)) : null}
+        trend={trend(key)}
+      />
+    );
 
   const cards = [
     ...(sections.sante
@@ -354,7 +357,7 @@ function PilotView({
                     label={d.name}
                     share={d.revenueShareOfGroup}
                     colour={seriesColour(index)}
-                    note={`marge brute ${formatMadCompact(d.grossMarginMad)}`}
+                    note={context.resolvedRounds === 0 ? 'marge publiée à la première résolution' : `marge brute ${formatMadCompact(d.grossMarginMad)}`}
                   />
                 </li>
               ))}
@@ -485,7 +488,7 @@ function ManagerSection({
 }) {
   switch (section) {
     case 'sante':
-      return <GroupHealth group={context.group} />;
+      return <GroupHealth group={context.group} resolvedRounds={context.resolvedRounds} />;
     case 'portefeuille':
       return (
         <>
@@ -508,6 +511,13 @@ function ManagerSection({
 
 /* ── Santé du Groupe ─────────────────────────────────────────────────────── */
 
+/**
+ * Grandeurs qui n'existent qu'après une résolution. À la dotation, elles valent
+ * zéro en base : affiché « 0 DH », ce zéro se lisait comme un résultat nul.
+ */
+const RESULT_METRICS: ReadonlySet<string> = new Set(['netIncomeMad', 'grossMarginMad', 'marginPct']);
+const NOT_YET_PUBLISHED = 'Publié à la première résolution';
+
 const GROUP_METRICS = [
   { key: 'treasuryMad', label: 'Trésorerie', unit: 'DH' },
   { key: 'revenueMad', label: 'Chiffre d’affaires', unit: 'DH' },
@@ -520,7 +530,7 @@ const GROUP_METRICS = [
 
 type GroupMetricKey = (typeof GROUP_METRICS)[number]['key'];
 
-function GroupHealth({ group }: { group: GroupPoint[] }) {
+function GroupHealth({ group, resolvedRounds }: { group: GroupPoint[]; resolvedRounds: number }) {
   const [metric, setMetric] = useState<GroupMetricKey>('treasuryMad');
   const last = group[group.length - 1];
   const previous = group[group.length - 2];
@@ -529,12 +539,16 @@ function GroupHealth({ group }: { group: GroupPoint[] }) {
     <>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {GROUP_METRICS.map((m) => (
-          <StatCard
-            key={m.key}
-            label={m.label}
-            value={show(last[m.key], m.unit)}
-            delta={previous ? delta(last[m.key], previous[m.key], (v) => show(v, m.unit)) : null}
-          />
+          resolvedRounds === 0 && RESULT_METRICS.has(m.key) ? (
+            <StatCard key={m.key} label={m.label} value="—" note={NOT_YET_PUBLISHED} />
+          ) : (
+            <StatCard
+              key={m.key}
+              label={m.label}
+              value={show(last[m.key], m.unit)}
+              delta={previous ? delta(last[m.key], previous[m.key], (v) => show(v, m.unit)) : null}
+            />
+          )
         ))}
       </div>
 

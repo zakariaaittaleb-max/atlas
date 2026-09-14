@@ -42,18 +42,22 @@ export default async function DashboardPage() {
               Trésorerie {treasuryLabel(context.treasuryStatus).toLowerCase()}
             </p>
           ) : null}
-          {/* Apporté par le protocole de test d'utilisabilité : le participant
-              doit trouver le questionnaire SUS sans qu'on le lui montre. */}
-          <Link
-            href="/sus"
-            className="rounded-lg border border-(--border) bg-(--surface) px-4 py-2 text-sm font-medium text-(--foreground-muted) transition-colors hover:border-(--border-strong) hover:text-(--foreground)"
-          >
-            Donner mon avis sur Atlas
-          </Link>
         </div>
       </header>
 
       <DashboardScreen context={context} sections={config.sections} initialView={initialView} />
+
+      {/* Apporté par le protocole de test d'utilisabilité : le participant doit
+          trouver le questionnaire SUS sans qu'on le lui montre. Il le trouve en
+          pied d'écran, là où l'on cherche ce qui n'est pas le jeu lui-même —
+          et non plus à la place de l'action principale du Dashboard. */}
+      <footer className="mt-12 border-t border-(--border) pt-5 text-sm text-(--foreground-muted)">
+        Une remarque sur l’outil ?{' '}
+        <Link href="/sus" className="font-medium text-(--accent-text) underline underline-offset-4">
+          Donner mon avis sur Atlas
+        </Link>
+        {' '}(2 minutes).
+      </footer>
     </main>
   );
 }

@@ -170,6 +170,7 @@ export async function loadDashboardContext(): Promise<DashboardContext> {
     teamName: team.teamName,
     roundNumber,
     hasResults: group.length > 0,
+    resolvedRounds: group.filter((p) => p.roundNumber >= 1).length,
     treasuryStatus: str(stateByRound.get(lastRound)?.treasury_status, 'sain'),
     group,
     das,
