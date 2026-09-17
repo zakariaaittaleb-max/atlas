@@ -99,6 +99,14 @@ export async function POST(request: Request) {
 
   try {
     // --- 3. Instantané et calcul -------------------------------------------
+    // Le marché de cession ferme avec le tour : une annonce sans preneur
+    // expire, et le DAS redevient simplement actif. Les opérations conclues
+    // en cours de tour, elles, sont déjà écrites.
+    const { error: marketError } = await admin.rpc('atlas_close_deal_market', {
+      p_session_id: sessionId,
+    });
+    if (marketError) throw new Error(`Clôture du marché de cession : ${marketError.message}`);
+
     const { input, params, poolByTeam } = await loadResolutionSnapshot(
       admin,
       sessionId,

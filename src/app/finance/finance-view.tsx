@@ -156,7 +156,13 @@ export function FinanceView({
             <StatCard
               label={t('fin.openingCash')}
               value={formatMadCompact(context.treasuryMad)}
-              note={t(`fin.status.${treasuryLevel}` as MessageKey)}
+              note={
+                context.dealCashMad !== 0
+                  ? `${t(`fin.status.${treasuryLevel}` as MessageKey)} · ${t('fin.dealCash', {
+                      amount: `${context.dealCashMad > 0 ? '+' : '−'}${formatMadCompact(Math.abs(context.dealCashMad))}`,
+                    })}`
+                  : t(`fin.status.${treasuryLevel}` as MessageKey)
+              }
               hint={t(`fin.statusHint.${treasuryLevel}` as MessageKey)}
             />
             <StatCard

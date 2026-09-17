@@ -1703,7 +1703,7 @@ export function resolveRound(
         debtMad: team.finance.debtOutstandingMad,
         equityMad: team.finance.equityMad,
         taxRegime: team.finance.taxRegime,
-        capexMad: capexMad + structureTransitionCostMad,
+        capexMad: capexMad + structureTransitionCostMad + (team.finance.dealInvestmentMad ?? 0),
         treasuryStartMad: team.finance.treasuryStartMad,
         workingCapitalDays,
         previousWorkingCapitalMad: team.finance.previousWorkingCapitalMad,
@@ -1720,7 +1720,9 @@ export function resolveRound(
         // la war room propose. Le coût était calculé puis jamais débité.
         divestitureCashMad:
           revenueMad * weightedShock((s) => s.subsidyPctOfRevenue) -
-          team.shockResponses.reduce((acc, r) => acc + r.costMad, 0),
+          team.shockResponses.reduce((acc, r) => acc + r.costMad, 0) +
+          // Le produit des cessions conclues en cours de tour.
+          (team.finance.dealProceedsMad ?? 0),
         rateDelta: weightedShock((s) => s.rateDelta),
         // La marge d'océan bleu se calcule PAR DOMAINE : la fenêtre s'ouvre
         // sur un métier, pas sur le groupe. Un pourcentage global l'aurait

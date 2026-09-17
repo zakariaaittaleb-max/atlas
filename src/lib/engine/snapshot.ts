@@ -339,6 +339,13 @@ export interface FinanceSnapshot {
   /** Résultat de l'exercice clos : l'assiette du dividende voté ce tour. */
   previousNetIncomeMad?: number;
   previousDividendMad?: number;
+  /**
+   * Cessions et acquisitions CONCLUES en cours de tour (migration 0050). Le
+   * produit d'une cession entre en trésorerie ; un rachat, prix et budget
+   * d'intégration compris, est un investissement. Absents : aucune opération.
+   */
+  dealProceedsMad?: number;
+  dealInvestmentMad?: number;
 }
 
 export interface TeamSnapshot {
