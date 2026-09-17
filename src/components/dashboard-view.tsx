@@ -768,7 +768,7 @@ function Alignment({ context }: { context: DashboardContext }) {
           trend={group.map((p) => p.iaScore)}
         />
         <div
-          className={`flex gap-3 rounded-xl p-5 lg:col-span-2 ${
+          className={`flex gap-3 rounded-xl p-5 lg:col-span-2 lg:row-span-3 ${
             alert ? 'bg-(--warning-subtle) text-(--foreground)' : 'border border-(--border) bg-(--surface)'
           }`}
         >

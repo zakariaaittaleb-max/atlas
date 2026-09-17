@@ -11,12 +11,13 @@ import 'server-only';
  *   • un acheteur NON JOUEUR, dont l'offre est calculée par le moteur et reste
  *     PRIVÉE au vendeur — c'est un plancher de liquidité, structurellement
  *     inférieur à ce qu'un concurrent rationnel proposerait ;
- *   • une enchère SCELLÉE entre équipes du pool, qui ne voient qu'une fiche
- *     limitée et ne connaissent ni l'offre NPC ni les offres des autres.
+ *   • des offres d'équipes du pool, scellées entre elles : chacune ne voit
+ *     qu'une fiche limitée et ignore l'offre NPC comme celles des autres.
  *
- * Le vendeur arrête son choix EN AVEUGLE, avant le verrouillage du tour :
- * préférer la liquidité certaine du NPC, ou parier sur le marché. C'est là
- * qu'est l'arbitrage.
+ * Le vendeur voit les montants et CONCLUT quand il le décide, en cours de tour
+ * (migration 0050) : prendre tout de suite la liquidité certaine du NPC, ou
+ * attendre une meilleure offre qui peut ne jamais venir. C'est là qu'est
+ * l'arbitrage. Une annonce sans preneur expire à la résolution.
  */
 
 import { dasBaseValuation, npcOffer } from '@/lib/engine/finance';

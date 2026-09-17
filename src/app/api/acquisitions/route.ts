@@ -15,6 +15,12 @@
  *
  * Croître vite et cher, ou lentement et bien : c'est la question, et elle n'a
  * pas de bonne réponse universelle.
+ *
+ * ── EN COURS DE TOUR ───────────────────────────────────────────────────────
+ * L'offre est tranchée sur-le-champ, contre le prix de réserve : acceptée, la
+ * cible est à l'équipe et l'argent sort aussitôt ; refusée, l'équipe ne peut
+ * plus la retenter du tour — sinon le prix de réserve se trouverait par essais
+ * successifs.
  * ───────────────────────────────────────────────────────────────────────────
  */
 
@@ -23,18 +29,19 @@ import { z } from 'zod';
 
 import { decisionsAreOpen, getRoundState, getTeamContext } from '@/lib/dal';
 import { isOn } from '@/lib/modules-state';
+import { acquisitionOutcome, dealErrorMessage, loadTargetTerms } from '@/lib/server/deals';
+import { engineParamsFrom } from '@/lib/server/divest';
 import { loadEnabledModules } from '@/lib/server/modules';
 import { createAdminClient } from '@/lib/supabase/server';
 
-const Payload = z.discriminatedUnion('action', [
-  z.object({
-    action: z.literal('bid'),
-    targetActorId: z.string().uuid(),
-    offerMad: z.number().positive().finite().transform(Math.round),
-    integrationBudgetMad: z.number().min(0).finite().transform(Math.round),
-  }),
-  z.object({ action: z.literal('withdraw'), targetActorId: z.string().uuid() }),
-]);
+// Une offre FERME : acceptée sur-le-champ si elle atteint le prix de réserve,
+// refusée sinon. Il n'y a plus d'offre en attente à retirer.
+const Payload = z.object({
+  action: z.literal('bid'),
+  targetActorId: z.string().uuid(),
+  offerMad: z.number().positive().finite().transform(Math.round),
+  integrationBudgetMad: z.number().min(0).finite().transform(Math.round),
+});
 
 export async function POST(request: Request) {
   const team = await getTeamContext();
@@ -59,15 +66,6 @@ export async function POST(request: Request) {
   const roundNumber = (round?.current_round as number) ?? 0;
   const admin = createAdminClient();
   const body = parsed.data;
-
-  if (body.action === 'withdraw') {
-    await admin.from('acquisition_offers')
-      .update({ status: 'withdrawn' })
-      .eq('bidder_team_id', team.teamId)
-      .eq('target_actor_id', body.targetActorId)
-      .eq('round_number', roundNumber);
-    return NextResponse.json({ ok: true, withdrawn: true });
-  }
 
   // La cible doit exister, appartenir à la session, et être acquérable.
   const { data: target } = await admin
@@ -166,23 +164,37 @@ export async function POST(request: Request) {
     }
   }
 
-  const { error } = await admin.from('acquisition_offers').upsert(
-    {
-      session_id: team.sessionId,
-      bidder_team_id: team.teamId,
-      target_actor_id: body.targetActorId,
-      das_id: target.das_id,
-      operation,
-      round_number: roundNumber,
-      offer_mad: body.offerMad,
-      integration_budget_mad: body.integrationBudgetMad,
-      status: 'sealed',
-    },
-    { onConflict: 'bidder_team_id,target_actor_id,round_number' },
+  const [terms, { data: paramRows }] = await Promise.all([
+    loadTargetTerms(admin, team.sessionId, body.targetActorId, roundNumber),
+    admin.from('engine_parameters').select('key, value').eq('session_id', team.sessionId),
+  ]);
+  if (!terms) {
+    return NextResponse.json({ error: 'Cible introuvable.' }, { status: 404 });
+  }
+
+  const outcome = acquisitionOutcome(
+    terms, body.offerMad, body.integrationBudgetMad,
+    engineParamsFrom(paramRows as { key: string; value: number }[] | null),
   );
 
+  const { data: result, error } = await admin.rpc('atlas_settle_acquisition', {
+    p_session_id: team.sessionId,
+    p_team_id: team.teamId,
+    p_target_actor_id: body.targetActorId,
+    p_round: roundNumber,
+    p_offer_mad: body.offerMad,
+    p_integration_mad: body.integrationBudgetMad,
+    p_reserve_mad: outcome.reserveMad,
+    p_value_loss_pct: outcome.valueLossPct,
+    p_share_acquired: outcome.shareAcquired,
+    p_revenue_acquired: outcome.revenueAcquired,
+    p_capacity_acquired: outcome.capacityAcquired,
+    p_notoriety_acquired: outcome.notorietyAcquired,
+    p_quality_acquired: outcome.qualityAcquired,
+  });
+
   if (error) {
-    return NextResponse.json({ error: `Offre refusée : ${error.message}` }, { status: 500 });
+    return NextResponse.json({ error: dealErrorMessage(error.message) }, { status: 409 });
   }
 
   await admin.from('decisions_log').insert({
@@ -190,9 +202,10 @@ export async function POST(request: Request) {
     payload: {
       targetActorId: body.targetActorId, dasId: target.das_id, operation,
       offerMad: body.offerMad, integrationBudgetMad: body.integrationBudgetMad,
+      outcome: result,
     },
     decided_by: team.userId,
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, outcome: result });
 }

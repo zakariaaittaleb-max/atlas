@@ -28,6 +28,7 @@
 import { CircleCheck, RotateCcw, TriangleAlert } from 'lucide-react';
 
 import { useDasScope } from '@/components/das-scope';
+import { useT } from '@/components/i18n-provider';
 import { DasDot } from '@/components/ui/das-dot';
 import { GroupLegend } from '@/components/ui/form-controls';
 import { InfoHint } from '@/components/ui/info-hint';
@@ -61,6 +62,7 @@ export function CashPooling({
   onChange: (next: Transfer[]) => void;
 }) {
   const { das: options } = useDasScope();
+  const t = useT();
   const vitalsOf = (dasId: string) => options.find((o) => o.dasId === dasId)?.vitals ?? null;
 
   const baseMad = Math.max(treasuryMad, 0);
@@ -84,33 +86,25 @@ export function CashPooling({
 
   return (
     <fieldset disabled={disabled || baseMad <= 0} className="mt-8 border-t border-(--border) pt-6">
-      <GroupLegend title="Répartir la trésorerie entre vos domaines">
-        Prendre là où l’argent dort pour le mettre là où il pousse. Un domaine ponctionné paie ses
-        fournisseurs plus tard et <strong>perd en compétitivité</strong> ; celui qui reçoit ne
-        gagne rien de lui-même — c’est ce que vous en investirez qui produira.
-      </GroupLegend>
+      <GroupLegend title={t('pool.legend')}>{t('pool.legendText')}</GroupLegend>
 
       {baseMad <= 0 ? (
         <p className="mt-2 text-sm text-(--foreground-muted)">
-          Aucune trésorerie d’ouverture à répartir ce tour.
+          {t('pool.noCash')}
         </p>
       ) : (
         <>
           <p className="tabular mt-1 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
             <span>
-              <span className="text-(--foreground-muted)">Trésorerie d’ouverture </span>
+              <span className="text-(--foreground-muted)">{t('fin.openingCash')} </span>
               <strong className="font-mono font-semibold">{formatMadCompact(baseMad)}</strong>
             </span>
             <span>
-              <span className="text-(--foreground-muted)">Déplacé entre domaines </span>
+              <span className="text-(--foreground-muted)">{t('pool.moved')} </span>
               <strong className="font-mono font-semibold">{formatMadCompact(movedMad)}</strong>
             </span>
-            <InfoHint label="Répartition de référence">
-              {byRevenue
-                ? 'La référence répartit la trésorerie au prorata du chiffre d’affaires de chaque domaine au dernier exercice clos. '
-                : 'Sans chiffre d’affaires encore connu, la référence répartit la trésorerie à parts égales. '}
-              S’en écarter déplace de l’argent : ce qu’un domaine reçoit, un autre le cède, et le total
-              reste à 100 %.
+            <InfoHint label={t('pool.refTitle')}>
+              {byRevenue ? t('pool.refRevenue') : t('pool.refEqual')}{' '}{t('pool.refTail')}
             </InfoHint>
           </p>
 
@@ -118,9 +112,9 @@ export function CashPooling({
               ce que l'équipe en fait. Les chiffres sont portés par les lignes
               ci-dessous — les barres ne sont qu'une image. */}
           <div aria-hidden className="mt-4 grid grid-cols-[6.5rem_1fr] items-center gap-x-3 gap-y-2 text-sm">
-            <span className="text-(--foreground-muted)">Référence</span>
+            <span className="text-(--foreground-muted)">{t('pool.reference')}</span>
             <AllocationBar das={das} shares={reference} thin />
-            <span className="font-medium">Votre choix</span>
+            <span className="font-medium">{t('pool.yourChoice')}</span>
             <AllocationBar das={das} shares={shares} />
           </div>
 
@@ -147,17 +141,17 @@ export function CashPooling({
                     </p>
                     <dl className="tabular mt-2 grid grid-cols-3 gap-2 text-sm">
                       <div>
-                        <dt className="text-(--foreground-muted)">Chiffre d’affaires</dt>
+                        <dt className="text-(--foreground-muted)">{t('pool.revenue')}</dt>
                         <dd className="font-mono font-semibold">{formatMadCompact(vitals?.revenueMad)}</dd>
                       </div>
                       <div>
-                        <dt className="text-(--foreground-muted)">Croissance</dt>
+                        <dt className="text-(--foreground-muted)">{t('das.growth')}</dt>
                         <dd className={`font-mono font-semibold ${growthTone ? TONE_CLASS[growthTone] : ''}`}>
                           {formatSignedPct(vitals?.growth)}
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-(--foreground-muted)">Marge</dt>
+                        <dt className="text-(--foreground-muted)">{t('das.margin')}</dt>
                         <dd className={`font-mono font-semibold ${marginTone ? TONE_CLASS[marginTone] : ''}`}>
                           {formatPct(vitals?.margin)}
                         </dd>
@@ -168,7 +162,7 @@ export function CashPooling({
                   <div className="min-w-0">
                     <div className="flex items-center gap-3">
                       <label htmlFor={sliderId} className="sr-only">
-                        Part de la trésorerie pour {d.name}
+                        {t('pool.sliderLabel', { name: d.name })}
                       </label>
                       <input
                         id={sliderId}
@@ -182,7 +176,7 @@ export function CashPooling({
                         className="min-w-0 flex-1 accent-(--accent)"
                       />
                       <label htmlFor={pctId} className="sr-only">
-                        Part de {d.name}, en pourcentage
+                        {t('pool.pctLabel', { name: d.name })}
                       </label>
                       <span className="flex items-center gap-1">
                         <input
@@ -206,14 +200,14 @@ export function CashPooling({
                     <p className="tabular mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">
                       <span>
                         <strong className="font-mono font-semibold">{formatMadCompact(share * baseMad)}</strong>
-                        <span className="text-(--foreground-muted)"> · référence {formatPct(reference[i])}</span>
+                        <span className="text-(--foreground-muted)"> · {t('pool.referencePct', { pct: formatPct(reference[i]) })}</span>
                       </span>
                       {transfer > 0 ? (
-                        <span className="font-medium text-(--positive)">↑ reçoit {formatMadCompact(transfer)}</span>
+                        <span className="font-medium text-(--positive)">{t('pool.receives', { amount: formatMadCompact(transfer) })}</span>
                       ) : transfer < 0 ? (
-                        <span className="font-medium text-(--warning)">↓ cède {formatMadCompact(-transfer)}</span>
+                        <span className="font-medium text-(--warning)">{t('pool.gives', { amount: formatMadCompact(-transfer) })}</span>
                       ) : (
-                        <span className="text-(--foreground-muted)">aucun mouvement</span>
+                        <span className="text-(--foreground-muted)">{t('pool.noMove')}</span>
                       )}
                     </p>
                   </div>
@@ -234,8 +228,8 @@ export function CashPooling({
                 <TriangleAlert aria-hidden className="h-4 w-4" />
               )}
               {balanced
-                ? 'Total à 100 % : ce que les uns reçoivent, les autres le cèdent.'
-                : `Déséquilibre de ${formatMadCompact(solde)} : déplacez une part pour rééquilibrer.`}
+                ? t('pool.balanced')
+                : t('pool.unbalanced', { amount: formatMadCompact(solde) })}
             </p>
             <button
               type="button"
@@ -244,7 +238,7 @@ export function CashPooling({
               className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-(--border) px-3 text-sm font-medium enabled:hover:border-(--accent) disabled:opacity-40"
             >
               <RotateCcw aria-hidden className="h-4 w-4" />
-              Revenir à la référence
+              {t('pool.reset')}
             </button>
           </div>
         </>

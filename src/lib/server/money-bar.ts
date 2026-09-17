@@ -62,6 +62,11 @@ export async function loadMoneyBar(): Promise<MoneyBar | null> {
         .eq('team_id', team.teamId).lte('round_number', roundNumber),
     ]);
 
+  // Cessions et rachats conclus ce tour : l'argent a déjà changé de mains.
+  const { data: deals } = await supabase.from('deal_cash_movements').select('amount_mad')
+    .eq('team_id', team.teamId).eq('round_number', roundNumber);
+  const dealCashMad = (deals ?? []).reduce((acc, d) => acc + num(d.amount_mad), 0);
+
   const budgets = (budget ?? []) as Record<string, unknown>[];
   /** Le dernier budget connu : il porte l'ÉTAT — dette en cours, frais de siège. */
   const lastBudget = budgets.at(-1) ?? null;
@@ -73,7 +78,7 @@ export async function loadMoneyBar(): Promise<MoneyBar | null> {
   // Ce dont on dispose : la trésorerie de clôture du dernier exercice, plus le
   // crédit pris ce tour. Un tirage augmente réellement la capacité à engager —
   // l'omettre ferait apparaître un dépassement fictif.
-  const availableMad = num(pnl?.treasury_end_mad) + drawnThisRoundMad;
+  const availableMad = num(pnl?.treasury_end_mad) + drawnThisRoundMad + dealCashMad;
 
   // Les salaires sont un engagement du tour au même titre qu'un investissement :
   // les omettre faisait apparaître « 0 DH engagé » à une équipe qui payait
@@ -106,5 +111,6 @@ export async function loadMoneyBar(): Promise<MoneyBar | null> {
     dasEngagedMad,
     debtOutstandingMad: num(lastBudget?.debt_outstanding_mad),
     drawnThisRoundMad,
+    dealCashMad,
   };
 }

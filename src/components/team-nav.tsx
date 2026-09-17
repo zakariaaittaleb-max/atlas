@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 
 import { DasSwitcher } from '@/components/das-scope';
 import { GlossaryButton } from '@/components/glossary-modal';
+import { MarketSync } from '@/components/market-sync';
 import { PresenceBar } from '@/components/presence-bar';
 import { SidebarNav, type NavGroup } from '@/components/sidebar-nav';
 import { TeamChrome } from '@/components/team-chrome';
@@ -196,6 +197,7 @@ export async function TeamShell({ children }: { children: React.ReactNode }) {
             <span className="ms-auto flex items-center gap-3 self-center">
               {/* Sur téléphone, on consulte : la présence s'efface derrière les chiffres. */}
               {presence ? <span className="max-sm:hidden"><PresenceBar context={presence} /></span> : null}
+              {presence ? <MarketSync sessionId={presence.sessionId} teamId={presence.teamId} /> : null}
               <LanguageSwitcher />
               <GlossaryButton />
               <ThemeToggle initial={themeChoice} />

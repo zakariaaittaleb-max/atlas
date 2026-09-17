@@ -33,11 +33,13 @@ import { useCallback, useState } from 'react';
 import {
   BudgetGauge, DecisionBar, SectionActions, type MissingDecision,
 } from '@/components/decision-shell';
+import { useT } from '@/components/i18n-provider';
 import { Term } from '@/components/term';
 import { Accordion } from '@/components/ui/accordion';
 import { InfoHint } from '@/components/ui/info-hint';
 import { StatCard } from '@/components/ui/stat-card';
 import { formatMadCompact } from '@/lib/format';
+import type { MessageKey } from '@/lib/i18n/messages';
 import type { DecisionContext, FinanceValues } from '@/lib/decision-types';
 import { deepEqual } from '@/lib/deep-equal';
 import type { MoneyBar, ResultsContext } from '@/lib/results-types';
@@ -62,22 +64,8 @@ const FINANCE_FIELDS = [
     + 'Un siège se dégraisse, il ne se supprime pas : sous un plancher, la charge revient.'],
 ] as const satisfies readonly (readonly [string, 'opexMad', string, string, string])[];
 
-/** Les quatre paliers de détresse de trésorerie (doc 02 §10.2). */
-const TREASURY_STATUS: Record<string, { label: string; hint: string }> = {
-  sain: { label: 'Statut : sain', hint: 'Aucun tour consécutif en trésorerie négative.' },
-  surveillance: {
-    label: 'Statut : surveillance',
-    hint: 'Trésorerie négative depuis un tour. Persister dégrade votre compétitivité et l’attractivité que vous présentez aux investisseurs.',
-  },
-  restructuration: {
-    label: 'Statut : restructuration',
-    hint: 'Trésorerie négative depuis plusieurs tours : le malus de compétitivité s’alourdit, et la banque comme les investisseurs vous jugent plus durement.',
-  },
-  liquidation: {
-    label: 'Statut : liquidation',
-    hint: 'Le palier le plus sévère : l’équipe risque la liquidation si la trésorerie ne se redresse pas.',
-  },
-};
+/** Les quatre paliers de détresse de trésorerie (doc 02 §10.2) : `fin.status.*` et `fin.statusHint.*`. */
+const TREASURY_LEVELS = ['sain', 'surveillance', 'restructuration', 'liquidation'] as const;
 
 /** Les montants qui se saisissent en valeur, bornés par un fait et non par un écart. */
 const MONEY_FIELDS = [
@@ -106,6 +94,8 @@ export function FinanceView({
   const router = useRouter();
   const autosave = useAutosave();
   const locked = !context.decisionsOpen;
+  const t = useT();
+  const treasuryLevel = (TREASURY_LEVELS as readonly string[]).includes(context.treasuryStatus) ? context.treasuryStatus : 'sain';
 
   const [finance, setFinance] = useState<FinanceValues>(context.finance);
 
@@ -139,28 +129,24 @@ export function FinanceView({
   // la trésorerie du groupe sans en créer ni en consommer. Leur coût est une
   // perte de compétitivité sur le domaine ponctionné, pas une sortie de cash.
 
-  const activeLevers = [...leverStates(levers, finance, context.financeLimits, context.das.length).values()]
+  const activeLevers = [...leverStates(levers, finance, context.financeLimits, context.das.length, t).values()]
     .filter((state) => state.status === 'active').length;
 
   const creditSummary =
-    finance.netCreditMad > 0 ? `tirage ${formatMadCompact(finance.netCreditMad)}`
-    : finance.netCreditMad < 0 ? `remboursement ${formatMadCompact(-finance.netCreditMad)}`
-    : 'aucun mouvement de dette';
+    finance.netCreditMad > 0 ? t('fin.creditDraw', { amount: formatMadCompact(finance.netCreditMad) })
+    : finance.netCreditMad < 0 ? t('fin.creditRepay', { amount: formatMadCompact(-finance.netCreditMad) })
+    : t('fin.creditNone');
 
   return (
     <>
       <main className="mx-auto w-full min-w-0 max-w-5xl px-6 py-8 lg:py-10">
         <header className="mb-6">
           <p className="text-xs font-semibold tracking-wider text-(--accent-text) uppercase">
-            Tour {context.roundNumber} · niveau Groupe
+            {t('strat.eyebrowGroup', { n: context.roundNumber })}
           </p>
           <h1 className="mt-1 flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight text-(--heading)">
-            Finance du Groupe
-            <InfoHint label="Finance du Groupe">
-              Cet écran ne porte que des décisions de niveau Groupe : elles valent pour tous vos
-              domaines à la fois. Ce qui se décide domaine par domaine — stratégie,
-              investissements, recrutement — se saisit sur les écrans dédiés.
-            </InfoHint>
+            {t('nav.link./finance')}
+            <InfoHint label={t('nav.link./finance')}>{t('fin.intro')}</InfoHint>
           </h1>
         </header>
 
@@ -168,50 +154,53 @@ export function FinanceView({
           {/* ── Les chiffres qui commandent le tour ───────────────────────── */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <StatCard
-              label="Trésorerie d’ouverture"
+              label={t('fin.openingCash')}
               value={formatMadCompact(context.treasuryMad)}
-              note={TREASURY_STATUS[context.treasuryStatus].label}
-              hint={TREASURY_STATUS[context.treasuryStatus].hint}
+              note={
+                context.dealCashMad !== 0
+                  ? `${t(`fin.status.${treasuryLevel}` as MessageKey)} · ${t('fin.dealCash', {
+                      amount: `${context.dealCashMad > 0 ? '+' : '−'}${formatMadCompact(Math.abs(context.dealCashMad))}`,
+                    })}`
+                  : t(`fin.status.${treasuryLevel}` as MessageKey)
+              }
+              hint={t(`fin.statusHint.${treasuryLevel}` as MessageKey)}
             />
             <StatCard
-              label="Engagé ce tour"
+              label={t('money.engaged')}
               value={formatMadCompact(engaged)}
               note={
                 engaged > available
-                  ? `Dépassement de ${formatMadCompact(engaged - available)}`
-                  : `Sur ${formatMadCompact(available)} disponibles`
+                  ? t('fin.over', { amount: formatMadCompact(engaged - available) })
+                  : t('fin.of', { amount: formatMadCompact(available) })
               }
-              hint="Engagements des domaines, masse salariale, formation, siège, remboursements et dividende. Les transferts entre domaines n’y entrent pas : ils déplacent la trésorerie sans en consommer."
+              hint={t('fin.engagedHint')}
             />
             <StatCard
-              label="Résultat net"
+              label={t('fin.netIncome')}
               value={results.group ? formatMadCompact(results.group.netIncomeMad) : '—'}
-              note={results.group ? `Exercice ${results.roundNumber}` : 'Aucun exercice clos'}
+              note={results.group ? t('fin.year', { n: results.roundNumber ?? 0 }) : t('fin.noYear')}
             />
             <StatCard
-              label="Capacité d’endettement"
+              label={t('fin.debtCapacity')}
               value={formatMadCompact(context.financeLimits.capacityAvailableMad)}
               note={
                 context.debtOutstandingMad > 0
-                  ? `Encours ${formatMadCompact(context.debtOutstandingMad)}`
-                  : 'Aucune dette en cours'
+                  ? t('fin.outstanding', { amount: formatMadCompact(context.debtOutstandingMad) })
+                  : t('fin.noDebt')
               }
-              hint="Ce que la banque prêterait encore : le plus contraignant de deux fois vos fonds propres et de 40 % de votre activité, moins l’encours."
+              hint={t('fin.debtHint')}
             />
             <StatCard
-              label="Attractivité investisseurs"
+              label={t('fin.investors')}
               value={context.financeLimits.investorScore === null ? '—' : `${Math.round(context.financeLimits.investorScore)} / 100`}
               note={
                 context.financeLimits.investorScore === null
-                  ? 'Aucune résolution encore publiée'
-                  : `Frais de levée : ${(context.financeLimits.equityIssueCostPct * 100).toFixed(1).replace('.', ',')} %`
+                  ? t('fin.noResolution')
+                  : t('fin.raiseFees', { pct: (context.financeLimits.equityIssueCostPct * 100).toFixed(1).replace('.', ',') })
               }
               hint={
                 <>
-                  Ce que le marché des capitaux pense de vous : rentabilité, croissance, solidité,
-                  politique de dividende et cohérence stratégique, avec mémoire du tour précédent.
-                  Fixe, ce tour, le coût et le plafond d’une levée de fonds propres et la prime de
-                  risque bancaire.
+                  {t('fin.investorsHint')}
                   {context.financeLimits.investorComponents ? (
                     <span className="mt-2 block space-y-1">
                       {context.financeLimits.investorComponents.map((c) => (
@@ -227,25 +216,25 @@ export function FinanceView({
           </div>
 
           <BudgetGauge
-            label="Charges et remboursements engagés ce tour"
+            label={t('fin.gauge')}
             allocated={engaged}
             available={available}
           />
 
           {/* Les résultats AVANT les décisions. */}
           <Accordion
-            title="Vos résultats"
-            summary={results.group ? `résultat net ${formatMadCompact(results.group.netIncomeMad)}` : 'aucun exercice clos'}
-            hint="Les termes sont ceux de la discipline — ceux que vous emploierez en soutenance et que vous retrouverez dans un manuel. Survolez-en un pour sa définition et un exemple chiffré."
+            title={t('fin.results')}
+            summary={results.group ? t('fin.resultsSummary', { amount: formatMadCompact(results.group.netIncomeMad) }) : t('fin.noYearLower')}
+            hint={t('fin.resultsHint')}
           >
             <ResultsSection results={results} />
           </Accordion>
 
           {results.group ? (
             <Accordion
-              title="Indicateurs financiers"
-              summary={`flux libre ${formatMadCompact(results.group.freeCashFlowMad)}`}
-              hint="Les grandeurs sur lesquelles un comité de crédit et un actionnaire vous jugeront. Le « + » de chaque ligne montre son calcul avec vos propres chiffres."
+              title={t('fin.indicators')}
+              summary={t('fin.fcfSummary', { amount: formatMadCompact(results.group.freeCashFlowMad) })}
+              hint={t('fin.indicatorsHint')}
             >
               <IndicatorsSection group={results.group} limits={context.financeLimits} />
             </Accordion>
@@ -254,10 +243,10 @@ export function FinanceView({
           {/* ── Les leviers, juste avant les champs qui les actionnent ────── */}
           {levers.length > 0 ? (
             <Accordion
-              title="Leviers financiers du Groupe"
+              title={t('fin.levers')}
               defaultOpen
-              summary={`${activeLevers} actionné${activeLevers > 1 ? 's' : ''} sur ${levers.length}`}
-              hint="Six façons de faire travailler l’argent du groupe. Chaque carte dit si le levier est joué ce tour, s’il est jouable, et mène au champ qui l’actionne. Sa fiche — bénéfice, risque majeur, mécanisme — est sous son « + »."
+              summary={t('fin.leversActive', { count: activeLevers, total: levers.length })}
+              hint={t('fin.leversHint')}
             >
               <LeversSection
                 levers={levers}
@@ -271,21 +260,21 @@ export function FinanceView({
           {/* ── Plan 7 : finance ──────────────────────────────────────────── */}
           {screenIsOpen(modules, 'finance') ? (
             <Accordion
-              title="Vos décisions financières"
+              title={t('fin.decisions')}
               indicators={{ topic: 'finance-decisions' }}
               anchor="finance-decisions"
               defaultOpen
               summary={creditSummary}
-              hint="Décisions de niveau Groupe, valables pour tous vos domaines. Une équipe déficitaire paie tout de même la cotisation minimale de 0,25 % du chiffre d’affaires : perdre de l’argent tranquillement n’est pas une stratégie."
+              hint={t('fin.decisionsHint')}
             >
               <fieldset disabled={locked} className="grid gap-8 sm:grid-cols-2">
-                <legend className="sr-only">Vos décisions financières</legend>
+                <legend className="sr-only">{t('fin.decisions')}</legend>
                 {FINANCE_FIELDS.filter(([key]) => isOn(modules, key)).map(
-                  ([key, field, family, label, hint]) => (
+                  ([key, field, family]) => (
                     <VariationField
                       key={key}
-                      label={label}
-                      hint={hint}
+                      label={t('fin.opex.label')}
+                      hint={t('fin.opex.hint')}
                       value={finance[field]}
                       reference={referenceOf(
                         context.financeBaseline[field],
@@ -324,9 +313,11 @@ export function FinanceView({
 
               {MONEY_FIELDS.some(([key]) => isOn(modules, key)) ? (
                 <fieldset disabled={locked} className="mt-8 grid gap-8 border-t border-(--border) pt-6 sm:grid-cols-2">
-                  <legend className="sr-only">Fonds propres et dividende</legend>
+                  <legend className="sr-only">{t('fin.equityLegend')}</legend>
                   {MONEY_FIELDS.filter(([key]) => isOn(modules, key)).map(
-                    ([key, field, label, hint]) => {
+                    ([key, field]) => {
+                      const label = t(`fin.${field}.label` as MessageKey);
+                      const hint = t(`fin.${field}.hint` as MessageKey);
                       const ceiling =
                         field === 'dividendMad' ? context.financeLimits.dividendCeilingMad
                         : field === 'capitalRaisedMad' ? context.financeLimits.equityRaiseCapMad
@@ -365,17 +356,17 @@ export function FinanceView({
                             <p className="tabular mt-1.5 mb-0 text-xs text-(--foreground-muted)">
                               {formatMadCompact(finance[field])}
                               {field === 'capitalRaisedMad'
-                                ? ` · ${formatMadCompact(finance[field] * context.financeLimits.equityIssueCostPct)} de frais`
+                                ? ` · ${t('fin.fees', { amount: formatMadCompact(finance[field] * context.financeLimits.equityIssueCostPct) })}`
                                 : ''}
                             </p>
                           ) : null}
                           {ceiling !== null ? (
                             <p className="tabular mt-1.5 mb-0 text-xs text-(--foreground-muted)">
                               {field === 'capitalRaisedMad'
-                                ? `Plafond : ${formatMadCompact(ceiling)} · ${(context.financeLimits.equityIssueCostPct * 100).toFixed(1).replace('.', ',')} % de frais d’émission, ce que les investisseurs souscrivent au vu de votre attractivité`
+                                ? t('fin.capitalCeiling', { amount: formatMadCompact(ceiling), pct: (context.financeLimits.equityIssueCostPct * 100).toFixed(1).replace('.', ',') })
                                 : ceiling > 0
-                                  ? `Plafond : ${formatMadCompact(ceiling)}, le résultat du dernier exercice`
-                                  : 'Aucun résultat distribuable sur le dernier exercice'}
+                                  ? t('fin.dividendCeiling', { amount: formatMadCompact(ceiling) })
+                                  : t('fin.noDistributable')}
                             </p>
                           ) : null}
                         </div>
@@ -386,7 +377,7 @@ export function FinanceView({
               ) : null}
 
               <SectionActions
-                what="le budget du Groupe"
+                what={t('fin.validate')}
                 locked={locked}
                 changed={!deepEqual(finance, context.financeBaseline)}
                 recorded={context.financeRecorded}
@@ -406,9 +397,9 @@ export function FinanceView({
               Le titre porte les deux seuls qui engagent la trésorerie du tour ;
               le détail reste à un clic. */}
           <Accordion
-            title="Masse salariale consolidée"
-            summary={`${formatMadCompact(hr.payrollMad)} · ${hr.headcountEnd.toLocaleString('fr-FR')} pers.`}
-            hint="Somme de ce que vous avez décidé sur chaque domaine. Le recrutement se saisit là où il a un sens — dans Organisation & RH, avec le climat social et la charge de travail du domaine sous les yeux."
+            title={t('fin.payroll')}
+            summary={t('fin.payrollSummary', { amount: formatMadCompact(hr.payrollMad), people: hr.headcountEnd.toLocaleString('fr-FR') })}
+            hint={t('fin.payrollHint')}
           >
             <dl className="tabular grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <Stat term="Effectif de départ" value={hr.headcountStart.toLocaleString('fr-FR')} />
@@ -416,7 +407,7 @@ export function FinanceView({
                 term="Variation d'effectif"
                 value={
                   hr.hires === 0 && hr.layoffs === 0
-                    ? 'aucune'
+                    ? t('fin.noVariation')
                     : [
                         hr.hires > 0 ? `+${hr.hires.toLocaleString('fr-FR')}` : null,
                         hr.layoffs > 0 ? `−${hr.layoffs.toLocaleString('fr-FR')}` : null,
@@ -428,7 +419,7 @@ export function FinanceView({
               <Stat
                 term="Salaire brut moyen"
                 value={`${Math.round(hr.avgSalaryBrutMad).toLocaleString('fr-FR')} DH`}
-                note="Pondéré par l’effectif de chaque domaine."
+                note={t('fin.avgSalaryNote')}
               />
               <Stat term="Budget de formation" value={formatMadCompact(hr.trainingBudgetMad)} />
               <Stat
@@ -436,36 +427,35 @@ export function FinanceView({
                 value={formatMadCompact(
                   hr.payrollMad - hr.payrollMad / (1 + context.chargesPatronalesPct),
                 )}
-                note={`${(context.chargesPatronalesPct * 100).toFixed(2)} % du brut.`}
+                note={t('fin.chargesNote', { pct: (context.chargesPatronalesPct * 100).toFixed(2) })}
               />
               <Stat
                 term="SMIG"
                 value={`${context.smigMad.toLocaleString('fr-FR')} DH`}
-                note="SMIG mensuel, réappliqué côté serveur."
+                note={t('fin.smigNote')}
               />
             </dl>
 
             {hr.pendingDas.length > 0 ? (
               <p className="mt-4 rounded-lg bg-(--warning-subtle) px-4 py-3 text-sm">
-                Aucune décision RH ce tour sur{' '}
+                {t('fin.hrMissing')}{' '}
                 {hr.pendingDas.map((d, i) => (
                   <span key={d.dasId}>
-                    {i > 0 ? (i === hr.pendingDas.length - 1 ? ' et ' : ', ') : ''}
+                    {i > 0 ? (i === hr.pendingDas.length - 1 ? t('fin.and') : ', ') : ''}
                     <strong>{d.name}</strong>
                   </span>
                 ))}
                 .{' '}
                 <a href="/organisation" className="font-medium text-(--accent-text) underline">
-                  Ouvrir Organisation &amp; RH
+                  {t('fin.openOrg')}
                 </a>
-                <InfoHint label="Décision RH manquante" className="ml-2">
-                  Ne rien changer est un choix légitime, mais il doit être posé : ouvrez l’écran
-                  d’organisation pour le déclarer.
+                <InfoHint label={t('fin.hrMissingTitle')} className="ms-2">
+                  {t('fin.hrMissingHint')}
                 </InfoHint>
               </p>
             ) : (
               <p className="mt-4 text-sm text-(--foreground-muted)">
-                ✓ Tous vos domaines ont reçu une décision RH ce tour.
+                {t('fin.hrAllDone')}
               </p>
             )}
           </Accordion>

@@ -11,7 +11,7 @@ import { loadMoneyBar } from '@/lib/server/money-bar';
 import { createAdminClient, createServerClient } from '@/lib/supabase/server';
 
 import {
-  CessionView, type DueDiligence, type DueDiligenceFields, type IntegrationTarget, type OwnListing,
+  CessionView, type ConcludedDeal, type DueDiligence, type DueDiligenceFields, type IntegrationTarget,
   type PublicListing, type SellableDas,
 } from './cession-view';
 
@@ -39,7 +39,7 @@ export default async function CessionPage() {
     .order('round_number', { ascending: false });
 
   const [
-    { data: units }, { data: ownListings }, { data: interest },
+    { data: units }, { data: ownListings },
     { data: market }, { data: myBids }, { data: targets }, { data: myOffers },
     { data: links }, { data: segments },
   ] =
@@ -59,13 +59,12 @@ export default async function CessionPage() {
         .eq('seller_team_id', team.teamId)
         .eq('round_number', roundNumber)
         .eq('status', 'open'),
-      supabase.from('das_listing_interest').select('listing_id, bid_count'),
       // Annonces des concurrents : fiche publique uniquement, l'offre NPC en est
       // physiquement absente.
       supabase.from('das_listings_public').select('*').eq('round_number', roundNumber),
       supabase
         .from('das_bids')
-        .select('listing_id, offer_mad, integration_budget_mad')
+        .select('listing_id, offer_mad, integration_budget_mad, status')
         .eq('bidder_team_id', team.teamId)
         .eq('round_number', roundNumber),
       // Cibles acquérables : identité seulement. Leurs chiffres s'achètent en
@@ -85,9 +84,6 @@ export default async function CessionPage() {
       supabase.from('market_segments').select('das_id, name'),
     ]);
 
-  const interestByListing = new Map(
-    (interest ?? []).map((r) => [String(r.listing_id), Number(r.bid_count ?? 0)]),
-  );
   const listedDasIds = new Set((ownListings ?? []).map((l) => String(l.das_id)));
 
   const sellable: SellableDas[] = (units ?? [])
@@ -116,14 +112,37 @@ export default async function CessionPage() {
   // et ne quitte la page que fondu dans une fourchette de prix.
   const admin = createAdminClient();
   const [{ data: valuations }, { data: actors }, money, decision] = await Promise.all([
-    admin.from('strategic_units').select('id, valuation_multiple').eq('session_id', team.sessionId),
-    admin.from('ecosystem_actors').select('id, das_id, actor_type')
+    admin.from('strategic_units').select('id, name, valuation_multiple').eq('session_id', team.sessionId),
+    admin.from('ecosystem_actors').select('id, das_id, actor_type, name')
       .eq('session_id', team.sessionId)
       .in('actor_type', ['cible_acquisition', 'fournisseur', 'distributeur']),
     loadMoneyBar(),
     // Mémoïsé pour la requête : la navigation l'a déjà chargé.
     loadDecisionContext(),
   ]);
+  // Les offres REÇUES, montants compris : le vendeur conclut en les lisant.
+  // Lues avec la clé de service — la RLS réserve chaque offre à son auteur —
+  // et limitées aux annonces de l'équipe.
+  const ownListingIds = (ownListings ?? []).map((l) => String(l.id));
+  const [{ data: receivedBids }, { data: dealRows }] = await Promise.all([
+    admin.from('das_bids').select('id, listing_id, bidder_team_id, offer_mad')
+      .in('listing_id', ownListingIds.length > 0 ? ownListingIds : [crypto.randomUUID()])
+      .eq('status', 'sealed')
+      .order('offer_mad', { ascending: false }),
+    admin.from('deal_cash_movements')
+      .select('id, kind, amount_mad, das_id, counterparty_team_id, target_actor_id')
+      .eq('team_id', team.teamId).eq('round_number', roundNumber)
+      .order('created_at'),
+  ]);
+  const teamIdsToName = [...new Set([
+    ...(receivedBids ?? []).map((b) => String(b.bidder_team_id)),
+    ...(dealRows ?? []).filter((d) => d.counterparty_team_id).map((d) => String(d.counterparty_team_id)),
+  ])];
+  const { data: namedTeams } = await admin.from('teams').select('id, name')
+    .in('id', teamIdsToName.length > 0 ? teamIdsToName : [crypto.randomUUID()]);
+  const teamName = new Map((namedTeams ?? []).map((t) => [String(t.id), String(t.name)]));
+  const dasName = new Map((valuations ?? []).map((u) => [String(u.id), String(u.name)]));
+
   const multipleByDas = new Map(
     (valuations ?? []).map((u) => [String(u.id), Number(u.valuation_multiple ?? 5)]),
   );
@@ -166,11 +185,16 @@ export default async function CessionPage() {
         dasId: String(l.das_id),
         dasName: sellable.find((d) => d.dasId === String(l.das_id))?.name ?? 'DAS',
         npcOfferMad: Number(l.npc_offer_mad ?? 0),
-        sellerChoice: String(l.seller_choice) as OwnListing['sellerChoice'],
-        bidCount: interestByListing.get(String(l.id)) ?? 0,
+        bids: (receivedBids ?? [])
+          .filter((b) => String(b.listing_id) === String(l.id))
+          .map((b) => ({
+            bidId: String(b.id),
+            bidderTeamName: teamName.get(String(b.bidder_team_id)) ?? 'Équipe',
+            offerMad: Number(b.offer_mad),
+          })),
       }))}
       market={(market ?? []) as unknown as PublicListing[]}
-      myBids={(myBids ?? []).map((b) => ({
+      myBids={(myBids ?? []).filter((b) => String(b.status) === 'sealed').map((b) => ({
         listingId: String(b.listing_id),
         offerMad: Number(b.offer_mad),
         integrationBudgetMad: Number(b.integration_budget_mad),
@@ -211,13 +235,23 @@ export default async function CessionPage() {
           }),
         }))}
       myOffers={(myOffers ?? [])
-        .filter((o) => String(o.status) === 'sealed')
         .map((o) => ({
           targetActorId: String(o.target_actor_id),
+          status: String(o.status),
           offerMad: Number(o.offer_mad),
           integrationBudgetMad: Number(o.integration_budget_mad),
         }))}
       modules={modules}
+      deals={(dealRows ?? []).map((d) => ({
+        id: String(d.id),
+        kind: String(d.kind) as ConcludedDeal['kind'],
+        amountMad: Number(d.amount_mad),
+        dasName: d.das_id ? dasName.get(String(d.das_id)) ?? 'DAS' : 'DAS',
+        counterpartyName: d.counterparty_team_id ? teamName.get(String(d.counterparty_team_id)) ?? null : null,
+        targetName: d.target_actor_id
+          ? (actors ?? []).find((a) => String(a.id) === String(d.target_actor_id))?.name ?? null
+          : null,
+      }))}
       buyingPower={{
         remainingMad: money ? money.availableMad - money.engagedMad : 0,
         creditMad: decision.financeLimits.capacityAvailableMad,
