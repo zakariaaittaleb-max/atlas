@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { redirect } from "next/navigation";
 
 import { getTeamContext, getUser } from "@/lib/dal";
@@ -17,9 +18,9 @@ export default async function LoginPage() {
   return (
     <main className="flex min-h-full items-center justify-center px-6 py-16">
       <div className="w-full max-w-md">
-        <header className="mb-10">
-          <h1 className="text-4xl font-bold text-(--heading) tracking-tight">Atlas</h1>
-          <p className="mt-2 text-lg text-(--foreground-muted)">
+        <header className="mb-10 flex flex-col items-center text-center">
+          <Image src="/logo.png" alt="Atlas Business Game" width={140} height={139} priority />
+          <p className="mt-3 text-lg text-(--foreground-muted)">
             Simulateur de stratégie d’entreprise
           </p>
         </header>

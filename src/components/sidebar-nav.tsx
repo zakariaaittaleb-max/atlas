@@ -17,6 +17,7 @@ import {
   SlidersHorizontal,
   X,
 } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useRef, useState } from 'react';
@@ -83,7 +84,10 @@ export function SidebarNav(props: SidebarProps) {
           <Menu aria-hidden className="h-5 w-5" />
           {t('nav.menu')}
         </button>
-        <span className="truncate font-semibold text-(--heading)">Atlas · {props.teamName}</span>
+        <span className="flex items-center gap-1.5 truncate font-semibold text-(--heading)">
+          <Image src="/logo-mark.png" alt="" aria-hidden width={20} height={13} className="shrink-0" />
+          Atlas · {props.teamName}
+        </span>
         <StatusDot open={props.decisionsOpen} label={`${props.roundLabel} · ${props.statusLabel}`} compact />
       </div>
 
@@ -96,7 +100,10 @@ export function SidebarNav(props: SidebarProps) {
         className="m-0 h-dvh max-h-none w-[min(20rem,88vw)] max-w-none border-e border-(--border) bg-(--surface) p-0 text-(--foreground) backdrop:bg-black/40 open:flex open:flex-col lg:hidden"
       >
         <div className="flex items-center justify-between px-4 py-3">
-          <span className="font-semibold text-(--heading)">Atlas · {props.teamName}</span>
+          <span className="flex items-center gap-1.5 font-semibold text-(--heading)">
+            <Image src="/logo-mark.png" alt="" aria-hidden width={20} height={13} className="shrink-0" />
+            Atlas · {props.teamName}
+          </span>
           <button
             type="button"
             onClick={() => drawer.current?.close()}
@@ -117,9 +124,14 @@ export function SidebarNav(props: SidebarProps) {
       >
         <div className={`flex items-center gap-2 px-3 pt-4 pb-3 ${collapsed ? 'flex-col' : ''}`}>
           <div className={`min-w-0 flex-1 ${collapsed ? 'text-center' : 'px-2'}`}>
-            <p className="text-lg font-bold tracking-tight text-(--heading)">
-              {collapsed ? 'A' : 'Atlas'}
-            </p>
+            {collapsed ? (
+              <Image src="/logo-mark.png" alt="Atlas" width={28} height={19} className="mx-auto" />
+            ) : (
+              <div className="flex items-center gap-2">
+                <Image src="/logo-mark.png" alt="" aria-hidden width={28} height={19} className="shrink-0" />
+                <p className="text-lg font-bold tracking-tight text-(--heading)">Atlas</p>
+              </div>
+            )}
             {collapsed ? null : (
               <p className="truncate text-xs text-(--foreground-muted)">{props.teamName}</p>
             )}
