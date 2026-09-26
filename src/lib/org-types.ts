@@ -153,6 +153,11 @@ export interface DasOrganisation {
   };
   /** État RH du dernier exercice clos. `null` avant la première résolution. */
   hrState: DasHrState | null;
+  /**
+   * Assiette répartissable entre les directions DE CE DOMAINE : sa marge brute
+   * attendue, environ 30 % de son dernier chiffre d'affaires connu.
+   */
+  operatingBudgetMad: number;
 }
 
 /**
@@ -187,7 +192,7 @@ export interface OrgContext {
   kpis: KpiRef[];
   axes: AxisRef[];
   das: DasOrganisation[];
-  /** Marge brute attendue : l'assiette effectivement répartissable. */
+  /** Somme des assiettes des domaines — chaque domaine répartit la sienne. */
   operatingBudgetMad: number;
   headcount: number;
 }

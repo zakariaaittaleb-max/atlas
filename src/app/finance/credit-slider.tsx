@@ -25,6 +25,7 @@
 
 import { useId, useState } from 'react';
 
+import { useT } from '@/components/i18n-provider';
 import { InfoHint } from '@/components/ui/info-hint';
 import { formatMadCompact } from '@/lib/format';
 import type { FinanceLimits } from '@/lib/decision-types';
@@ -42,6 +43,7 @@ export function CreditSlider({
   onChange: (next: number) => void;
 }) {
   const id = useId();
+  const t = useT();
   // Planchers à zéro : une dette ou une capacité négative inversait les bornes
   // — la gauche passait au-dessus de la droite — et figeait le curseur.
   const debt = Math.max(limits.debtOutstandingMad, 0);
@@ -65,21 +67,21 @@ export function CreditSlider({
     setClipped(
       raw > max
         ? max > 0
-          ? `La banque s’arrête à ${formatMadCompact(max)} : montant ramené à ce plafond.`
-          : 'La banque ne prête rien en l’état : aucun tirage possible.'
+          ? t('credit.bankCap', { amount: formatMadCompact(max) })
+          : t('credit.bankNothing')
         : raw < min
           ? debt > 0
-            ? `Vous ne devez que ${formatMadCompact(debt)} : remboursement ramené à la dette.`
-            : 'Vous n’avez aucune dette à rembourser.'
+            ? t('credit.debtCap', { amount: formatMadCompact(debt) })
+            : t('credit.noDebt')
           : null,
     );
     onChange(next);
   }
 
   const verdict =
-    bounded > 0 ? `Vous tirez ${formatMadCompact(bounded)}`
-    : bounded < 0 ? `Vous remboursez ${formatMadCompact(-bounded)}`
-    : 'Aucun mouvement de dette';
+    bounded > 0 ? t('credit.draw', { amount: formatMadCompact(bounded) })
+    : bounded < 0 ? t('credit.repay', { amount: formatMadCompact(-bounded) })
+    : t('credit.none');
 
   const bloque = max <= 0;
 
@@ -87,36 +89,36 @@ export function CreditSlider({
     <div>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <span className="flex items-center gap-2">
-          <label htmlFor={id} className="text-sm font-medium">Crédit net du tour</label>
+          <label htmlFor={id} className="text-sm font-medium">{t('credit.label')}</label>
           {/* La capacité se détaille à la demande : c'est le chiffre que l'équipe
               contestera, et elle doit pouvoir voir lequel des deux critères la
               bloque — c'est celui-là qu'il faut desserrer. */}
-          <InfoHint label="Comment la banque calcule votre capacité">
+          <InfoHint label={t('credit.hintTitle')}>
             <span className="block">
-              Deux fois vos fonds propres :{' '}
+              {t('credit.byEquity')}{' '}
               <strong className="font-mono">{formatMadCompact(limits.capacityByEquityMad)}</strong>{' '}
-              sur {formatMadCompact(limits.equityMad)} de capitaux propres
-              {limits.capacityBinding === 'fonds_propres' ? ' — c’est lui qui bloque.' : '.'}
+              {t('credit.onEquity', { amount: formatMadCompact(limits.equityMad) })}
+              {limits.capacityBinding === 'fonds_propres' ? t('credit.binding') : '.'}
             </span>
             <span className="mt-1 block">
-              40 % de votre activité :{' '}
+              {t('credit.byRevenue')}{' '}
               <strong className="font-mono">{formatMadCompact(limits.capacityByRevenueMad)}</strong>{' '}
-              sur {formatMadCompact(limits.lastRevenueMad)} de chiffre d’affaires
-              {limits.capacityBinding === 'activite' ? ' — c’est lui qui bloque.' : '.'}
+              {t('credit.onRevenue', { amount: formatMadCompact(limits.lastRevenueMad) })}
+              {limits.capacityBinding === 'activite' ? t('credit.binding') : '.'}
             </span>
             <span className="mt-1 block">
-              Encours accepté :{' '}
-              <strong className="font-mono">{formatMadCompact(limits.capacityTotalMad)}</strong>, le plus
-              contraignant des deux. Déjà utilisé : {debt > 0 ? `−${formatMadCompact(debt)}` : 'rien'}.
+              {t('credit.accepted')}{' '}
+              <strong className="font-mono">{formatMadCompact(limits.capacityTotalMad)}</strong>
+              {t('credit.acceptedTail', { used: debt > 0 ? `−${formatMadCompact(debt)}` : t('credit.nothing') })}
             </span>
             <span className="mt-2 block text-(--foreground-muted)">
               {bloque && limits.lastRevenueMad <= 0
-                ? 'Sans exercice clos, la banque n’a rien à regarder : votre ligne s’ouvrira après le premier tour résolu.'
+                ? t('credit.noYear')
                 : bloque && limits.equityMad <= 0
-                  ? 'Vos fonds propres sont nuls : aucune banque ne prête sans assise. Une levée de capital rouvrirait votre ligne.'
+                  ? t('credit.noEquity')
                   : limits.capacityBinding === 'activite'
-                    ? 'C’est votre volume d’activité qui fixe le plafond : une ligne de crédit suit le chiffre d’affaires qu’elle finance. Reconquérir des parts de marché l’élargit.'
-                    : 'C’est votre assise en fonds propres qui bloque : une levée de capital élargirait directement ce plafond.'}
+                    ? t('credit.revenueBinds')
+                    : t('credit.equityBinds')}
             </span>
           </InfoHint>
         </span>
@@ -159,10 +161,10 @@ export function CreditSlider({
 
       <div id={`${id}-bornes`} className="tabular flex flex-wrap justify-between gap-3 text-sm text-(--foreground-muted)">
         <span>
-          {debt > 0 ? `tout rembourser : ${formatMadCompact(debt)}` : 'aucune dette à rembourser'}
+          {debt > 0 ? t('credit.repayAll', { amount: formatMadCompact(debt) }) : t('credit.noDebtLower')}
         </span>
         <span>
-          {max > 0 ? `capacité restante : ${formatMadCompact(max)}` : 'plus rien à tirer'}
+          {max > 0 ? t('credit.remaining', { amount: formatMadCompact(max) }) : t('credit.nothingLeft')}
         </span>
       </div>
 
@@ -170,7 +172,7 @@ export function CreditSlider({
         <input
           type="text"
           inputMode="numeric"
-          aria-label="Crédit net du tour, en dirhams : positif pour emprunter, négatif pour rembourser"
+          aria-label={t('credit.inputAria')}
           disabled={disabled}
           value={draft ?? (bounded === 0 ? '' : String(Math.round(bounded)))}
           onChange={(e) => {
@@ -190,7 +192,7 @@ export function CreditSlider({
         />
         <span className="text-sm text-(--foreground-muted)">DH</span>
         <span className="text-sm text-(--foreground-muted)">
-          positif : vous empruntez · négatif : vous remboursez
+          {t('credit.signHint')}
         </span>
       </div>
       {clipped ? (

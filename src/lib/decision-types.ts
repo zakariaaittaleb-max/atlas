@@ -218,6 +218,8 @@ export interface DecisionContext {
   status: string;
   /** Trésorerie de clôture du tour précédent : l'assiette de tout engagement. */
   treasuryMad: number;
+  /** Solde des cessions et rachats conclus ce tour, compris dans `treasuryMad`. */
+  dealCashMad: number;
   /** Palier de détresse à la clôture du tour précédent — `'sain'` par défaut avant la première résolution. */
   treasuryStatus: TreasuryStatus;
   headcount: number;

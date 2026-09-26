@@ -7,11 +7,17 @@
  * avoir pu se battre ». Une équipe étranglée peut céder un DAS pour se refaire
  * une trésorerie plutôt que de regarder les autres jouer pendant deux heures.
  *
- * Trois asymétries d'information sont MISES EN SCÈNE, parce qu'elles sont
+ * Tout se conclut EN COURS de tour, au moment où l'équipe tranche : le
+ * vendeur accepte une offre et le domaine change de mains aussitôt ; une
+ * offre ferme sur une entreprise non joueuse est acceptée ou refusée
+ * sur-le-champ. L'argent bouge dans la foulée.
+ *
+ * Les asymétries d'information restent MISES EN SCÈNE, parce qu'elles sont
  * l'arbitrage lui-même :
- *   • le vendeur seul voit l'offre de l'acheteur non joueur ;
- *   • il sait combien d'offres il a reçues, jamais leur montant ;
- *   • les acheteurs ne voient qu'une fiche limitée, et s'ignorent entre eux.
+ *   • le vendeur seul voit l'offre de l'acheteur non joueur et les montants
+ *     reçus — et parie sur une meilleure offre en attendant ;
+ *   • les acheteurs ne voient qu'une fiche limitée, et s'ignorent entre eux ;
+ *   • le prix de réserve d'une cible reste caché, et on ne le tente qu'une fois.
  *
  * Quatre marchés sur une page : vendre, entrer dans un domaine, intégrer sa
  * filière, racheter un domaine en vente. La synthèse dit en tête ce qui est en
@@ -27,7 +33,7 @@ import { NumberInput } from '@/components/decision-shell';
 import { DisclosureList } from '@/components/disclosure-list';
 import { Accordion } from '@/components/ui/accordion';
 import { DasDot } from '@/components/ui/das-dot';
-import { ChoiceCard, GroupLegend } from '@/components/ui/form-controls';
+import { GroupLegend } from '@/components/ui/form-controls';
 import { InfoHint } from '@/components/ui/info-hint';
 import { StatCard } from '@/components/ui/stat-card';
 import type { FieldDisclosure } from '@/lib/consulting-types';
@@ -46,8 +52,25 @@ export interface OwnListing {
   dasId: string;
   dasName: string;
   npcOfferMad: number;
-  sellerChoice: 'npc' | 'best_bid' | 'withdraw';
-  bidCount: number;
+  /** Offres reçues, de la plus haute à la plus basse. */
+  bids: ReceivedBid[];
+}
+
+export interface ReceivedBid {
+  bidId: string;
+  bidderTeamName: string;
+  offerMad: number;
+}
+
+/** Une opération conclue ce tour, vue depuis l'équipe. */
+export interface ConcludedDeal {
+  id: string;
+  kind: 'cession_das' | 'rachat_das' | 'acquisition';
+  /** Signé : positif pour un encaissement. */
+  amountMad: number;
+  dasName: string;
+  counterpartyName: string | null;
+  targetName: string | null;
 }
 
 export interface PublicListing {
@@ -135,6 +158,8 @@ export interface AcquisitionTarget {
 
 interface MyOffer {
   targetActorId: string;
+  /** `won` : acquise ; `rejected` : sous le prix de réserve, plus tentable ce tour. */
+  status: string;
   offerMad: number;
   integrationBudgetMad: number;
 }
@@ -163,9 +188,10 @@ export interface DueDiligenceTier {
 }
 
 export function CessionView({
-  roundNumber, decisionsOpen, sellable, ownListings, market, myBids, targets, myOffers,
-  integrationTargets, modules, dueDiligences, buyingPower, dueDiligenceTiers,
+  roundNumber, decisionsOpen, sellable, ownListings: serverListings, market, myBids, targets, myOffers,
+  integrationTargets, modules, dueDiligences, buyingPower, dueDiligenceTiers, deals,
 }: {
+  deals: ConcludedDeal[];
   buyingPower: BuyingPower;
   /** Vide quand la due diligence est hors du catalogue de la session. */
   dueDiligenceTiers: DueDiligenceTier[];
@@ -185,12 +211,25 @@ export function CessionView({
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Annonces retirées à l'instant : masquées sans attendre le rafraîchissement
+  // du serveur, pour qu'un DAS retiré ne s'affiche plus « en vente » nulle part.
+  const [withdrawnIds, setWithdrawnIds] = useState<ReadonlySet<string>>(new Set());
 
   const disabled = busy || pending || !decisionsOpen;
 
   async function send(body: Record<string, unknown>, endpoint = '/api/divest') {
     setError(null);
     setBusy(true);
+    const withdrawing = body.action === 'withdraw' ? String(body.listingId) : null;
+    if (withdrawing) setWithdrawnIds((prev) => new Set(prev).add(withdrawing));
+    const rollback = () => {
+      if (!withdrawing) return;
+      setWithdrawnIds((prev) => {
+        const next = new Set(prev);
+        next.delete(withdrawing);
+        return next;
+      });
+    };
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -200,16 +239,19 @@ export function CessionView({
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
         setError(payload.error ?? 'Opération refusée.');
+        rollback();
         setBusy(false);
         return;
       }
       startTransition(() => { router.refresh(); setBusy(false); });
     } catch {
       setError('Le réseau est indisponible. Rien n’a été envoyé.');
+      rollback();
       setBusy(false);
     }
   }
 
+  const ownListings = serverListings.filter((l) => !withdrawnIds.has(l.listingId));
   const bidByListing = new Map(myBids.map((b) => [b.listingId, b]));
   const targetIds = new Set(targets.map((t) => t.targetActorId));
   const entryOffers = myOffers.filter((o) => targetIds.has(o.targetActorId)).length;
@@ -251,14 +293,14 @@ export function CessionView({
             label="Vos DAS en vente"
             value={`${ownListings.length} / ${sellable.length}`}
             note={
-              ownListings.reduce((acc, l) => acc + l.bidCount, 0) > 0
-                ? `${ownListings.reduce((acc, l) => acc + l.bidCount, 0)} offre(s) reçue(s)`
+              ownListings.reduce((acc, l) => acc + l.bids.length, 0) > 0
+                ? `${ownListings.reduce((acc, l) => acc + l.bids.length, 0)} offre(s) reçue(s)`
                 : 'Aucune offre reçue'
             }
           />
           <StatCard
             label="Vos offres d’acquisition"
-            value={String(myOffers.length + myBids.length)}
+            value={String(myOffers.filter((o) => o.status === 'won').length + myBids.length)}
             note={`${entryOffers} entrée · ${linkOffers} filière · ${myBids.length} rachat`}
           />
           <StatCard
@@ -273,6 +315,8 @@ export function CessionView({
           />
         </div>
 
+        {deals.length > 0 ? <DealLedger deals={deals} /> : null}
+
         {/* ── Vendre ────────────────────────────────────────────────────────── */}
         {showSell ? (
           <Accordion
@@ -280,7 +324,7 @@ export function CessionView({
             indicators={{ topic: 'cession-vente' }}
             defaultOpen={ownListings.length > 0}
             summary={`${ownListings.length} en vente`}
-            hint="Céder un DAS libère de la trésorerie et recentre votre portefeuille. L’acheteur non joueur offre toujours moins qu’un concurrent rationnel : c’est un plancher de liquidité, pas une bonne affaire."
+            hint="Céder un DAS libère de la trésorerie et recentre votre portefeuille. Vous concluez quand vous voulez pendant le tour : le domaine passe aussitôt à l’acheteur et le prix entre dans votre trésorerie. L’acheteur non joueur offre toujours moins qu’un concurrent rationnel : c’est un plancher de liquidité, pas une bonne affaire. Une annonce sans preneur expire à la fin du tour."
           >
             {sellable.length === 0 ? (
               <p className="text-sm text-(--foreground-muted)">Vous ne détenez aucun DAS actif.</p>
@@ -429,7 +473,7 @@ export function CessionView({
             indicators={{ topic: 'cession-acquisition' }}
             defaultOpen={market.length > 0}
             summary={`${market.length} annonce${market.length > 1 ? 's' : ''} · ${myBids.length} offre${myBids.length > 1 ? 's' : ''}`}
-            hint="Les offres sont scellées : vous ne voyez ni celles des autres équipes, ni ce que l’acheteur non joueur propose au vendeur. Budgétez votre intégration — sans elle, un rachat détruit jusqu’à 45 % de ce que vous venez de payer."
+            hint="Votre offre est ferme : le vendeur peut l’accepter à tout moment du tour. Le domaine passe alors chez vous pour tout le tour, et le prix comme le budget d’intégration sortent aussitôt de votre trésorerie. Vous ne voyez ni les offres des autres équipes, ni ce que l’acheteur non joueur propose au vendeur. Sans budget d’intégration, un rachat détruit jusqu’à 45 % de ce que vous venez de payer."
           >
             {market.length === 0 ? (
               <p className="text-sm text-(--foreground-muted)">
@@ -470,7 +514,10 @@ function Alert({ tone, children }: { tone: 'negative' | 'warning'; children: Rea
   );
 }
 
-/** Panneau du vendeur : l'offre NPC, l'intérêt reçu, et le choix — en aveugle. */
+/**
+ * Panneau du vendeur : l'offre NPC et les offres reçues, chacune concluable sur
+ * le moment. Conclure est irréversible : un premier clic demande confirmation.
+ */
 function ListingPanel({
   listing, disabled, onSend,
 }: {
@@ -478,58 +525,145 @@ function ListingPanel({
   disabled: boolean;
   onSend: (body: Record<string, unknown>) => void;
 }) {
+  // `null` : l'offre non joueuse ; une chaîne : l'offre visée ; `undefined` : rien.
+  const [confirming, setConfirming] = useState<string | null | undefined>(undefined);
+  const best = listing.bids[0]?.offerMad ?? 0;
+
+  const offers: { key: string | null; who: string; amount: number; npc: boolean }[] = [
+    ...listing.bids.map((b) => ({ key: b.bidId, who: b.bidderTeamName, amount: b.offerMad, npc: false })),
+    { key: null, who: 'Acheteur non joueur', amount: listing.npcOfferMad, npc: true },
+  ];
+
   return (
     <div className="mt-4 border-t border-(--border) pt-4">
-      <dl className="mb-4 grid gap-2 sm:grid-cols-2">
-        <div className="rounded-lg bg-(--surface-muted) px-4 py-3">
-          <dt className="flex items-center gap-1.5 text-sm text-(--foreground-muted)">
-            Offre de l’acheteur non joueur
-            <InfoHint label="Offre de l’acheteur non joueur">
-              Visible de vous seul. Ferme et immédiate.
-            </InfoHint>
-          </dt>
-          <dd className="tabular mt-1 font-mono text-2xl font-semibold">
-            {formatMadCompact(listing.npcOfferMad)}
-          </dd>
-        </div>
-        <div className="rounded-lg bg-(--surface-muted) px-4 py-3">
-          <dt className="flex items-center gap-1.5 text-sm text-(--foreground-muted)">
-            Offres reçues de vos concurrents
-            <InfoHint label="Offres reçues">
-              Leur montant vous restera inconnu jusqu’au dénouement.
-            </InfoHint>
-          </dt>
-          <dd className="tabular mt-1 font-mono text-2xl font-semibold">{listing.bidCount}</dd>
-        </div>
-      </dl>
-
       <fieldset disabled={disabled}>
-        <GroupLegend title="Votre décision pour ce tour">
-          Le choix est arrêté avant le verrouillage du tour — vous pariez sans connaître les
-          montants.
+        <GroupLegend title="Offres sur la table">
+          Conclure fait passer le domaine à l’acheteur sur-le-champ, pour tout le tour.
         </GroupLegend>
-        <div className="grid gap-2 sm:grid-cols-3">
-          {([
-            ['npc', 'Céder à l’acheteur non joueur'],
-            ['best_bid', 'Retenir la meilleure offre'],
-            ['withdraw', 'Retirer l’annonce'],
-          ] as const).map(([value, label]) => (
-            <ChoiceCard
-              key={value}
-              title={label}
-              selected={listing.sellerChoice === value}
-              onSelect={() => onSend({ action: 'choice', listingId: listing.listingId, choice: value })}
-            />
+        {listing.bids.length === 0 ? (
+          <p className="mb-3 text-sm text-(--foreground-muted)">
+            Aucune offre de concurrent pour l’instant.
+          </p>
+        ) : null}
+        <ul className="divide-y divide-(--border) rounded-lg border border-(--border)">
+          {offers.map((o) => (
+            <li key={o.key ?? 'npc'} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+              <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-sm">
+                <span className="font-medium">{o.who}</span>
+                {o.npc ? (
+                  <InfoHint label="Offre de l’acheteur non joueur">
+                    Visible de vous seul. Ferme et immédiate : un plancher de liquidité, inférieur à
+                    ce qu’un concurrent rationnel proposerait.
+                  </InfoHint>
+                ) : o.amount === best && listing.bids.length > 1 ? (
+                  <span className="rounded-full bg-(--positive-subtle) px-2 py-0.5 text-xs font-semibold text-(--positive)">
+                    meilleure offre
+                  </span>
+                ) : null}
+              </span>
+              <span className="tabular font-mono text-lg font-semibold">{formatMadCompact(o.amount)}</span>
+              {confirming === o.key ? (
+                <span className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirming(undefined);
+                      onSend({ action: 'accept', listingId: listing.listingId, bidId: o.key });
+                    }}
+                    className="rounded-lg bg-(--accent) px-4 py-2 text-sm font-medium text-(--on-accent) transition-colors enabled:hover:bg-(--accent-hover) disabled:opacity-40"
+                  >
+                    Confirmer la cession à {formatMadCompact(o.amount)}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirming(undefined)}
+                    className="rounded-lg px-3 py-2 text-sm font-medium text-(--foreground-muted) hover:bg-(--surface-muted)"
+                  >
+                    Annuler
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirming(o.key)}
+                  className="rounded-lg border border-(--border) px-4 py-2 text-sm font-medium enabled:hover:border-(--accent) disabled:opacity-40"
+                >
+                  {o.npc ? 'Céder au non-joueur' : 'Accepter'}
+                </button>
+              )}
+            </li>
           ))}
+        </ul>
+
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => onSend({ action: 'withdraw', listingId: listing.listingId })}
+            className="inline-flex min-h-9 items-center rounded-lg border border-(--border) px-4 text-sm font-medium enabled:hover:border-(--negative) enabled:hover:text-(--negative) disabled:opacity-40"
+          >
+            Retirer l’annonce
+          </button>
+          <InfoHint label="Retirer l’annonce">
+            Effet immédiat : le DAS redevient actif, quitte le marché du pool et les offres reçues
+            tombent. Vous pourrez le remettre en vente tant que le tour est ouvert.
+          </InfoHint>
         </div>
       </fieldset>
+    </div>
+  );
+}
 
-      {listing.sellerChoice === 'best_bid' && listing.bidCount === 0 ? (
-        <p className="mt-3 text-sm text-(--warning)">
-          Aucune offre reçue : à défaut, la cession se fera à l’acheteur non joueur.
+const DEAL_LABELS: Record<ConcludedDeal['kind'], string> = {
+  cession_das: 'Cession',
+  rachat_das: 'Rachat',
+  acquisition: 'Acquisition',
+};
+
+/** Les opérations conclues ce tour : ce qui a déjà changé de mains, et l'argent. */
+function DealLedger({ deals }: { deals: ConcludedDeal[] }) {
+  const net = deals.reduce((acc, d) => acc + d.amountMad, 0);
+  const signed = (v: number) => `${v >= 0 ? '+' : '−'}${formatMadCompact(Math.abs(v))}`;
+
+  return (
+    <section aria-labelledby="operations-conclues" className="rounded-lg border border-(--border) bg-(--surface) p-4">
+      <h2 id="operations-conclues" className="flex flex-wrap items-center gap-2 text-base font-semibold">
+        Opérations conclues ce tour
+        <InfoHint label="Opérations conclues">
+          Déjà écrites : le domaine a changé de mains et le montant est compté dans votre trésorerie
+          disponible, sur la barre du haut comme en Finance du Groupe. Un rachat est un
+          investissement, amorti comme les autres.
+        </InfoHint>
+      </h2>
+      <ul className="mt-3 divide-y divide-(--border)">
+        {deals.map((d) => (
+          <li key={d.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 text-sm">
+            <span className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="rounded bg-(--surface-muted) px-1.5 py-0.5 text-xs font-semibold tracking-wide uppercase ring-1 ring-(--border)">
+                {DEAL_LABELS[d.kind]}
+              </span>
+              <DasDot seed={d.dasName} />
+              <span className="font-medium">{d.targetName ?? d.dasName}</span>
+              {d.kind === 'cession_das' ? (
+                <span className="text-(--foreground-muted)">
+                  → {d.counterpartyName ?? 'acheteur non joueur'}
+                </span>
+              ) : d.counterpartyName ? (
+                <span className="text-(--foreground-muted)">← {d.counterpartyName}</span>
+              ) : null}
+            </span>
+            <span className={`tabular font-mono font-semibold ${d.amountMad >= 0 ? 'text-(--positive)' : ''}`}>
+              {signed(d.amountMad)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {deals.length > 1 ? (
+        <p className="tabular mt-2 border-t border-(--border) pt-2 text-end text-sm">
+          <span className="text-(--foreground-muted)">Solde : </span>
+          <strong className="font-mono">{signed(net)}</strong>
         </p>
       ) : null}
-    </div>
+    </section>
   );
 }
 
@@ -650,7 +784,7 @@ function MarketCard({
           disabled={disabled || offerValue < 1}
           className="mt-4 rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
         >
-          {existingBid ? 'Modifier mon offre scellée' : 'Déposer une offre scellée'}
+          {existingBid ? 'Modifier mon offre ferme' : 'Déposer une offre ferme'}
         </button>
       </form>
     </li>
@@ -663,7 +797,7 @@ const SIZE_LABELS = {
   petite: ['Petite entreprise', 'Moins de 2 % du marché de son domaine : une porte d’entrée, pas une position.'],
 } as const;
 
-/** Fiche d'une cible acquérable, et formulaire d'offre scellée. */
+/** Fiche d'une cible acquérable, et formulaire d'offre ferme. */
 function AcquisitionCard({
   target, existingOffer, disabled, onSend, badge, owned, dueDiligences,
   buyingPower, dueDiligenceTiers, onOrderStudy,
@@ -689,9 +823,10 @@ function AcquisitionCard({
   const offerValue = Number(offer);
   const integrationValue = Number(integration || 0);
   const size = target.sizeClass ? SIZE_LABELS[target.sizeClass] : null;
+  const [confirming, setConfirming] = useState(false);
 
   return (
-    <li className={`rounded-lg border p-4 ${existingOffer ? 'border-(--accent)' : 'border-(--border)'}`}>
+    <li className={`rounded-lg border p-4 ${existingOffer?.status === 'won' ? 'border-(--positive)' : 'border-(--border)'}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex flex-wrap items-center gap-2 text-base font-semibold">
           {badge ? (
@@ -710,9 +845,13 @@ function AcquisitionCard({
               </InfoHint>
             </span>
           ) : null}
-          {existingOffer ? (
-            <span className="rounded-full bg-(--accent-subtle) px-2 py-0.5 text-xs font-semibold text-(--accent-text)">
-              offre déposée
+          {existingOffer?.status === 'won' ? (
+            <span className="rounded-full bg-(--positive-subtle) px-2 py-0.5 text-xs font-semibold text-(--positive)">
+              acquise ce tour
+            </span>
+          ) : existingOffer?.status === 'rejected' ? (
+            <span className="rounded-full bg-(--negative-subtle) px-2 py-0.5 text-xs font-semibold text-(--negative)">
+              offre refusée
             </span>
           ) : null}
         </h3>
@@ -765,11 +904,22 @@ function AcquisitionCard({
         disabled={disabled}
       />
 
-      {owned ? null : (
+      {existingOffer?.status === 'rejected' ? (
+        <p className="mt-4 flex flex-wrap items-center gap-2 border-t border-(--border) pt-4 text-sm text-(--negative)">
+          Offre de {formatMadCompact(existingOffer.offerMad)} refusée : elle n’atteignait pas le prix de
+          réserve.
+          <InfoHint label="Pourquoi une seule tentative">
+            Retenter la même cible dans le tour permettrait de trouver son prix de réserve par
+            essais successifs. Vous pourrez refaire une offre au tour suivant — une due diligence
+            vous aidera à la chiffrer.
+          </InfoHint>
+        </p>
+      ) : owned || existingOffer?.status === 'won' ? null : (
         <form
           className="mt-4 border-t border-(--border) pt-4"
           onSubmit={(e) => {
             e.preventDefault();
+            setConfirming(false);
             onSend({
               action: 'bid',
               targetActorId: target.targetActorId,
@@ -794,7 +944,7 @@ function AcquisitionCard({
               <span className="flex items-center gap-2 text-sm font-medium">
                 Votre offre (DH)
                 <InfoHint label="Prix de réserve">
-                  La cible a un prix de réserve : en deçà, elle refuse et personne n’acquiert.
+                  La cible a un prix de réserve : en deçà, elle refuse, et vous n’avez qu’une tentative par tour.
                 </InfoHint>
               </span>
               <NumberInput value={offerValue} onChange={(v) => setOffer(String(v))} className="mt-1.5 w-full" />
@@ -807,22 +957,37 @@ function AcquisitionCard({
 
           <IntegrationLoss offer={offerValue} integration={integrationValue} />
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="submit" disabled={disabled || offerValue < 1}
-              className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
-            >
-              {existingOffer ? 'Modifier mon offre scellée' : 'Déposer une offre scellée'}
-            </button>
-            {existingOffer ? (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {confirming ? (
+              <>
+                <button
+                  type="submit" disabled={disabled || offerValue < 1}
+                  className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
+                >
+                  Confirmer l’offre de {formatMadCompact(offerValue + integrationValue)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirming(false)}
+                  className="rounded-lg px-4 py-2.5 text-sm font-medium text-(--foreground-muted) hover:bg-(--surface-muted)"
+                >
+                  Annuler
+                </button>
+              </>
+            ) : (
               <button
-                type="button" disabled={disabled}
-                onClick={() => onSend({ action: 'withdraw', targetActorId: target.targetActorId })}
-                className="rounded-lg px-4 py-2.5 text-sm font-medium text-(--foreground-muted) enabled:hover:bg-(--negative-subtle) enabled:hover:text-(--negative) disabled:opacity-40"
+                type="button" disabled={disabled || offerValue < 1}
+                onClick={() => setConfirming(true)}
+                className="rounded-lg bg-(--accent) enabled:hover:bg-(--accent-hover) transition-colors px-5 py-2.5 text-sm font-medium text-(--on-accent) disabled:opacity-40"
               >
-                Retirer mon offre
+                Faire une offre ferme
               </button>
-            ) : null}
+            )}
+            <InfoHint label="Offre ferme">
+              Tranchée sur-le-champ. Au niveau du prix de réserve ou au-dessus, l’entreprise est à
+              vous et le prix, budget d’intégration compris, sort aussitôt de votre trésorerie. En
+              dessous, elle refuse — et vous ne pourrez plus la retenter ce tour.
+            </InfoHint>
           </div>
         </form>
       )}

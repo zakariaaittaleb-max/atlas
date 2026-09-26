@@ -308,6 +308,16 @@ export async function loadResolutionSnapshot(
       .eq('session_id', sessionId).eq('round_number', roundNumber).eq('status', 'sealed'),
   ]);
 
+  // Cessions et rachats CONCLUS en cours de tour : l'argent a déjà changé de
+  // mains, le moteur l'inscrit au compte de l'exercice (migration 0050).
+  const { data: dealRows } = await admin
+    .from('deal_cash_movements').select('team_id, amount_mad, is_investment')
+    .in('team_id', teamIds).eq('round_number', roundNumber);
+  const dealsOf = (teamId: string, investment: boolean) =>
+    ((dealRows ?? []) as Row[])
+      .filter((d) => str(d.team_id) === teamId && bool(d.is_investment) === investment)
+      .reduce((acc, d) => acc + num(d.amount_mad), 0);
+
   // Affinité de chaque élément de catalogue, lue en base plutôt que codée en
   // dur : le facilitateur peut la retoucher entre deux promotions.
   const toAffinity = (row: Row): Affinity => ({
@@ -888,6 +898,8 @@ export async function loadResolutionSnapshot(
         capexHistoryMad: capexRoundsByTeam.get(teamId) ?? [],
         previousWorkingCapitalMad: num(pnl?.working_capital_mad),
         consultingSpendMad: consultingByTeam.get(teamId) ?? 0,
+        dealProceedsMad: dealsOf(teamId, false),
+        dealInvestmentMad: -dealsOf(teamId, true),
         // ── Ce que les investisseurs ont retenu du tour précédent ─────────
         investorAttractiveness:
           state?.investor_attractiveness === null || state?.investor_attractiveness === undefined

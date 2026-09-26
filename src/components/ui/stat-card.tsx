@@ -56,42 +56,66 @@ export function StatCard({
   const resolvedPolarity: Polarity = polarity ?? (invertPolarity ? 'inverted' : 'normal');
 
   return (
-    <div className="stat-card flex min-w-0 flex-col rounded-xl border border-(--border) bg-(--surface) p-5">
-      <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-(--foreground-muted)">
-        {label}
+    // Trois rangées partagées avec les cartes voisines (`subgrid`) : quel que
+    // soit le nombre de lignes d'un libellé, toutes les valeurs d'une rangée
+    // tombent sur la même ligne. La carte est un conteneur de requête : le
+    // chiffre se resserre avec la largeur de la carte plutôt que de déborder.
+    <div className="stat-card @container row-span-3 grid min-w-0 [grid-template-rows:subgrid] content-start gap-y-2 rounded-xl border border-(--border) bg-(--surface) p-5">
+      {/* Deux lignes réservées : sans `subgrid`, un libellé court ne remonte pas son chiffre. */}
+      <p className="min-h-[2lh] text-sm font-medium text-(--foreground-muted)">
+        <LabelWithHint label={label} hint={hint} />
         {source ? (
-          <span className="rounded bg-(--surface-muted) px-1.5 py-0.5 text-xs font-normal">
+          <span className="ms-2 inline-block rounded bg-(--surface-muted) px-1.5 py-0.5 align-middle text-xs font-normal">
             {source}
           </span>
         ) : null}
-        {hint ? <InfoHint label={label}>{hint}</InfoHint> : null}
       </p>
       <p
         className={
           size === 'sm'
-            ? 'mt-2 text-lg leading-7 font-semibold text-(--foreground)'
-            : 'tabular mt-2 font-mono text-[1.75rem] leading-9 font-medium tracking-tight text-(--foreground)'
+            ? 'self-start text-lg leading-7 font-semibold text-(--foreground)'
+            : 'tabular self-start font-mono text-[clamp(0.875rem,14cqi,1.75rem)] leading-[1.25] font-medium tracking-tight text-(--foreground)'
         }
       >
         {value}
       </p>
 
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-        {delta ? (
-          <>
-            <TrendBadge delta={delta} polarity={resolvedPolarity} />
-            <span className="text-xs text-(--meta)">{t('stat.vsPrevious')}</span>
-          </>
-        ) : (
-          <span className="text-sm text-(--meta)">{note ?? t('stat.firstRound')}</span>
-        )}
-      </div>
-      {benchmark ? <p className="tabular mt-1 text-sm text-(--meta)">{benchmark}</p> : null}
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          {delta ? (
+            <>
+              <TrendBadge delta={delta} polarity={resolvedPolarity} />
+              <span className="text-xs text-(--meta)">{t('stat.vsPrevious')}</span>
+            </>
+          ) : (
+            <span className="text-sm text-(--meta)">{note ?? t('stat.firstRound')}</span>
+          )}
+        </div>
+        {benchmark ? <p className="tabular mt-1 text-sm text-(--meta)">{benchmark}</p> : null}
 
-      {trend && trend.length > 1 ? (
-        <Sparkline values={trend} className="mt-4" label={t('stat.trend', { label })} />
-      ) : null}
+        {trend && trend.length > 1 ? (
+          <Sparkline values={trend} className="mt-4" label={t('stat.trend', { label })} />
+        ) : null}
+      </div>
     </div>
+  );
+}
+
+/**
+ * Le « + » reste accroché au dernier mot du libellé : seul en début de ligne,
+ * il ajoutait une rangée à la carte et décalait son chiffre.
+ */
+function LabelWithHint({ label, hint }: { label: string; hint?: React.ReactNode }) {
+  if (!hint) return <>{label}</>;
+  const cut = label.lastIndexOf(' ');
+  return (
+    <>
+      {cut > 0 ? label.slice(0, cut + 1) : null}
+      <span className="whitespace-nowrap">
+        {cut > 0 ? label.slice(cut + 1) : label}
+        <InfoHint label={label} className="ms-2">{hint}</InfoHint>
+      </span>
+    </>
   );
 }
 

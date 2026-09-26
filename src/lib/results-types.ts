@@ -97,4 +97,6 @@ export interface MoneyBar {
   debtOutstandingMad: number;
   /** Crédit pris ce tour, déjà compté dans le disponible. */
   drawnThisRoundMad: number;
+  /** Solde des cessions et rachats conclus ce tour, déjà compté dans le disponible. */
+  dealCashMad: number;
 }

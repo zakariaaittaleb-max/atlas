@@ -302,12 +302,20 @@ async function loadDecisionContextOnce(): Promise<DecisionContext> {
   // touchée.
   const financeBaseline = toFinance((previousBudget ?? openingBudget) as Row | null);
 
+  // Cessions et rachats conclus ce tour : la trésorerie dont on dispose les
+  // compte déjà, sans quoi vendre un domaine ne rendrait rien avant le tour
+  // suivant.
+  const { data: dealRows } = await supabase.from('deal_cash_movements').select('amount_mad')
+    .eq('team_id', team.teamId).eq('round_number', roundNumber);
+  const dealCashMad = ((dealRows ?? []) as Row[]).reduce((acc, d) => acc + num(d.amount_mad), 0);
+
   return {
     team,
     roundNumber,
     status: str(round?.status, 'draft'),
     decisionsOpen: decisionsAreOpen(round?.status as string),
-    treasuryMad: num(previousPnl?.treasury_end_mad),
+    treasuryMad: num(previousPnl?.treasury_end_mad) + dealCashMad,
+    dealCashMad,
     treasuryStatus: ((state as Row | undefined)?.treasury_status as TreasuryStatus | undefined) ?? 'sain',
     headcount: num(state?.headcount),
     avgSalaryMad: averageSalary(hrInForce, dasHrStates as Row[] | null, roundNumber),
